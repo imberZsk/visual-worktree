@@ -5,26 +5,26 @@ import { detectTerminal, buildTerminalCommand, resolveTerminalKind, winQuote } f
 
 describe('detectTerminal', () => {
   it('returns ghostty when a Ghostty app path exists', () => {
-    // 注入恒为 true 的 existsSync，模拟检测到 Ghostty 安装
-    expect(detectTerminal(() => true)).toBe('ghostty');
+    // 注入恒为 true 的 existsSync，模拟检测到 Ghostty 安装；显式传 'darwin' 避免在 Windows CI 上走 win32 分支
+    expect(detectTerminal(() => true, 'darwin')).toBe('ghostty');
   });
 
   it('falls back to terminal when no Ghostty app exists', () => {
-    // 注入恒为 false 的 existsSync，模拟未安装 Ghostty
-    expect(detectTerminal(() => false)).toBe('terminal');
+    // 注入恒为 false 的 existsSync，模拟未安装 Ghostty；显式传 'darwin' 避免在 Windows CI 上返回 'wt'
+    expect(detectTerminal(() => false, 'darwin')).toBe('terminal');
   });
 });
 
 describe('buildTerminalCommand', () => {
   it('builds a Ghostty command with quoted working-directory', () => {
-    // 含空格路径需被 POSIX 单引号包裹，验证防注入引号生效
-    const cmd = buildTerminalCommand('/a b/proj', 'ghostty');
+    // 含空格路径需被 POSIX 单引号包裹，验证防注入引号生效；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand('/a b/proj', 'ghostty', 'darwin');
     expect(cmd).toContain("--working-directory='/a b/proj'");
   });
 
   it('Ghostty command disables inherited working directory before setting target dir', () => {
-    // cmd 存储 Ghostty 启动命令，用于验证新建窗口不会继承上一个窗口目录覆盖目标目录
-    const cmd = buildTerminalCommand('/wt/TASK-A', 'ghostty');
+    // cmd 存储 Ghostty 启动命令，用于验证新建窗口不会继承上一个窗口目录覆盖目标目录；显式传 'darwin'
+    const cmd = buildTerminalCommand('/wt/TASK-A', 'ghostty', 'darwin');
     // inheritFlagIndex 存储禁用目录继承参数的位置；必须早于 working-directory，避免后者被继承目录覆盖
     const inheritFlagIndex = cmd.indexOf('--window-inherit-working-directory=false');
     // workingDirIndex 存储目标目录参数的位置
@@ -35,38 +35,38 @@ describe('buildTerminalCommand', () => {
   });
 
   it('Ghostty command explicitly cd into the target dir before starting the interactive shell', () => {
-    // cmd 存储 Ghostty 启动命令，用于验证即使 Ghostty 继承了上一个窗口目录也会在 shell 内落到目标路径
-    const cmd = buildTerminalCommand('/wt/TASK-A/projA', 'ghostty');
+    // cmd 存储 Ghostty 启动命令；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand('/wt/TASK-A/projA', 'ghostty', 'darwin');
     expect(cmd).toContain('-e /bin/zsh -lc');
     expect(cmd).toContain("cd '\\''/wt/TASK-A/projA'\\''");
     expect(cmd).toContain('exec "${SHELL:-/bin/zsh}"');
   });
 
   it('builds a Terminal.app command via AppleScript that cd into the target dir', () => {
-    // Terminal 改用 AppleScript do script "cd <path>"，规避 open -a Terminal 首次冷启动打不到目标目录的竞态
-    const cmd = buildTerminalCommand('/a/proj', 'terminal');
+    // Terminal 改用 AppleScript do script "cd <path>"；显式传 'darwin' 保证走 macOS AppleScript 分支
+    const cmd = buildTerminalCommand('/a/proj', 'terminal', 'darwin');
     expect(cmd).toBe(
       'osascript -e "tell application \\"Terminal\\" to do script \\"cd \'/a/proj\'\\"" -e "tell application \\"Terminal\\" to activate"'
     );
   });
 
   it('Terminal command wraps a path with spaces in single quotes (no word splitting)', () => {
-    // 带空格路径应被单引号包裹，cd 不会被拆成多个参数
-    const cmd = buildTerminalCommand('/a b/proj a', 'terminal');
+    // 带空格路径应被单引号包裹，cd 不会被拆成多个参数；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand('/a b/proj a', 'terminal', 'darwin');
     // 关键片段：cd '/a b/proj a'（AppleScript 双引号串内）
     expect(cmd).toContain("cd '/a b/proj a'");
   });
 
   it("Terminal command escapes single quotes inside the path", () => {
-    // 路径含单引号时用 '\'' 序列转义，避免提前闭合单引号导致命令损坏
-    const cmd = buildTerminalCommand("/a/it's/proj", 'terminal');
+    // 路径含单引号时用 '\'' 序列转义；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand("/a/it's/proj", 'terminal', 'darwin');
     // 期望 cd 'a/it'\''s/proj' 的片段（单引号被转义为 '\''）
     expect(cmd).toContain("cd '/a/it'\\''s/proj'");
   });
 
   it('builds an iTerm2 command via AppleScript that cd into the target dir', () => {
-    // iTerm2 用 create window + write text 的 AppleScript，同样规避首次冷启动目录竞态
-    const cmd = buildTerminalCommand('/a/proj', 'iterm2');
+    // iTerm2 用 create window + write text 的 AppleScript；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand('/a/proj', 'iterm2', 'darwin');
     expect(cmd).toContain('osascript');
     // 应驱动 iTerm 应用、新建窗口并在会话里执行 cd
     expect(cmd).toContain('iTerm');
@@ -76,8 +76,8 @@ describe('buildTerminalCommand', () => {
   });
 
   it('iTerm2 command wraps a path with spaces in single quotes', () => {
-    // 带空格路径在 iTerm2 命令里同样被单引号包裹
-    const cmd = buildTerminalCommand('/a b/proj a', 'iterm2');
+    // 带空格路径在 iTerm2 命令里同样被单引号包裹；显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildTerminalCommand('/a b/proj a', 'iterm2', 'darwin');
     expect(cmd).toContain("cd '/a b/proj a'");
   });
 });

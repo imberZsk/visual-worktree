@@ -16,10 +16,13 @@ import { join } from 'path';
  * @returns {string[]} Git Bash 候选绝对路径列表
  */
 function gitBashPathsWin32() {
+  // homedir() 返回反斜杠路径，统一替换为正斜杠，与前两个硬编码路径保持一致，
+  // 使 resolveShell 的 existsSyncFn 接收到的路径格式始终是正斜杠，不受平台分隔符影响
+  const home = homedir().replace(/\\/g, '/');
   return [
     'C:/Program Files/Git/bin/bash.exe',
     'C:/Program Files (x86)/Git/bin/bash.exe',
-    join(homedir(), 'AppData/Local/Programs/Git/bin/bash.exe'),
+    `${home}/AppData/Local/Programs/Git/bin/bash.exe`,
   ];
 }
 

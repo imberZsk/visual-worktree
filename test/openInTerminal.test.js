@@ -41,7 +41,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     existsMock.mockReturnValue(true);
     // 任何命令都成功
     configureExec([]);
-    const res = await openInTerminal('/wt/TASK-A');
+    const res = await openInTerminal('/wt/TASK-A', undefined, 'darwin');
     expect(res.success).toBe(true);
     expect(execMock).toHaveBeenCalledTimes(1);
     // 首条命令应是 Ghostty 打开命令
@@ -52,7 +52,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     // Ghostty 已安装，但 Ghostty 命令失败、Terminal 命令成功
     existsMock.mockReturnValue(true);
     configureExec(['Ghostty.app']);
-    const res = await openInTerminal('/wt/TASK-A');
+    const res = await openInTerminal('/wt/TASK-A', undefined, 'darwin');
     expect(res.success).toBe(true);
     // 应调用两次：先 Ghostty（失败）再 Terminal（成功）
     expect(execMock).toHaveBeenCalledTimes(2);
@@ -66,7 +66,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     existsMock.mockReturnValue(true);
     // 所有命令都失败
     configureExec(['Ghostty.app', 'Terminal']);
-    const res = await openInTerminal('/wt/TASK-A');
+    const res = await openInTerminal('/wt/TASK-A', undefined, 'darwin');
     expect(res.success).toBe(false);
     expect(res.error).toBe('未找到可用终端');
     expect(execMock).toHaveBeenCalledTimes(2);
@@ -76,7 +76,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     // 模拟 Ghostty 未安装 → detectTerminal 返回 'terminal'
     existsMock.mockReturnValue(false);
     configureExec([]);
-    const res = await openInTerminal('/wt/TASK-A');
+    const res = await openInTerminal('/wt/TASK-A', undefined, 'darwin');
     expect(res.success).toBe(true);
     // 只调用一次，且直接是 Terminal 命令（无 Ghostty 兜底分支）
     expect(execMock).toHaveBeenCalledTimes(1);
@@ -88,7 +88,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
   it('未装 Ghostty 且 Terminal 失败时直接报错，不重试', async () => {
     existsMock.mockReturnValue(false);
     configureExec(['Terminal']);
-    const res = await openInTerminal('/wt/TASK-A');
+    const res = await openInTerminal('/wt/TASK-A', undefined, 'darwin');
     expect(res.success).toBe(false);
     expect(res.error).toBe('未找到可用终端');
     // kind 为 terminal，失败后无兜底分支，仅一次调用
@@ -99,7 +99,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     // 即便 existsSync 返回 false（检测不到 Ghostty），显式配置应优先生效
     existsMock.mockReturnValue(false);
     configureExec([]);
-    const res = await openInTerminal('/wt/TASK-A', 'Ghostty');
+    const res = await openInTerminal('/wt/TASK-A', 'Ghostty', 'darwin');
     expect(res.success).toBe(true);
     expect(execMock.mock.calls[0][0]).toContain('Ghostty.app');
   });
@@ -108,7 +108,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     // Ghostty 已安装，但用户明确选了 Terminal，应直接用 Terminal 不走 Ghostty
     existsMock.mockReturnValue(true);
     configureExec([]);
-    const res = await openInTerminal('/wt/TASK-A', 'Terminal');
+    const res = await openInTerminal('/wt/TASK-A', 'Terminal', 'darwin');
     expect(res.success).toBe(true);
     expect(execMock).toHaveBeenCalledTimes(1);
     // 强制 Terminal 时走 AppleScript 命令
@@ -119,7 +119,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
   it('用户配置 preferred=iTerm2 时用 iTerm2 命令', async () => {
     existsMock.mockReturnValue(false);
     configureExec([]);
-    const res = await openInTerminal('/wt/TASK-A', 'iTerm2');
+    const res = await openInTerminal('/wt/TASK-A', 'iTerm2', 'darwin');
     expect(res.success).toBe(true);
     expect(execMock).toHaveBeenCalledTimes(1);
     // iTerm2 命令应驱动 iTerm 应用
@@ -130,7 +130,7 @@ describe('openInTerminal 终端兜底逻辑', () => {
     existsMock.mockReturnValue(false);
     // iTerm 命令失败、Terminal 命令成功（failOn 用 iTerm 关键字命中首条 iTerm2 命令）
     configureExec(['iTerm']);
-    const res = await openInTerminal('/wt/TASK-A', 'iTerm2');
+    const res = await openInTerminal('/wt/TASK-A', 'iTerm2', 'darwin');
     expect(res.success).toBe(true);
     // 先 iTerm2（失败）再 Terminal（成功），共两次
     expect(execMock).toHaveBeenCalledTimes(2);

@@ -23,7 +23,8 @@ const { buildVscodeCommand } = await import('../electron/ipcHandlers.js');
 
 describe('buildVscodeCommand 命令构建（注入 -n 新窗口打开）', () => {
   it('默认模板 code {path} 会注入 -n 在新窗口打开（不替换当前窗口）', () => {
-    const cmd = buildVscodeCommand('code {path}', '/wt/TASK-A');
+    // 显式传 'darwin'：Windows 下路径用双引号包裹，断言的单引号会失败
+    const cmd = buildVscodeCommand('code {path}', '/wt/TASK-A', 'darwin');
     // 应包含新窗口参数 -n
     expect(cmd).toContain('-n');
     // 路径被 POSIX 单引号包裹防止 shell 展开
@@ -33,46 +34,51 @@ describe('buildVscodeCommand 命令构建（注入 -n 新窗口打开）', () =>
   });
 
   it('模板未给 {path} 占位符时把路径拼到末尾', () => {
-    const cmd = buildVscodeCommand('code', '/wt/TASK-B');
+    // 显式传 'darwin'：Windows 下双引号包裹路径，断言的单引号会失败
+    const cmd = buildVscodeCommand('code', '/wt/TASK-B', 'darwin');
     expect(cmd).toContain('-n');
     expect(cmd).toContain("'/wt/TASK-B'");
   });
 
   it('模板已含 -n 时不重复注入', () => {
-    const cmd = buildVscodeCommand('code -n {path}', '/wt/TASK-C');
+    // 显式传 'darwin' 保证走 macOS 单引号分支
+    const cmd = buildVscodeCommand('code -n {path}', '/wt/TASK-C', 'darwin');
     // -n 只出现一次
     expect(cmd.match(/-n/g)).toHaveLength(1);
   });
 
   it('模板已含 --new-window 时不再注入 -n', () => {
-    const cmd = buildVscodeCommand('code --new-window {path}', '/wt/TASK-D');
+    // 显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildVscodeCommand('code --new-window {path}', '/wt/TASK-D', 'darwin');
     expect(cmd).not.toContain('-n ');
     expect(cmd).toContain('--new-window');
   });
 
   it('模板已含 -r/--reuse-window 时尊重用户选择，不注入 -n', () => {
-    // 用户显式选了复用窗口（-r），说明是有意为之，不应被我们强行改成新窗口
-    const cmd = buildVscodeCommand('code -r {path}', '/wt/TASK-R');
+    // 显式传 'darwin' 保证走 macOS 分支
+    const cmd = buildVscodeCommand('code -r {path}', '/wt/TASK-R', 'darwin');
     expect(cmd).not.toContain('-n');
     expect(cmd).toContain('-r');
   });
 
   it('非 code 命令的自定义模板（如 cursor）不注入 -n，保持用户原样', () => {
-    const cmd = buildVscodeCommand('cursor {path}', '/wt/TASK-E');
+    // 显式传 'darwin' 保证走 macOS 单引号分支；断言精确匹配含单引号的字符串
+    const cmd = buildVscodeCommand('cursor {path}', '/wt/TASK-E', 'darwin');
     // cursor 不是 code 命令，不应被注入 -n
     expect(cmd).toBe("cursor '/wt/TASK-E'");
   });
 
   it('空模板回退到默认 code 命令', () => {
-    const cmd = buildVscodeCommand('', '/wt/TASK-F');
+    // 显式传 'darwin' 保证走 macOS 单引号分支
+    const cmd = buildVscodeCommand('', '/wt/TASK-F', 'darwin');
     expect(cmd).toContain('code');
     expect(cmd).toContain('-n');
     expect(cmd).toContain("'/wt/TASK-F'");
   });
 
   it('路径包含 shell 变量字符时不会被外层 shell 展开', () => {
-    // cmd 存储 VSCode 启动命令，用于验证 $TASK 作为路径字面量保留
-    const cmd = buildVscodeCommand('code {path}', '/wt/$TASK/proj');
+    // cmd 存储 VSCode 启动命令；显式传 'darwin' 保证走 macOS 单引号分支（Windows 用双引号）
+    const cmd = buildVscodeCommand('code {path}', '/wt/$TASK/proj', 'darwin');
     expect(cmd).toContain("'/wt/$TASK/proj'");
     expect(cmd).not.toContain('"/wt/$TASK/proj"');
   });

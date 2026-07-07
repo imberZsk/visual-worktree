@@ -339,9 +339,10 @@ function hasDockerRuntimeConfig(projectDir) {
  * @returns {string} 项目目录名
  */
 function projectNameOf(projectDir) {
-  // parts 为按路径分隔符拆分后的非空片段
-  const parts = String(projectDir || '').split('/').filter(Boolean);
-  return parts[parts.length - 1] || projectDir;
+  // 先归一化为正斜杠（Windows 下 realpathSync/join 返回反斜杠，split('/') 切不开），
+  // 再用 split 取最后一段；macOS 上 replace 是 no-op，行为与修改前完全一致
+  const parts = String(projectDir || '').replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts[parts.length - 1] || String(projectDir || '');
 }
 
 /**
@@ -972,8 +973,8 @@ function mergeResults(items) {
   const messages = [];
   const fixes = [];
   for (const { dir, result } of items) {
-    // projName 取项目目录最后一段作为简短前缀
-    const projName = dir.split('/').filter(Boolean).pop() || dir;
+    // projName 取项目目录最后一段作为简短前缀；先归一化反斜杠再 split，兼容 Windows 路径
+    const projName = dir.replace(/\\/g, '/').split('/').filter(Boolean).pop() || dir;
     if (severity[result.status] > severity[worst]) worst = result.status;
     // 仅非 ok 项计入消息，减少噪音；全 ok 时下方统一给「全部正常」
     if (result.status !== 'ok') messages.push(`[${projName}] ${result.message}`);
@@ -1119,7 +1120,11 @@ function pickDirsForRole(taskDir, roleDirs, allDirs) {
   // wanted 该角色声明的子目录名集合，用于按目录名匹配
   const wanted = new Set((roleDirs || []).map((d) => String(d).trim()).filter(Boolean));
   // 按「目录最后一段（子目录名）是否在 wanted 中」筛选实际存在的项目目录
-  return allDirs.filter((dir) => wanted.has(dir.split('/').filter(Boolean).pop()));
+  // 先归一化为正斜杠再 split，兼容 Windows 反斜杠；macOS 上为 no-op
+  return allDirs.filter((dir) => {
+    const name = dir.replace(/\\/g, '/').split('/').filter(Boolean).pop();
+    return wanted.has(name);
+  });
 }
 
 /**

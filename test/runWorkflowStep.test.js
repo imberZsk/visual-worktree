@@ -42,8 +42,9 @@ describe('runWorkflowStep 流式执行工作流步骤命令', () => {
     // fake 为本次 spawn 返回的假子进程
     const fake = makeFakeChild();
     spawnMock.mockReturnValue(fake);
-    // 发起执行（Promise 在 close 后 resolve）
-    const p = runWorkflowStep({ command: 'echo hello {path}', cwd: '/wt/TASK-A', task: 'TASK-A', branch: 'main' });
+    // 发起执行（Promise 在 close 后 resolve）；显式传 'darwin' 保证走 POSIX bash 分支，
+    // 否则 Windows CI 上 resolveShell 探测不到 Git Bash 会改用 cmd，导致 spawn('bash') 断言失败
+    const p = runWorkflowStep({ command: 'echo hello {path}', cwd: '/wt/TASK-A', task: 'TASK-A', branch: 'main' }, undefined, 'darwin');
     // 模拟脚本输出后正常退出
     fake.stdout.emit('data', Buffer.from('hello\n'));
     fake.emit('close', 0);

@@ -153,9 +153,10 @@ function openInVscode(targetPath, template, platform = process.platform) {
  * @param {string} [preferred] - 用户配置的首选终端（macOS：'Terminal'|'iTerm2'|'Ghostty'；Windows：'wt'|'powershell'|'cmd'），来自配置 terminalApp
  * @returns {Promise<{success:boolean, error?:string}>} 操作结果
  */
-export function openInTerminal(targetPath, preferred) {
+export function openInTerminal(targetPath, preferred, platform = process.platform) {
   // chain 为终端类型尝试链（主选 + 兜底），按平台解析；副作用层按序 exec 直到成功
-  const chain = resolveTerminalKind(preferred, existsSync);
+  // platform 参数允许测试注入 'darwin' 在 Windows CI 上验证 macOS 分支，而无需真机
+  const chain = resolveTerminalKind(preferred, existsSync, platform);
   return new Promise((resolve) => {
     // tryAt 从链的第 index 项开始尝试打开，失败则递归尝试下一项，链尽仍失败则回传错误
     const tryAt = (index) => {
@@ -164,7 +165,7 @@ export function openInTerminal(targetPath, preferred) {
         resolve({ success: false, error: '未找到可用终端' });
         return;
       }
-      exec(buildTerminalCommand(targetPath, chain[index]), (err) => {
+      exec(buildTerminalCommand(targetPath, chain[index], platform), (err) => {
         if (!err) return resolve({ success: true });
         // 当前终端打开失败（未安装/损坏），继续尝试链中下一个兜底终端
         tryAt(index + 1);
@@ -198,7 +199,7 @@ function hasHighConfidenceErrorOutput(output) {
  * @param {(evt:{taskName?:string, stepKey?:string, chunk:string})=>void} [onChunk] - 流式输出回调：每来一段 stdout/stderr 即调用，由调用方推给渲染进程
  * @returns {Promise<{success:boolean, code?:number, stdout?:string, stderr?:string, error?:string}>} 执行结果
  */
-export function runWorkflowStep(payload = {}, onChunk) {
+export function runWorkflowStep(payload = {}, onChunk, platform = process.platform) {
   // command/cwd/task/branch 从入参解构：command 为用户配置的命令模板，cwd 为任务目录，task/branch 供占位符替换
   const { command, cwd, task, branch, taskArgMode } = payload;
   const taskName = payload.taskName ?? task;
@@ -230,7 +231,8 @@ export function runWorkflowStep(payload = {}, onChunk) {
     const childEnv = { ...process.env, ...extraEnv, ...taskEnv };
     // shell 为按平台解析的执行器：macOS/Linux 用 bash；Windows 优先 Git Bash（保持 POSIX 语义），无则兜底 cmd。
     // 传入 existsSync 探测 Windows 上 Git Bash 的绝对路径；纯逻辑在 commandRunner.resolveShell。
-    const shell = resolveShell(process.platform, existsSync);
+    // platform 参数允许测试注入 'darwin'/'linux' 在 Windows CI 上验证 POSIX 分支，无需真机。
+    const shell = resolveShell(platform, existsSync);
     // 用解析出的 shell 执行整条命令字符串（bash -c / cmd /c <finalCmd>），合并 childEnv 注入凭证和任务上下文
     const child = spawn(shell.cmd, [...shell.args, finalCmd], { cwd, env: childEnv });
     // stdout data：累积到 outBuf 并实时推送

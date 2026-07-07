@@ -131,8 +131,9 @@ describe('config', () => {
   it('default config dir is unified ~/.visualWorktree (no hyphen)', () => {
     // 默认配置目录统一到 .visualWorktree，与 task-status/links/workflow 同目录
     const { dir, file } = getConfigPaths();
-    expect(dir.endsWith('/.visualWorktree')).toBe(true);
-    expect(file.endsWith('/.visualWorktree/config.json')).toBe(true);
+    // 归一化为正斜杠再断言：Windows 下 path.join 返回反斜杠，endsWith('/.visualWorktree') 会失败
+    expect(dir.replace(/\\/g, '/').endsWith('/.visualWorktree')).toBe(true);
+    expect(file.replace(/\\/g, '/').endsWith('/.visualWorktree/config.json')).toBe(true);
     // 不再使用带连字符的旧目录名
     expect(dir.includes('.visual-worktree')).toBe(false);
   });
