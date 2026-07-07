@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visual Worktree</title>
+    <style>
+      /* 首屏背景色：从 localStorage 读取主题偏好，默认暗色，避免白屏闪烁。
+         背景同时挂在 html 与 body 上，确保 React 挂载前整窗即为主题色 */
+      html, body {
+        margin: 0;
+        background: #141414;
+      }
+      /* 亮色主题时的背景色（通过内联脚本提前在 <html> 上加 class，避免 React 渲染延迟） */
+      html.light-theme, html.light-theme body {
+        background: #ffffff;
+      }
+    </style>
+    <script>
+      /* 在 React 加载前同步应用主题背景，消除白屏闪烁。
+         此脚本位于 <head>，此时 document.body 尚未解析，故 class 加在 documentElement(<html>) 上 */
+      (function() {
+        try {
+          // theme 用户上次选择的主题，默认 dark（与 useStore 初值保持一致）
+          var theme = localStorage.getItem('vw-theme') || 'dark';
+          if (theme === 'light') {
+            document.documentElement.classList.add('light-theme');
+          }
+        } catch (e) {
+          /* localStorage 不可用时保持默认暗色 */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>

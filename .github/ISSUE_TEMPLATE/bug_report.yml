@@ -1,0 +1,44 @@
+name: Bug 报告
+description: 报告可复现的问题
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 简要说明你遇到了什么问题。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请按顺序列出触发问题的操作。
+      placeholder: |
+        1. 打开...
+        2. 点击...
+        3. 看到...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你原本期望应用如何表现？
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 请提供 macOS、Node.js、pnpm、Git 和应用版本。
+      placeholder: |
+        macOS:
+        Node.js:
+        pnpm:
+        Git:
+        Visual Worktree:
+    validations:
+      required: true

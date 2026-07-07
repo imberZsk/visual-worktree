@@ -1,0 +1,36 @@
+node_modules/
+
+# 构建与发布产物
+dist/
+release/
+*.dmg
+*.zip
+*.tar.gz
+
+# 测试与覆盖率产物
+coverage/
+.nyc_output/
+
+# 本地环境与日志
+.DS_Store
+.npmrc
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 包管理器：本项目使用 pnpm，避免混入 npm/yarn 锁文件
+package-lock.json
+yarn.lock
+
+# 本地 AI/工具状态，不应进入公开仓库
+.claude/*.local.md
+.superpowers/
+
+# 编辑器本地状态
+.idea/
+.vscode/

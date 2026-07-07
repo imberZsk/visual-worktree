@@ -1,0 +1,178 @@
+/* 全局样式：视图切换淡入动画 */
+
+/* 防止 Electron webview 出现文档级滚动条；滚动由 Content 内部 overflow:auto 处理 */
+html, body, #root {
+  overflow: hidden;
+  height: 100%;
+}
+
+/* 滚动条稳定：内容高度变化导致滚动条出现/消失时，预留出滚动条宽度，避免内容区宽度横向跳动（CLS） */
+.ant-layout-content {
+  scrollbar-gutter: stable;
+}
+
+/* 视图切换时的淡入 + 轻微上移，缓和 Tab 切换的生硬感 */
+/* min-height 常驻生效：内容不足一屏时也保持稳定的高度基准，避免加载完成（full-height-spin 被移除）后容器塌陷造成的整屏跳动（CLS） */
+.view-fade {
+  animation: viewFadeIn 0.22s ease-out;
+  min-height: calc(100vh - 96px);
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 让 Spin 包裹容器撑满内容可视高度，使加载转圈在整屏垂直居中（而非贴顶部） */
+/* Content 内边距 16，Header 高 64，故可视高度约为视口减去这些 */
+.full-height-spin {
+  min-height: calc(100vh - 96px);
+}
+.full-height-spin .ant-spin-container {
+  min-height: calc(100vh - 96px);
+}
+
+/* 修复表格固定右列在垂直滚动时出现的层级 bug（sticky 列 z-index 过高遮盖上方内容） */
+.ant-table-body .ant-table-cell-fix-right {
+  z-index: 1 !important;
+}
+
+/* AntD Modal 默认从最近点击位置缩放；全局固定中心原点，让弹层直接从屏幕中间出现 */
+.ant-modal {
+  transform-origin: center center !important;
+}
+
+/* 环境检查刷新遮罩默认跟随亮色浮层背景；暗色主题在下方用根主题属性覆盖，避免 React 状态切换瞬间闪白 */
+.env-health-refresh-overlay {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+/* 暗色主题下给环境检查 Modal 自定义内容区兜底暗色背景，防止 portal/动画首帧露出默认白底 */
+html[data-theme='dark'] .env-health-modal .ant-modal-content,
+html[data-theme='dark'] .env-health-modal .ant-modal-header,
+html[data-theme='dark'] .env-health-modal .ant-modal-body,
+html[data-theme='dark'] .env-health-modal .ant-modal-footer,
+html[data-theme='dark'] .env-health-result-shell {
+  background: #141414;
+}
+
+/* 暗色主题下刷新遮罩也使用暗色半透明层，避免“重新检查”时旧结果区域闪成白色 */
+html[data-theme='dark'] .env-health-refresh-overlay {
+  background: rgba(20, 20, 20, 0.78);
+}
+
+/* 隐藏项目在“显示隐藏项目”模式下仍可恢复，视觉上轻微降权以免误当作常规项目 */
+.project-row-hidden {
+  opacity: 0.62;
+}
+
+/* 项目行隐藏时先淡出并轻微上移，动画结束后再从数据列表移除 */
+.project-row-hiding > td {
+  animation: listItemHideOut 0.18s ease forwards;
+  pointer-events: none;
+}
+
+/* Worktree 任务隐藏时保留一个短暂退出态，避免列表突然跳变 */
+.worktree-task-hiding {
+  animation: listItemHideOut 0.18s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes listItemHideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+}
+
+/* 历史任务弹层列表容器提供稳定测量边界，pageSize 由该容器高度动态推导 */
+.history-task-list-shell {
+  max-height: min(68vh, 640px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 历史任务分页贴合列表底部，不额外撑出一段空白 */
+.history-task-list .ant-list-pagination {
+  margin-block-end: 0;
+}
+
+/* 历史任务列表项用固定左右布局：左侧文本可省略，右侧操作位不随 docsPath 缺失而跳动 */
+.history-task-list .history-task-list-item {
+  padding-inline: 0;
+}
+
+/* 历史任务单行主体容器，min-width:0 允许左侧内容在固定操作区旁正确收缩 */
+.history-task-entry {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+
+/* 历史任务内容列存储任务名、链接和删除时间，宽度不足时交给子元素省略 */
+.history-task-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 历史任务标题行容纳任务名和状态标签，任务名过长时只压缩任务名 */
+.history-task-title-row {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 历史任务名默认只占一行，完整内容通过悬停浮层查看 */
+.history-task-name {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+/* 历史任务链接默认只占一行，避免长 URL 把历史列表撑高 */
+.history-task-link {
+  display: block;
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 历史任务右侧工具区固定三个图标位，保证有无归档 docs 时视觉位置一致 */
+.history-task-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 96px;
+  gap: 2px;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+/* 历史任务工具按钮槽位固定宽高，禁用按钮也保留占位 */
+.history-task-action-slot {
+  align-items: center;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}

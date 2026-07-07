@@ -1,0 +1,4 @@
+# 允许构建工具安装本机二进制，保证 pnpm 11 在 CI 和本地安装时可复现。
+allowBuilds:
+  electron-winstaller: true
+  esbuild: true
