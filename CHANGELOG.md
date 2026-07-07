@@ -13,6 +13,7 @@
   - 打开编辑器（VSCode）兼容 Windows：补充 `code.cmd` 常见安装路径，兜底命令由 macOS 的 `open -a` 换成 Windows 的 `start code`。
   - 工作流步骤执行优先复用 Git for Windows 自带的 `bash.exe`（保持 `.sh`/POSIX 命令模板与 macOS 一致），找不到才兜底 `cmd /c`。
   - 创建 worktree 时：跳过 hooks 的空设备路径按平台切换（Windows 用 `NUL`、类 Unix 用 `/dev/null`）；`node_modules` 复用链接在 Windows 上改用 junction，规避目录符号链接需管理员权限的限制。
+  - worktree 扫描/删除的路径匹配统一按正斜杠归一化：Windows 上 `git worktree list` 返回正斜杠、而 Node 的 `join`/`realpathSync` 返回反斜杠，二者直接做前缀匹配、`split('/')` 切分或相等比较会失配，导致 worktree 扫不到、含斜杠的任务名被截断成第一层目录、幂等复用判断失效。新增 `toPosixPath` 归一化后再比较（类 Unix 平台为恒等变换，零影响），并补充针对反斜杠输入的单元测试。
   - 打包新增 Windows target（`nsis` 安装包 + `portable` 便携版，x64）与 `dist:win` 脚本，配套 `build/icon.ico` 图标。
   - GitHub CI 扩为 macOS/Windows 双平台跑测试，并新增在 Windows runner 上原生打包并上传产物的 job。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
