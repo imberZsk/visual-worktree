@@ -41,6 +41,30 @@ const EDITOR_COMMAND_OPTIONS = [
   { label: 'WebStorm（webstorm {path}）', value: 'webstorm {path}' },
 ];
 
+// 各平台终端应用下拉选项：Windows 用 Windows Terminal/PowerShell/cmd，macOS 用 Terminal/iTerm2/Ghostty。
+// value 与主进程 openInTerminal/resolveTerminalKind 识别的 terminalApp 取值保持一致。
+const TERMINAL_OPTIONS_WIN32 = [
+  { value: 'wt', label: 'Windows Terminal（推荐，Win11 自带）' },
+  { value: 'powershell', label: 'PowerShell（Windows 自带）' },
+  { value: 'cmd', label: 'cmd（Windows 自带，兜底）' },
+];
+// macOS 终端选项（保持原有）
+const TERMINAL_OPTIONS_DARWIN = [
+  { value: 'Terminal', label: 'Terminal（macOS 默认，推荐）' },
+  { value: 'iTerm2', label: 'iTerm2' },
+  { value: 'Ghostty', label: 'Ghostty' },
+];
+
+/**
+ * 按运行平台返回终端应用下拉选项。
+ * @param {string} platform - 运行平台标识（来自 api.platform，如 'win32'|'darwin'）
+ * @returns {{value:string,label:string}[]} 当前平台可选的终端应用列表
+ */
+function getTerminalOptions(platform) {
+  // Windows 展示 wt/powershell/cmd，其余（macOS/Linux）展示 Terminal 系
+  return platform === 'win32' ? TERMINAL_OPTIONS_WIN32 : TERMINAL_OPTIONS_DARWIN;
+}
+
 /**
  * 设置抽屉
  * @param {object} props - 组件属性
@@ -329,17 +353,13 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
               filterOption={(input, opt) => String(opt.value).toLowerCase().includes(input.toLowerCase())}
             />
           </Form.Item>
-          {/* 终端应用选择：Terminal / iTerm2 / Ghostty，默认 Terminal */}
+          {/* 终端应用选择：按平台展示不同选项——Windows 为 wt/PowerShell/cmd，macOS 为 Terminal/iTerm2/Ghostty */}
           <Form.Item
             label="终端应用"
             name="terminalApp"
-            tooltip="默认使用 macOS 自带 Terminal。iTerm2：需先安装 iTerm.app。Ghostty：需先安装 Ghostty.app，应用会在打开时显式切换到目标目录。未安装所选终端时会自动兜底用系统 Terminal。"
+            tooltip="Windows：默认 Windows Terminal（Win11 自带），未安装时自动兜底 PowerShell/cmd。macOS：默认系统 Terminal，iTerm2/Ghostty 需先安装对应应用，未安装所选终端时自动兜底系统 Terminal。"
           >
-            <Select>
-              <Select.Option value="Terminal">Terminal（macOS 默认，推荐）</Select.Option>
-              <Select.Option value="iTerm2">iTerm2</Select.Option>
-              <Select.Option value="Ghostty">Ghostty</Select.Option>
-            </Select>
+            <Select options={getTerminalOptions(api.platform)} />
           </Form.Item>
         </>
       ),

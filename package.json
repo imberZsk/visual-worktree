@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
@@ -35,7 +35,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "verify:boot": "node scripts/verify-boot.mjs",
-    "dist": "pnpm run build:ui && electron-builder --mac --arm64"
+    "dist": "pnpm run build:ui && electron-builder --mac --arm64",
+    "dist:win": "pnpm run build:ui && electron-builder --win --x64"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
@@ -85,6 +86,28 @@
     },
     "dmg": {
       "title": "VisualWorktree ${version}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": "x64"
+        },
+        {
+          "target": "portable",
+          "arch": "x64"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "VisualWorktree-${version}-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "VisualWorktree-${version}-portable.${ext}"
     }
   }
 }

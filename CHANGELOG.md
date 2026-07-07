@@ -8,6 +8,13 @@
 
 ### 新增
 
+- **Windows 平台支持**：应用现可在 Windows 上运行与打包。
+  - 打开终端支持 Windows Terminal(`wt`)/PowerShell/cmd，按「主选 → 兜底」链依次尝试，未装某个终端时自动降级；设置页的「终端应用」下拉按运行平台展示对应选项。
+  - 打开编辑器（VSCode）兼容 Windows：补充 `code.cmd` 常见安装路径，兜底命令由 macOS 的 `open -a` 换成 Windows 的 `start code`。
+  - 工作流步骤执行优先复用 Git for Windows 自带的 `bash.exe`（保持 `.sh`/POSIX 命令模板与 macOS 一致），找不到才兜底 `cmd /c`。
+  - 创建 worktree 时：跳过 hooks 的空设备路径按平台切换（Windows 用 `NUL`、类 Unix 用 `/dev/null`）；`node_modules` 复用链接在 Windows 上改用 junction，规避目录符号链接需管理员权限的限制。
+  - 打包新增 Windows target（`nsis` 安装包 + `portable` 便携版，x64）与 `dist:win` 脚本，配套 `build/icon.ico` 图标。
+  - GitHub CI 扩为 macOS/Windows 双平台跑测试，并新增在 Windows runner 上原生打包并上传产物的 job。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更

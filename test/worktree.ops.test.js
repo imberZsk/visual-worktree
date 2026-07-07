@@ -9,6 +9,7 @@ import {
   getWorktrees,
   linkNodeModules,
   unlinkNodeModules,
+  buildWorktreeAddArgs,
 } from '../src/core/gitService.js';
 import { makeTempRoot, initRepo, git, makeRemoteAndClone, commitFile } from './helpers.js';
 
@@ -399,6 +400,20 @@ describe('node_modules 软链接', () => {
     expect(lstatSync(join(target, 'node_modules')).isSymbolicLink()).toBe(false);
   });
 
+  it('linkNodeModules 传入 platform=win32 时用 junction 类型创建（不需管理员权限）', () => {
+    // WHY 测这条：Windows 上目录 symlink 需管理员权限，改用 junction 规避；此处在 macOS 上注入 win32 平台参数，
+    // 验证「传 win32 也能成功创建链接」——Node 在 macOS 上把 junction 类型按普通符号链接处理，创建成功即证明平台分支未抛错。
+    const repo = initRepo(join(ctx.root, 'projWin'), 'master');
+    mkdirSync(join(repo, 'node_modules', 'left-pad'), { recursive: true });
+    const target = join(ctx.root, 'worktrees', 'TASK-WIN', 'projWin');
+    mkdirSync(target, { recursive: true });
+    // 显式传 win32：走 junction 分支
+    const res = linkNodeModules(repo, target, 'win32');
+    expect(res.linked).toBe(true);
+    // 链接可用，能读到源项目已安装的包
+    expect(existsSync(join(target, 'node_modules', 'left-pad'))).toBe(true);
+  });
+
   it('addWorktree 默认自动软链接源项目 node_modules', async () => {
     const repo = initRepo(join(ctx.root, 'projA'), 'master');
     mkdirSync(join(repo, 'node_modules', 'react'), { recursive: true });
@@ -484,5 +499,30 @@ describe('node_modules 软链接', () => {
     const res = await addWorktree(repo, target, 'feat/b', { newBranch: true });
     expect(res.success).toBe(false);
     expect(res.error).toBeTruthy();
+  });
+});
+
+describe('buildWorktreeAddArgs（跳过 hooks 的空设备按平台切换）', () => {
+  it('类 Unix 平台用 /dev/null 作为 hooksPath', () => {
+    // 注入 platform='darwin'，hooksPath 指向 /dev/null
+    const args = buildWorktreeAddArgs('feat/x', '/wt/T/proj', true, false, '', 'darwin');
+    expect(args).toContain('core.hooksPath=/dev/null');
+    // 参数顺序：-c <config> worktree add ...
+    expect(args.slice(0, 4)).toEqual(['-c', 'core.hooksPath=/dev/null', 'worktree', 'add']);
+  });
+
+  it('Windows 平台用 NUL 作为 hooksPath（/dev/null 在原生 git 下非法）', () => {
+    // 注入 platform='win32'，hooksPath 应改用 Windows 空设备 NUL
+    const args = buildWorktreeAddArgs('feat/x', 'C:\\wt\\T\\proj', true, false, '', 'win32');
+    expect(args).toContain('core.hooksPath=NUL');
+    expect(args).not.toContain('core.hooksPath=/dev/null');
+  });
+
+  it('新建分支时带 -b 与起点引用；平台参数不影响分支参数拼装', () => {
+    // 验证 platform 参数不干扰既有的分支/起点参数逻辑
+    const args = buildWorktreeAddArgs('feat/x', 'C:\\wt\\T', true, false, 'origin/main', 'win32');
+    expect(args).toContain('-b');
+    expect(args).toContain('feat/x');
+    expect(args).toContain('origin/main');
   });
 });

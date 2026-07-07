@@ -24,8 +24,10 @@ const DEFAULT_CONFIG = {
   // 编辑器命令模板：{path} 占位符会被替换为实际路径，支持 VSCode(code)/Cursor(cursor)/Trae(trae) 等；
   // code 命令会自动注入 -n 在新窗口打开，不替换用户当前窗口
   vscodeCommand: 'code {path}',
-  // 终端选择：Terminal（macOS 默认终端，推荐）/ iTerm2 / Ghostty
-  terminalApp: 'Terminal',
+  // 终端选择：按平台给不同默认——Windows 默认 wt(Windows Terminal)，macOS/其他默认系统 Terminal。
+  // WHY 按平台：默认值直接决定新用户首次「打开终端」用哪个应用；给 Windows 存 'Terminal' 虽也能被主进程兜底到 wt，
+  // 但设置页下拉会显示不匹配项。取当前平台的合理默认，让展示与行为一致。macOS：Terminal / iTerm2 / Ghostty；Windows：wt / powershell / cmd。
+  terminalApp: process.platform === 'win32' ? 'wt' : 'Terminal',
   // 任务工作流步骤清单：worktree 视图里每个任务展示的「需求流程」步骤（可在设置中增删改）。
   // 每项 { key, label, command }，所有步骤都可勾选；command 非空的步骤额外可「执行」。
   // 取默认清单的深拷贝，避免多处共享同一数组引用被意外修改。

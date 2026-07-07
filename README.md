@@ -1,6 +1,6 @@
 # Visual Worktree
 
-Visual Worktree 是一个 macOS 桌面应用，用于可视化管理本地多个 Git 仓库，并按“任务/需求”组织跨仓库 worktree。它适合需要同时改多个仓库、频繁检查分支状态、批量拉取或清理 worktree 的开发者。
+Visual Worktree 是一个跨平台（macOS / Windows）桌面应用，用于可视化管理本地多个 Git 仓库，并按“任务/需求”组织跨仓库 worktree。它适合需要同时改多个仓库、频繁检查分支状态、批量拉取或清理 worktree 的开发者。
 
 ## 主要功能
 
@@ -21,10 +21,13 @@ Visual Worktree 是一个 macOS 桌面应用，用于可视化管理本地多个
 
 ## 系统要求
 
-- macOS Apple Silicon（当前打包脚本默认产出 arm64 DMG）
+- macOS Apple Silicon（`pnpm run dist` 产出 arm64 DMG）或 Windows 10/11 x64（`pnpm run dist:win` 产出 NSIS 安装包 + 便携版）
 - Node.js 20 或更高版本
 - pnpm 11 或更高版本
-- 系统已安装 Git；如果没有，可通过 `xcode-select --install` 安装 Apple Command Line Tools
+- 系统已安装 Git；macOS 可通过 `xcode-select --install` 安装 Apple Command Line Tools，Windows 建议安装 [Git for Windows](https://git-scm.com/download/win)
+- Windows 额外建议：
+  - 安装 Git for Windows（自带 `bash.exe`）——「工作流步骤执行」优先用它跑命令模板，以保持与 macOS 一致的 POSIX 语义；未安装则回退到 `cmd`，此时 `.sh` 类命令可能无法运行
+  - 「打开终端」默认使用 Windows Terminal（Win11 自带；Win10 可从 Microsoft Store 安装），未安装时自动回退 PowerShell/cmd
 
 ## 快速开始
 
@@ -42,6 +45,7 @@ pnpm run build:ui       # 构建渲染进程产物
 pnpm start              # 构建后以生产模式启动 Electron
 pnpm run verify:boot    # Electron headless 启动冒烟验证
 pnpm run dist           # 打包 macOS arm64 DMG
+pnpm run dist:win       # 打包 Windows x64 安装包 + 便携版（需在 Windows 上运行）
 ```
 
 首次启动后，打开右上角设置并配置：
@@ -54,12 +58,15 @@ pnpm run dist           # 打包 macOS arm64 DMG
 ## 打包说明
 
 ```bash
-pnpm run dist
+pnpm run dist       # macOS：arm64 DMG
+pnpm run dist:win   # Windows：x64 NSIS 安装包 + 便携版（须在 Windows 上运行）
 ```
 
-构建产物输出到 `release/`。当前配置仅生成 macOS arm64 DMG，且 `package.json` 中 `build.mac.identity` 为 `null`，表示应用未进行 Apple 开发者签名。首次打开未签名应用时，macOS 可能会提示安全拦截，可在 Finder 中右键应用选择“打开”，或自行签名/公证后分发。
+构建产物输出到 `release/`。
 
-如需支持 Intel Mac 或 universal 包，可以调整 `package.json` 中的 `build.mac.target[].arch` 和 `dist` 脚本。
+**macOS**：生成 arm64 DMG，`package.json` 中 `build.mac.identity` 为 `null`，表示应用未进行 Apple 开发者签名。首次打开未签名应用时，macOS 可能会提示安全拦截，可在 Finder 中右键应用选择“打开”，或自行签名/公证后分发。如需支持 Intel Mac 或 universal 包，可调整 `build.mac.target[].arch` 和 `dist` 脚本。
+
+**Windows**：生成 x64 的 NSIS 安装包（`VisualWorktree-<版本>-Setup.exe`，支持自定义安装目录）与免安装便携版（`VisualWorktree-<版本>-portable.exe`）。electron-builder 需在 Windows 上原生打包 Windows 目标，跨平台从 macOS 直接打 Windows 包并不可靠；推荐用仓库内置的 GitHub Actions（`.github/workflows/ci.yml` 的 `build-win` job，在 `windows-latest` runner 上打包并上传产物）在 CI 里出包。Windows 包同样未做代码签名，首次运行可能触发 SmartScreen 提示，可选择“仍要运行”。
 
 ## 架构概览
 

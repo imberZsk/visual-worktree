@@ -77,3 +77,26 @@ describe('buildVscodeCommand 命令构建（注入 -n 新窗口打开）', () =>
     expect(cmd).not.toContain('"/wt/$TASK/proj"');
   });
 });
+
+describe('buildVscodeCommand Windows 分支（双引号包裹路径）', () => {
+  it('Windows 下用双引号包裹路径而非 POSIX 单引号', () => {
+    // 传入 platform='win32'，路径应被双引号包裹（cmd 分词以双引号为界）
+    const cmd = buildVscodeCommand('code {path}', 'C:\\wt\\TASK A', 'win32');
+    expect(cmd).toContain('"C:\\wt\\TASK A"');
+    // 不应出现 POSIX 单引号包裹的路径
+    expect(cmd).not.toContain("'C:\\wt\\TASK A'");
+  });
+
+  it('Windows 下仍注入 -n 新窗口参数', () => {
+    // code 命令跨平台通用 -n 参数，Windows 也应注入
+    const cmd = buildVscodeCommand('code {path}', 'C:\\wt\\proj', 'win32');
+    expect(cmd).toContain('-n');
+    expect(cmd.indexOf('-n')).toBeLessThan(cmd.indexOf('C:\\wt\\proj'));
+  });
+
+  it('Windows 下含空格路径被双引号包裹不被拆词', () => {
+    // 任务目录含空格是常见场景，双引号包裹保证 cmd 不拆词
+    const cmd = buildVscodeCommand('code', 'C:\\Users\\a b\\wt', 'win32');
+    expect(cmd).toContain('"C:\\Users\\a b\\wt"');
+  });
+});

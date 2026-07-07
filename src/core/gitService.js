@@ -16,9 +16,10 @@ const NODE_MODULES_DIR = 'node_modules';
  * 失败不抛出，仅返回结果，避免影响 worktree 创建主流程。
  * @param {string} sourceProjectPath - 源项目根目录
  * @param {string} worktreePath - worktree 目标路径
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定用 junction 还是 dir 类型软链接
  * @returns {{linked:boolean, reason?:string, error?:string}} 是否创建了软链接，未创建时附原因
  */
-export function linkNodeModules(sourceProjectPath, worktreePath) {
+export function linkNodeModules(sourceProjectPath, worktreePath, platform = process.platform) {
   // source 源项目的 node_modules 绝对路径，作为软链接指向的目标
   const source = join(sourceProjectPath, NODE_MODULES_DIR);
   // target worktree 内待创建的 node_modules 软链接路径
@@ -27,9 +28,13 @@ export function linkNodeModules(sourceProjectPath, worktreePath) {
   if (!existsSync(source)) return { linked: false, reason: 'source-missing' };
   // worktree 已存在同名目录（真实目录或既有软链接）：不覆盖，避免破坏已有依赖
   if (existsSync(target) || isSymlink(target)) return { linked: false, reason: 'target-exists' };
+  // linkType 为软链接类型：Windows 用 junction（NTFS 目录联结），类 Unix 用 dir（符号链接）。
+  // WHY 用 junction：Windows 上创建目录符号链接(symlink)默认需要管理员权限或开启开发者模式（SeCreateSymbolicLinkPrivilege），
+  // 普通用户会 EPERM 失败；junction 是文件系统层的目录联结，无需特殊权限即可创建，正好适配「复用 node_modules」这一目录级链接场景。
+  const linkType = platform === 'win32' ? 'junction' : 'dir';
   try {
-    // 用 'dir' 类型创建目录软链接，兼容跨平台（Windows 需显式指定）
-    symlinkSync(source, target, 'dir');
+    // 按平台类型创建目录链接：Windows junction / 类 Unix dir 符号链接
+    symlinkSync(source, target, linkType);
     return { linked: true };
   } catch (e) {
     return { linked: false, error: e.message };
@@ -141,11 +146,16 @@ async function mapWithConcurrency(items, fn, limit = SCAN_CONCURRENCY) {
  * @param {boolean} useNewBranch - 是否通过 -b 创建新分支
  * @param {boolean} [forceExistingBranch] - 复用已被其他 worktree 占用的已有分支时是否加 --force
  * @param {string} [startPoint] - 新建分支的起点引用（如 master/origin/main）；仅在 useNewBranch 时生效，不传则用源仓库当前 HEAD
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定 hooksPath 指向的空设备路径
  * @returns {string[]} simple-git raw 所需的 git 参数数组
  */
-function buildWorktreeAddArgs(branch, targetPath, useNewBranch, forceExistingBranch = false, startPoint = '') {
+export function buildWorktreeAddArgs(branch, targetPath, useNewBranch, forceExistingBranch = false, startPoint = '', platform = process.platform) {
+  // nullDevice 为当前平台的「空设备」路径：Windows 用 NUL，类 Unix 用 /dev/null。
+  // WHY：把 core.hooksPath 指向空设备可跳过 worktree 创建时的 git hooks（husky 等常因依赖缺失非零退出导致 add 失败）；
+  // /dev/null 在 Windows 原生 git 下不是合法路径，需换成 Windows 的空设备名 NUL。
+  const nullDevice = platform === 'win32' ? 'NUL' : '/dev/null';
   // args 存储 simple-git raw 需要的完整 git 参数，包含跳过 hooks 的临时配置
-  const args = ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add'];
+  const args = ['-c', `core.hooksPath=${nullDevice}`, 'worktree', 'add'];
   if (forceExistingBranch && !useNewBranch) {
     // 分支已被另一个 worktree 使用时，Git 默认拒绝；这里按用户选择显式复用该已有分支
     args.push('--force');
