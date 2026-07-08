@@ -1,4 +1,6 @@
 node_modules/
+# 也忽略 node_modules 软链接本身：worktree 复用源项目依赖时创建的是符号链接文件，上面带斜杠的目录规则匹配不到
+node_modules
 
 # 构建与发布产物
 dist/

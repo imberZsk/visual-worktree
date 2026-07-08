@@ -32,7 +32,8 @@ describe('getSafeToRemoveWorktrees', () => {
     git(proj, 'branch --merged master'); // 触发一次确保命令可用
     // feat/done 与 master 同提交 → 已合并
     const list = await getSafeToRemoveWorktrees(projectsRoot, worktreesRoot, ['master', 'main']);
-    const found = list.find((w) => w.path.endsWith(join('TASK-1', 'projA')));
+    // w.path 来自 git worktree list（Windows 上为正斜杠），先归一化再按正斜杠后缀匹配，避免 join 在 Windows 产生反斜杠导致失配
+    const found = list.find((w) => w.path.replace(/\\/g, '/').endsWith('TASK-1/projA'));
     expect(found).toBeTruthy();
     expect(found.taskName).toBe('TASK-1');
     expect(found.projectName).toBe('projA');

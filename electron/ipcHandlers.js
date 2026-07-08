@@ -1,8 +1,8 @@
 import { IPC } from './ipcChannels.js';
 import * as gitService from '../src/core/gitService.js';
 import { loadConfig, resetConfig, saveConfig } from '../src/core/config.js';
-import { detectTerminal, buildTerminalCommand, shellSingleQuote } from '../src/core/terminalService.js';
-import { buildStepCommand } from '../src/core/commandRunner.js';
+import { detectTerminal, buildTerminalCommand, resolveTerminalKind, shellSingleQuote, winQuote } from '../src/core/terminalService.js';
+import { buildStepCommand, resolveShell } from '../src/core/commandRunner.js';
 import { getSessionsByTask, getTasksSummary } from '../src/core/claudeService.js';
 import { checkEnvHealth } from '../src/core/envHealthService.js';
 import { loadTaskEnvHealth, saveTaskEnvHealth } from '../src/core/envHealthStore.js';
@@ -17,12 +17,29 @@ import { homedir } from 'os';
 // IPC handler 注册：把核心 gitService/config 能力暴露给渲染进程。
 // 抽成独立函数并注入 ipcMain，便于用 mock 做接口测试（无需启动 Electron）。
 
-// VSCode CLI 在 GUI 启动的 Electron 中可能不在 PATH，预置 macOS 常见安装位置作兜底
-const VSCODE_CLI_PATHS = [
+// VSCode CLI 在 GUI 启动的 Electron 中可能不在 PATH，预置各平台常见安装位置作兜底。
+// macOS：Homebrew(intel/arm) 与应用包内 CLI；Windows：系统级与用户级安装的 code.cmd（%LOCALAPPDATA% 用户装、Program Files 全局装）。
+const VSCODE_CLI_PATHS_DARWIN = [
   '/usr/local/bin/code',
   '/opt/homebrew/bin/code',
   '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
 ];
+// Windows 常见 VSCode CLI(code.cmd) 位置：优先用户级安装（占多数），再全局安装
+const VSCODE_CLI_PATHS_WIN32 = [
+  join(homedir(), 'AppData/Local/Programs/Microsoft VS Code/bin/code.cmd'),
+  'C:/Program Files/Microsoft VS Code/bin/code.cmd',
+  'C:/Program Files (x86)/Microsoft VS Code/bin/code.cmd',
+];
+
+/**
+ * 按平台返回 VSCode CLI 的候选绝对路径列表（用于 PATH 中无 code 时的兜底）。
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台
+ * @returns {string[]} 该平台下 VSCode CLI 的候选安装路径
+ */
+function getVscodeCliPaths(platform = process.platform) {
+  // Windows 返回 code.cmd 候选路径，其余平台（macOS/Linux）返回 Unix 风格候选
+  return platform === 'win32' ? VSCODE_CLI_PATHS_WIN32 : VSCODE_CLI_PATHS_DARWIN;
+}
 
 // 需要透传给流程脚本子进程的环境变量前缀/名称白名单。
 // WHY：流程脚本（jira 评论、飞书上传、claude 分析）依赖 ANTHROPIC/JIRA/SSO/FEISHU 等凭证，
@@ -65,11 +82,12 @@ async function loadClaudeSettingsEnv() {
  * -n（--new-window）始终新开一个窗口、不动现有窗口；两者都不会在程序坞新建额外的 VSCode 进程图标。
  * @param {string} template - 命令模板，如 'code {path}'，{path} 为占位符
  * @param {string} targetPath - 要打开的目录路径
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定路径用 POSIX 单引号还是 Windows 双引号
  * @returns {string} 可直接交给 exec 执行的完整命令字符串
  */
-export function buildVscodeCommand(template, targetPath) {
-  // quoted 用 POSIX 单引号包裹目标路径，防止空格/特殊字符把命令拆开或被 shell 展开
-  const quoted = shellSingleQuote(targetPath);
+export function buildVscodeCommand(template, targetPath, platform = process.platform) {
+  // quoted 为按平台包裹的目标路径：Windows 用双引号（cmd 分词以双引号为界），其余平台用 POSIX 单引号
+  const quoted = platform === 'win32' ? winQuote(targetPath) : shellSingleQuote(targetPath);
   // tpl 为去掉首尾空白的有效模板，缺省回退到默认 code 命令
   const tpl = (template || 'code {path}').trim();
   // 注入 -n（new-window）：始终新开窗口而不替换用户当前窗口。
@@ -83,35 +101,41 @@ export function buildVscodeCommand(template, targetPath) {
 
 /**
  * 在 VSCode 中打开目录：优先用配置的命令模板（默认 code -n 新窗口打开，不动用户当前窗口），
- * 失败则回退到已知 CLI 路径，再失败用 macOS 的 open -a 启动 VSCode 应用。
+ * 失败则回退到已知 CLI 路径，再失败用系统方式启动 VSCode 应用（macOS: open -a；Windows: start code）。
  * @param {string} targetPath - 要打开的目录路径
  * @param {string} [template] - 可选的命令模板（来自用户配置 vscodeCommand）
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定引号风格与最终兜底命令
  * @returns {Promise<{success:boolean, error?:string}>} 操作结果
  */
-function openInVscode(targetPath, template) {
-  // 用 shell 引号包裹路径，防止空格/特殊字符导致命令拆分
-  const quoted = shellSingleQuote(targetPath);
+function openInVscode(targetPath, template, platform = process.platform) {
+  // isWin 标记是否 Windows 平台，决定路径引号风格与 CLI 候选路径/兜底命令
+  const isWin = platform === 'win32';
+  // quoted 为按平台包裹的目标路径：Windows 双引号、其余 POSIX 单引号
+  const quoted = isWin ? winQuote(targetPath) : shellSingleQuote(targetPath);
   return new Promise((resolve) => {
     // 先尝试配置模板（默认 code -n），在新窗口打开而不替换用户当前正在看的窗口
-    exec(buildVscodeCommand(template, targetPath), (err) => {
+    exec(buildVscodeCommand(template, targetPath, platform), (err) => {
       if (!err) return resolve({ success: true });
-      // PATH 中没有 code，尝试已知的绝对路径（同样用 -n 新窗口打开）
-      const cliPath = VSCODE_CLI_PATHS.find((p) => existsSync(p));
+      // PATH 中没有 code，尝试该平台已知的绝对路径（同样用 -n 新窗口打开）
+      const cliPath = getVscodeCliPaths(platform).find((p) => existsSync(p));
       if (cliPath) {
-        // quotedCliPath 存储 VSCode CLI 的 shell 安全路径，兼容 /Applications/... 里的空格
-        const quotedCliPath = shellSingleQuote(cliPath);
+        // quotedCliPath 存储 VSCode CLI 的安全路径，兼容安装目录里的空格
+        const quotedCliPath = isWin ? winQuote(cliPath) : shellSingleQuote(cliPath);
         exec(`${quotedCliPath} -n ${quoted}`, (err2) => {
           if (!err2) return resolve({ success: true });
-          // 绝对路径也失败，最终回退到 open -a
+          // 绝对路径也失败，最终回退到系统级启动
           fallbackOpen();
         });
       } else {
         fallbackOpen();
       }
     });
-    // 兜底：用 macOS open -a 启动 VSCode 应用打开目录
+    // 兜底：用系统方式启动 VSCode 应用打开目录。
+    // Windows 无 open -a：改用 start 调 code（首个 "" 为窗口标题占位）；macOS 用 open -a 按应用名启动。
     function fallbackOpen() {
-      exec(`open -a "Visual Studio Code" ${quoted}`, (err3) => {
+      // fallbackCmd 为平台相关的最终兜底命令
+      const fallbackCmd = isWin ? `start "" code -n ${quoted}` : `open -a "Visual Studio Code" ${quoted}`;
+      exec(fallbackCmd, (err3) => {
         if (!err3) resolve({ success: true });
         else resolve({ success: false, error: '未找到 VSCode，请确认已安装' });
       });
@@ -120,35 +144,34 @@ function openInVscode(targetPath, template) {
 }
 
 /**
- * 在终端中打开目录：优先使用用户配置指定的终端，未指定时按「检测到 Ghostty 则用 Ghostty，否则系统 Terminal」自动判定。
- * 选用 Ghostty 失败（如应用损坏）时兜底用系统 Terminal 重试一次。
- * 命令构建与终端检测的纯逻辑在 src/core/terminalService.js，这里只做 exec 副作用与降级兜底。
- * 导出以便单测验证「Ghostty 失败 → Terminal 兜底重试」这段分支逻辑（mock child_process）。
+ * 在终端中打开目录：优先使用用户配置指定的终端，未指定时按平台自动判定
+ * （macOS：检测到 Ghostty 用 Ghostty 否则系统 Terminal；Windows：Windows Terminal→powershell→cmd）。
+ * 选用的终端打开失败（未安装/损坏）时按兜底链逐个重试，直到某个成功或链尽。
+ * 终端类型解析与命令构建的纯逻辑在 src/core/terminalService.js，这里只做 exec 副作用与降级兜底。
+ * 导出以便单测验证「主选失败 → 兜底重试」这段分支逻辑（mock child_process）。
  * @param {string} targetPath - 要作为初始工作目录打开的目录路径
- * @param {string} [preferred] - 用户配置的首选终端（'Terminal' | 'Ghostty'），来自配置 terminalApp
+ * @param {string} [preferred] - 用户配置的首选终端（macOS：'Terminal'|'iTerm2'|'Ghostty'；Windows：'wt'|'powershell'|'cmd'），来自配置 terminalApp
  * @returns {Promise<{success:boolean, error?:string}>} 操作结果
  */
-export function openInTerminal(targetPath, preferred) {
+export function openInTerminal(targetPath, preferred, platform = process.platform) {
+  // chain 为终端类型尝试链（主选 + 兜底），按平台解析；副作用层按序 exec 直到成功
+  // platform 参数允许测试注入 'darwin' 在 Windows CI 上验证 macOS 分支，而无需真机
+  const chain = resolveTerminalKind(preferred, existsSync, platform);
   return new Promise((resolve) => {
-    // kind 最终采用的终端类型：用户显式配置优先，否则回退到自动检测
-    let kind;
-    // 用户明确选择了 Ghostty/iTerm2/Terminal 时直接采用，尊重设置；否则自动探测
-    if (preferred === 'Ghostty') kind = 'ghostty';
-    else if (preferred === 'iTerm2') kind = 'iterm2';
-    else if (preferred === 'Terminal') kind = 'terminal';
-    else kind = detectTerminal(existsSync);
-    exec(buildTerminalCommand(targetPath, kind), (err) => {
-      if (!err) return resolve({ success: true });
-      // 非系统 Terminal（Ghostty/iTerm2）打开失败（如应用未安装/损坏）时兜底用系统 Terminal 重试一次
-      if (kind === 'ghostty' || kind === 'iterm2') {
-        exec(buildTerminalCommand(targetPath, 'terminal'), (err2) => {
-          if (!err2) resolve({ success: true });
-          else resolve({ success: false, error: '未找到可用终端' });
-        });
-      } else {
+    // tryAt 从链的第 index 项开始尝试打开，失败则递归尝试下一项，链尽仍失败则回传错误
+    const tryAt = (index) => {
+      // 链尽仍无成功：所有候选终端都打不开，回传失败供 UI 提示
+      if (index >= chain.length) {
         resolve({ success: false, error: '未找到可用终端' });
+        return;
       }
-    });
+      exec(buildTerminalCommand(targetPath, chain[index], platform), (err) => {
+        if (!err) return resolve({ success: true });
+        // 当前终端打开失败（未安装/损坏），继续尝试链中下一个兜底终端
+        tryAt(index + 1);
+      });
+    };
+    tryAt(0);
   });
 }
 
@@ -176,7 +199,7 @@ function hasHighConfidenceErrorOutput(output) {
  * @param {(evt:{taskName?:string, stepKey?:string, chunk:string})=>void} [onChunk] - 流式输出回调：每来一段 stdout/stderr 即调用，由调用方推给渲染进程
  * @returns {Promise<{success:boolean, code?:number, stdout?:string, stderr?:string, error?:string}>} 执行结果
  */
-export function runWorkflowStep(payload = {}, onChunk) {
+export function runWorkflowStep(payload = {}, onChunk, platform = process.platform) {
   // command/cwd/task/branch 从入参解构：command 为用户配置的命令模板，cwd 为任务目录，task/branch 供占位符替换
   const { command, cwd, task, branch, taskArgMode } = payload;
   const taskName = payload.taskName ?? task;
@@ -206,8 +229,12 @@ export function runWorkflowStep(payload = {}, onChunk) {
     };
     // childEnv 存储最终子进程环境变量：系统环境 + 额外凭证 + 工作流任务上下文。
     const childEnv = { ...process.env, ...extraEnv, ...taskEnv };
-    // 用 bash -c 执行整条命令字符串，合并 childEnv 到子进程 env 以便注入凭证和任务上下文
-    const child = spawn('bash', ['-c', finalCmd], { cwd, env: childEnv });
+    // shell 为按平台解析的执行器：macOS/Linux 用 bash；Windows 优先 Git Bash（保持 POSIX 语义），无则兜底 cmd。
+    // 传入 existsSync 探测 Windows 上 Git Bash 的绝对路径；纯逻辑在 commandRunner.resolveShell。
+    // platform 参数允许测试注入 'darwin'/'linux' 在 Windows CI 上验证 POSIX 分支，无需真机。
+    const shell = resolveShell(platform, existsSync);
+    // 用解析出的 shell 执行整条命令字符串（bash -c / cmd /c <finalCmd>），合并 childEnv 注入凭证和任务上下文
+    const child = spawn(shell.cmd, [...shell.args, finalCmd], { cwd, env: childEnv });
     // stdout data：累积到 outBuf 并实时推送
     child.stdout?.on('data', (data) => {
       // text 为本次到达的输出片段（Buffer 转字符串）

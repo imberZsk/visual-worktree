@@ -64,6 +64,8 @@ const IPC = {
 
 // 暴露给渲染进程的 API 对象
 contextBridge.exposeInMainWorld('api', {
+  // 当前运行平台（'darwin'|'win32'|'linux'）：供 UI 按平台切换终端应用选项等平台相关展示
+  platform: process.platform,
   // 扫描所有项目
   scanProjects: (opts) => ipcRenderer.invoke(IPC.SCAN_PROJECTS, opts),
   // 获取单个项目状态

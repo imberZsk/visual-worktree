@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStepCommand } from '../src/core/commandRunner.js';
+import { buildStepCommand, resolveShell } from '../src/core/commandRunner.js';
 
 // 工作流步骤执行命令渲染的纯逻辑测试：验证占位符替换与 shell 引号包裹。
 
@@ -82,5 +82,38 @@ describe('buildStepCommand（占位符渲染 + shell 引号包裹）', () => {
     // cmd 存储含显式占位符的命令，避免出现两个任务目录参数。
     const cmd = buildStepCommand('bash check-unit-test.sh {path}', { path: '/wt/TASK-A' }, { taskArgMode: 'appendPath' });
     expect(cmd).toBe("bash check-unit-test.sh '/wt/TASK-A'");
+  });
+});
+
+describe('resolveShell（按平台解析执行 shell）', () => {
+  it('macOS/Linux 用 bash -c 执行', () => {
+    // 非 Windows 平台直接用 bash -c，保持原有 POSIX 行为
+    const shell = resolveShell('darwin', () => false);
+    expect(shell).toEqual({ cmd: 'bash', args: ['-c'], shell: 'bash', bashFound: true });
+    // linux 同样走 bash
+    expect(resolveShell('linux', () => false).cmd).toBe('bash');
+  });
+
+  it('Windows 探测到 Git Bash 时用其绝对路径 -c 执行（保持 POSIX 语义）', () => {
+    // 模拟第一个候选 Git Bash 路径存在
+    const shell = resolveShell('win32', (p) => p === 'C:/Program Files/Git/bin/bash.exe');
+    expect(shell.cmd).toBe('C:/Program Files/Git/bin/bash.exe');
+    expect(shell.args).toEqual(['-c']);
+    expect(shell.shell).toBe('bash');
+    expect(shell.bashFound).toBe(true);
+  });
+
+  it('Windows 未找到 Git Bash 时兜底 cmd /c，并标记 bashFound=false 供 UI 提示', () => {
+    // 所有 Git Bash 候选路径都不存在 → 兜底 cmd
+    const shell = resolveShell('win32', () => false);
+    expect(shell).toEqual({ cmd: 'cmd', args: ['/c'], shell: 'cmd', bashFound: false });
+  });
+
+  it('Windows 探测用户级安装的 Git Bash（AppData 路径）', () => {
+    // 模拟只有 AppData 下的用户级 Git 安装存在（路径以 bash.exe 结尾）
+    const shell = resolveShell('win32', (p) => p.endsWith('AppData/Local/Programs/Git/bin/bash.exe'));
+    expect(shell.shell).toBe('bash');
+    expect(shell.bashFound).toBe(true);
+    expect(shell.cmd).toContain('bash.exe');
   });
 });

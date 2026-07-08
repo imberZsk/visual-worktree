@@ -2,6 +2,20 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readdirSync, readFileSync, statSync, realpathSync } from 'fs';
 
+/**
+ * 跨平台 join：结果统一为正斜杠分隔符。
+ * WHY：Windows 上 path.join 返回反斜杠，而测试 mock（以及 Claude Code 本身的
+ * projects 目录命名）使用正斜杠风格路径。二者做字符串匹配时必然失配，
+ * 导致 existsSync/readdirSync mock 查不到对应路径。用此函数替换所有内部路径拼接，
+ * 保证字符串结果在两个平台都是正斜杠。macOS 上为恒等变换，零影响。
+ * @param {...string} parts - 路径片段
+ * @returns {string} 正斜杠分隔的路径
+ */
+function posixJoin(...parts) {
+  // join 先做跨平台路径规范化（处理 .. / . 等），再统一换为正斜杠
+  return join(...parts).replace(/\\/g, '/');
+}
+
 // Claude Code 对话追踪服务：读取本地 Claude Code 的会话数据，按任务统计 token 用量与费用。
 // 数据来源：~/.claude/projects/{转义后的cwd}/{sessionId}.jsonl（主会话）
 //           ~/.claude/projects/{转义后的cwd}/{sessionId}/**/*.jsonl（该会话派生的 subagent / workflow）
@@ -203,8 +217,8 @@ export function scanClaudeSessions(deps = {}) {
   const _readdirSync = deps.readdirSync || readdirSync;
   const _readFileSync = deps.readFileSync || readFileSync;
 
-  // projects 根目录
-  const projectsDir = join(_homedir(), '.claude', 'projects');
+  // projects 根目录，用 posixJoin 保证正斜杠（Windows 下 join 返回反斜杠，与 mock 路径不匹配）
+  const projectsDir = posixJoin(_homedir(), '.claude', 'projects');
   if (!_existsSync(projectsDir)) return [];
 
   // sessions 存储扫描到的所有会话
@@ -219,8 +233,8 @@ export function scanClaudeSessions(deps = {}) {
   }
 
   for (const sub of projectSubdirs) {
-    // subPath 为单个项目子目录路径
-    const subPath = join(projectsDir, sub);
+    // subPath 为单个项目子目录路径（posixJoin 保证正斜杠，与 mock 路径匹配）
+    const subPath = posixJoin(projectsDir, sub);
     let entries;
     try {
       entries = _readdirSync(subPath);
@@ -231,8 +245,8 @@ export function scanClaudeSessions(deps = {}) {
     for (const entry of entries) {
       // 只取顶层会话文件（.jsonl）；子目录（subagents）在统计 token 时通过 sessionId 关联
       if (!entry.endsWith('.jsonl')) continue;
-      // jsonlPath 为主会话文件路径
-      const jsonlPath = join(subPath, entry);
+      // jsonlPath 为主会话文件路径（posixJoin 保证正斜杠）
+      const jsonlPath = posixJoin(subPath, entry);
       // sessionId 为去掉扩展名的文件名
       const sessionId = entry.replace(/\.jsonl$/, '');
       // meta 为从头部提取的会话元信息
@@ -274,8 +288,8 @@ function collectJsonlFiles(dir, out, deps = {}) {
     return;
   }
   for (const e of entries) {
-    // p 为子条目完整路径
-    const p = join(dir, e);
+    // p 为子条目完整路径（posixJoin 保证正斜杠一致性）
+    const p = posixJoin(dir, e);
     let st;
     try {
       st = _statSync(p);
@@ -427,10 +441,10 @@ function computeSessionUsageAndCost(session, deps = {}) {
   // mainPath 为主会话文件路径（优先用扫描时记录的路径，兜底按 projectDir 拼接）
   const mainPath =
     session.jsonlPath ||
-    join(_homedir(), '.claude', 'projects', session.projectDir, `${session.sessionId}.jsonl`);
+    posixJoin(_homedir(), '.claude', 'projects', session.projectDir, `${session.sessionId}.jsonl`);
   if (_existsSync(mainPath)) files.push(mainPath);
-  // subDir 为该会话派生记录的子目录（subagents/workflows）
-  const subDir = join(_homedir(), '.claude', 'projects', session.projectDir, session.sessionId);
+  // subDir 为该会话派生记录的子目录（subagents/workflows），posixJoin 保证正斜杠与 mock 匹配
+  const subDir = posixJoin(_homedir(), '.claude', 'projects', session.projectDir, session.sessionId);
   collectJsonlFiles(subDir, files, deps);
 
   // byModelUsage 为「模型 → token 用量」累加结果
@@ -483,8 +497,12 @@ function matchSessionForTask(session, taskDir, taskDirReal, issueKey, deps = {})
   try {
     // cwdReal 为会话工作目录的规范化路径（规避 macOS /tmp→/private/tmp 等 symlink 差异）
     const cwdReal = session.cwd && _existsSync(session.cwd) ? _realpathSync(session.cwd) : session.cwd;
+    // cwdNorm/taskNorm 归一化为正斜杠再比较：Windows 下 realpathSync 返回反斜杠，
+    // 而 cwd 字段（来自 JSONL 或 mock）可能是正斜杠，须统一才能正确匹配
+    const cwdNorm = (cwdReal || '').replace(/\\/g, '/');
+    const taskNorm = taskDirReal.replace(/\\/g, '/');
     // 条件1：cwd 命中任务目录（本身或子目录）
-    const cwdMatch = cwdReal && (cwdReal === taskDirReal || cwdReal.startsWith(taskDirReal + '/'));
+    const cwdMatch = cwdNorm && (cwdNorm === taskNorm || cwdNorm.startsWith(taskNorm + '/'));
     // 条件2：intent 含任务目录完整路径（同时比对原始与规范化路径，覆盖 symlink 前后写法）
     const intent = session.intent || '';
     const intentMatch =
@@ -517,8 +535,8 @@ function selectSessionsForTask(taskName, worktreesRoot, allSessions, deps = {}) 
   const _existsSync = deps.existsSync || existsSync;
   const _realpathSync = deps.realpathSync || realpathSync;
 
-  // 任务 worktree 目录及其规范化路径
-  const taskDir = join(worktreesRoot, taskName);
+  // 任务 worktree 目录及其规范化路径，posixJoin 保证正斜杠以便与 cwd 字段做字符串匹配
+  const taskDir = posixJoin(worktreesRoot, taskName);
   const taskDirReal = _existsSync(taskDir) ? _realpathSync(taskDir) : taskDir;
   // issueKey 为从任务名提取的 Jira 编号（用于跨目录关联）
   const issueKey = extractIssueKey(taskName);

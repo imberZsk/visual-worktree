@@ -10,6 +10,8 @@ const TASK_WORKFLOW_OUTPUT_STORAGE_KEY = 'vw-task-workflow-output';
 
 // 浏览器降级实现：返回空数据并在控制台提示
 const browserFallback = {
+  // 浏览器降级平台标识：无 Node process，用 navigator.platform 粗判 Windows，识别不出默认按 darwin（保持原有 UI 展示）
+  platform: (typeof navigator !== 'undefined' && /win/i.test(navigator.platform || '')) ? 'win32' : 'darwin',
   scanProjects: async () => {
     console.warn('[api] 非 Electron 环境，scanProjects 返回空');
     return [];

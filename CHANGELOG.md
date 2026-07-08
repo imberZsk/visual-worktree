@@ -8,6 +8,17 @@
 
 ### 新增
 
+- **Windows 平台支持**：应用现可在 Windows 上运行与打包。
+  - 打开终端支持 Windows Terminal(`wt`)/PowerShell/cmd，按「主选 → 兜底」链依次尝试，未装某个终端时自动降级；设置页的「终端应用」下拉按运行平台展示对应选项。
+  - 打开编辑器（VSCode）兼容 Windows：补充 `code.cmd` 常见安装路径，兜底命令由 macOS 的 `open -a` 换成 Windows 的 `start code`。
+  - 工作流步骤执行优先复用 Git for Windows 自带的 `bash.exe`（保持 `.sh`/POSIX 命令模板与 macOS 一致），找不到才兜底 `cmd /c`。
+  - 创建 worktree 时：跳过 hooks 的空设备路径按平台切换（Windows 用 `NUL`、类 Unix 用 `/dev/null`）；`node_modules` 复用链接在 Windows 上改用 junction，规避目录符号链接需管理员权限的限制。
+  - worktree 扫描/删除的路径匹配统一按正斜杠归一化：Windows 上 `git worktree list` 返回正斜杠、而 Node 的 `join`/`realpathSync` 返回反斜杠，二者直接做前缀匹配、`split('/')` 切分或相等比较会失配，导致 worktree 扫不到、含斜杠的任务名被截断成第一层目录、幂等复用判断失效。新增 `toPosixPath` 归一化后再比较（类 Unix 平台为恒等变换，零影响），并补充针对反斜杠输入的单元测试。
+  - worktree 扫描的路径真实化改用 `realpathSync.native`：Windows 上普通 `realpathSync` 不会把 8.3 短名（如 `RUNNER~1`）展开成长名（`runneradmin`），而 `git worktree list` 返回长名，导致前缀匹配失配、任务列表为空。`.native` 走操作系统 API 展开短名，与 git 输出对齐（类 Unix 平台与普通版等价，无副作用）。
+  - Claude 会话追踪（`claudeService`）与环境健康检查（`envHealthService`）中所有拼接/切分本地路径的位置同样按正斜杠归一化，修复 Windows 上会话扫不到、项目名被整条路径取代的问题。
+  - 修通 Windows CI 上约 50 个历史失败用例：macOS 专属的终端/编辑器命令构建与打开逻辑（Ghostty/Terminal.app/iTerm2、VSCode 单引号）测试统一注入 `platform` 参数，在 Windows runner 上验证 darwin 分支；`openInTerminal`/`runWorkflowStep` 补充 `platform` 注入点；Git Bash 探测的 AppData 候选路径改用正斜杠字面量以匹配注入探针；`config`/`cleanup` 等测试断言不再用 `join` 拼比较路径（避免分隔符差异）。
+  - 打包新增 Windows target（`nsis` 安装包 + `portable` 便携版，x64）与 `dist:win` 脚本，配套 `build/icon.ico` 图标。
+  - GitHub CI 扩为 macOS/Windows 双平台跑测试，并新增在 Windows runner 上原生打包并上传产物的 job。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更

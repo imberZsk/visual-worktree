@@ -4,6 +4,28 @@
 // 业务场景：用户在「设置 → 流程」里给某个步骤配一段 shell 命令（如 ./deploy.sh {path}），
 // 点该步骤的「执行」按钮时，在对应任务目录下运行。命令里可用占位符引用任务上下文。
 
+import { homedir } from 'os';
+import { join } from 'path';
+
+/**
+ * 计算 Windows 上 Git for Windows 自带 bash.exe 的常见安装位置（全局装 / 用户装）。
+ * WHY 优先用 Git Bash：工作流命令模板多为 POSIX 风格（.sh 脚本、单引号转义），用 Git Bash 跑能与 macOS 保持一致语义，
+ * 避免用户为 Windows 重写全部命令模板；找不到 Git Bash 时才兜底 cmd（见 resolveShell）。
+ * WHY 用函数而非模块级常量：homedir() 若在模块加载时调用，会与测试对 os.homedir 的 mock 产生初始化顺序问题（TDZ）；
+ * 惰性求值到调用时才读 home，既规避该问题，也保证拿到运行时真实用户目录。
+ * @returns {string[]} Git Bash 候选绝对路径列表
+ */
+function gitBashPathsWin32() {
+  // homedir() 返回反斜杠路径，统一替换为正斜杠，与前两个硬编码路径保持一致，
+  // 使 resolveShell 的 existsSyncFn 接收到的路径格式始终是正斜杠，不受平台分隔符影响
+  const home = homedir().replace(/\\/g, '/');
+  return [
+    'C:/Program Files/Git/bin/bash.exe',
+    'C:/Program Files (x86)/Git/bin/bash.exe',
+    `${home}/AppData/Local/Programs/Git/bin/bash.exe`,
+  ];
+}
+
 // TASK_ARG_MODE_AUTO 表示自动判断是否把任务目录作为最后一个参数追加到命令后。
 export const TASK_ARG_MODE_AUTO = 'auto';
 // TASK_ARG_MODE_NONE 表示永不自动追加任务目录参数，完全尊重用户命令文本。
@@ -106,4 +128,30 @@ export function buildStepCommand(command, ctx = {}, options = {}) {
   // 任务目录参数需要追加在渲染后命令末尾，保证 path 一样经过 shell 安全引号包裹。
   if (shouldAppendTaskPath(tpl, ctx, options)) return `${rendered} ${shellSingleQuote(ctx.path ?? '')}`;
   return rendered;
+}
+
+/**
+ * 解析在当前平台执行工作流命令字符串所用的 shell（spawn 的可执行文件 + 参数）。
+ * WHY 分平台：macOS/Linux 有 /bin/bash，直接 `bash -c <cmd>`；Windows 默认无 bash，
+ * 但装了 Git for Windows 就有 bash.exe——优先用它保持与 macOS 一致的 POSIX 语义（.sh 脚本/单引号转义可复用），
+ * 找不到才兜底 `cmd /c <cmd>`（此时用户的 POSIX 命令模板可能不适用，UI 需提示装 Git Bash）。
+ * 纯逻辑抽出便于单测各平台/Git Bash 有无的分支，副作用（spawn）留给 ipcHandlers.runWorkflowStep。
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台
+ * @param {(p:string)=>boolean} [existsSyncFn] - 注入的 fs.existsSync，用于探测 Git Bash 是否存在（默认恒 false，便于纯逻辑测试兜底分支）
+ * @returns {{cmd:string, args:string[], shell:'bash'|'cmd', bashFound:boolean}} spawn 所需的可执行文件与前置参数；调用方把最终命令串接在 args 末尾。shell 标识实际 shell 类型，bashFound 标记 Windows 上是否找到 Git Bash（供 UI 提示）
+ */
+export function resolveShell(platform = process.platform, existsSyncFn = () => false) {
+  // 非 Windows：直接用 bash -c 执行命令字符串，保持原有 POSIX 行为
+  if (platform !== 'win32') {
+    return { cmd: 'bash', args: ['-c'], shell: 'bash', bashFound: true };
+  }
+  // Windows：优先探测 Git for Windows 自带的 bash.exe（PATH 里没有时用绝对路径）
+  // gitBash 存储探测到的 Git Bash 绝对路径，找不到为 undefined
+  const gitBash = gitBashPathsWin32().find((p) => existsSyncFn(p));
+  if (gitBash) {
+    // 找到 Git Bash：用它 -c 执行，命令模板的 POSIX 语义（.sh/单引号）与 macOS 一致
+    return { cmd: gitBash, args: ['-c'], shell: 'bash', bashFound: true };
+  }
+  // 兜底：无 Git Bash 时用 Windows 自带 cmd /c 执行；POSIX 风格命令模板可能失效，bashFound=false 供 UI 提示
+  return { cmd: 'cmd', args: ['/c'], shell: 'cmd', bashFound: false };
 }

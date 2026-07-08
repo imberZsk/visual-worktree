@@ -17,6 +17,7 @@ npm run verify:boot    # Electron 启动冒烟验证 (headless，设置 PM_SMOKE
 npm run build:ui       # 仅构建前端产物到 dist/
 npm start              # 生产模式：先 build:ui 再用 electron 加载本地文件
 npm run dist           # 打包为 macOS arm64 DMG，产物在 release/
+npm run dist:win       # 打包为 Windows x64 NSIS 安装包 + 便携版（须在 Windows 上运行），产物在 release/
 
 # 跑单个测试文件
 npx vitest run test/gitService.ops.test.js
@@ -68,7 +69,13 @@ src/ui/            React 渲染进程
 - **路径 realpath 规范化**：macOS 下 `/tmp→/private/tmp`、`/var→/private/var` 等 symlink 差异会导致与 `git worktree list` 返回的绝对路径前缀匹配失败。`scanWorktreesByTask` 和 `isExistingWorktree` 都对路径做 `realpathSync` 后再比较。
 - **addWorktree 幂等**：目标已是合法 worktree 时不报错，仅补齐缺失的 node_modules 软链接，返回 `reused: true`。
 - **CSP 按环境区分**（`main.js` setupCSP）：dev 放开 `unsafe-eval` 与 ws 连接以支持 vite HMR，prod 严格策略；antd 的 CSS-in-JS 需要 `style-src 'unsafe-inline'`。
-- **打包未签名**（`identity: null`）：同事首次打开会被 Gatekeeper 拦截，需「右键 → 打开」或 `xattr -cr`。目标仅 macOS arm64。
+- **打包未签名**：macOS（`identity: null`）首次打开会被 Gatekeeper 拦截，需「右键 → 打开」或 `xattr -cr`；Windows 包同样未签名，首次运行可能触发 SmartScreen（选「仍要运行」）。目标为 macOS arm64（DMG）与 Windows x64（NSIS 安装包 + 便携版）。
+- **跨平台兼容（macOS / Windows）**：调用外部程序的副作用点都按 `platform` 分支，纯逻辑抽出可注入 `platform` 参数单测（在 macOS 上即可验证 win32 分支，无需真机）。关键差异集中在：
+  - **终端**（`terminalService.js`）：Windows 用 `wt`(Windows Terminal `-d <dir>`)/`powershell`(`Set-Location -LiteralPath`)/`cmd`(`cd /d`)，路径用双引号包裹（`winQuote`，Windows 文件名不含 `"` 故无需转义）。`resolveTerminalKind(preferred, existsSync, platform)` 返回「主选+兜底链」，副作用层 `openInTerminal` 按链逐个 `exec` 重试；Windows 残留的旧 macOS 终端名（`Terminal` 等）会被忽略走默认链。
+  - **编辑器 VSCode**（`ipcHandlers.js`）：`buildVscodeCommand`/`openInVscode` 按平台切引号；Windows CLI 候选为 `code.cmd`（`%LOCALAPPDATA%`/`Program Files`），兜底命令 `start "" code -n`（macOS 是 `open -a`）。
+  - **工作流执行**（`commandRunner.js` 的 `resolveShell`）：Windows 优先探测 Git for Windows 的 `bash.exe`（`C:/Program Files/Git/...` 等，惰性 `homedir()` 避免与 os mock 的初始化顺序冲突），找到用 `bash -c` 保持 POSIX 语义，找不到兜底 `cmd /c` 并回传 `bashFound:false` 供 UI 提示。
+  - **git worktree**（`gitService.js`）：`buildWorktreeAddArgs` 的 `core.hooksPath` 空设备 Windows 用 `NUL`、类 Unix 用 `/dev/null`；`linkNodeModules` 的 node_modules 复用链接 Windows 用 `junction`（不需管理员权限），类 Unix 用 `dir` 符号链接。
+  - **平台透出**：`preload.cjs` 暴露 `api.platform`，UI（`SettingsModal` 终端下拉）与 `config.js` 默认 `terminalApp`（Windows 默认 `wt`）据此按平台区分。
 - **VSCode 用 `-n` 新窗口打开（不替换当前窗口）**：`buildVscodeCommand`（`ipcHandlers.js`）给 `code` 系命令注入 `-n`（`--new-window`）而非 `-r`（`--reuse-window`）。WHY：`-r` 会把目标目录开在「当前聚焦的窗口」里、替换掉用户正在看的内容（表现为「关掉旧窗口又开新窗口」）；`-n` 始终新开窗口、不动现有窗口，两者都不会在程序坞新建额外进程图标。仅当模板未显式带 `-n/--new-window/-r/--reuse-window` 时才注入（用户已选 `-r` 视为有意复用，尊重不改）；非 `code` 命令（如 cursor）原样不注入。
 - **终端打开（优先 Ghostty）**：`src/core/terminalService.js` 抽出纯函数 `detectTerminal(existsSync)` 与 `buildTerminalCommand(path, kind)`，便于单测不拉起终端；`ipcHandlers.js` 的 `openInTerminal` 只做 `exec` 副作用，Ghostty 失败时自动兜底重试 Terminal。Ghostty 在 macOS 不能用 CLI 直接开窗，必须 `open -na Ghostty.app --args --working-directory=<path>`；注意 Ghostty 默认 `window-inherit-working-directory=true`，已有窗口时新窗口会继承旧目录——这是刻意保留的官方默认行为，未强制覆盖。**Terminal.app 用 AppleScript 而非 `open -a Terminal <path>`**：后者在 Terminal 未运行（首次点击）时有冷启动竞态——macOS 先拉起 Terminal 开一个 home 窗口，path 参数常被吞掉导致打不到目标目录。改用 `osascript -e 'tell application "Terminal" to do script "cd <path>"' -e '...activate'`，显式在窗口里 cd，无论 Terminal 是否已运行都可靠落到目标目录。路径转义两层：先 POSIX 单引号包裹（`shellSingleQuote`，内部 `'` 转义为 `'\''`），再嵌入 AppleScript 双引号串，最外层 osascript `-e` 参数用双引号。
 - **持久化目录统一为 `~/.visualWorktree`（无连字符）**：历史上 `config.json` 存在 `~/.visual-worktree`（带连字符），而 task-status/links/workflow/history 存在 `~/.visualWorktree`，两者分裂。现 `config.js` 默认目录改为 `~/.visualWorktree`，`loadConfig` 在走默认目录（未注入 baseDir）时一次性把旧 `~/.visual-worktree/config.json` 迁移过来（`migrateLegacyConfig`，仅当新文件不存在且旧文件存在时复制，保留旧文件不删便于回滚）。测试注入 baseDir 不触发迁移，避免污染临时目录。

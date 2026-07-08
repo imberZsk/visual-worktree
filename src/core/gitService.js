@@ -1,5 +1,5 @@
 import { simpleGit } from 'simple-git';
-import { existsSync, readdirSync, statSync, realpathSync, symlinkSync, lstatSync, rmSync } from 'fs';
+import { existsSync, readdirSync, statSync, realpathSync as _realpathSync, symlinkSync, lstatSync, rmSync } from 'fs';
 import { readdir as readdirAsync, lstat as lstatAsync, stat as statAsync } from 'fs/promises';
 import { join, basename, resolve } from 'path';
 import { ensureTaskDocsAssets, ensureTaskDocsGitExclude } from './taskDocsService.js';
@@ -11,14 +11,45 @@ import { ensureTaskDocsAssets, ensureTaskDocsGitExclude } from './taskDocsServic
 const NODE_MODULES_DIR = 'node_modules';
 
 /**
+ * 把路径归一化为正斜杠（POSIX 风格）分隔符，用于跨平台路径比较与切分。
+ * WHY：Windows 上 `git worktree list --porcelain` 返回的路径统一用正斜杠（如 `C:/Users/.../wt`），
+ * 而 Node 的 realpathSync/join/basename 在 Windows 上返回反斜杠（`C:\Users\...`）。二者直接做
+ * startsWith 前缀匹配、split('/') 切分或 === 相等比较都会失配，导致 worktree 扫不到、任务名被截断。
+ * 统一归一化为正斜杠后再比较即可对齐。类 Unix 平台路径本无反斜杠，此函数为无副作用的恒等变换。
+ * @param {string} p - 待归一化的路径
+ * @returns {string} 反斜杠全部替换为正斜杠后的路径
+ */
+export function toPosixPath(p) {
+  // 空值兜底：非字符串直接原样返回，避免 replace 抛错
+  if (!p) return p;
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * 规范化路径的真实形态，优先用 realpathSync.native 展开 Windows 8.3 短名。
+ * WHY：Windows 上 Node 的 realpathSync 只消除 symlink，但不会把 8.3 短名（如 `RUNNER~1`）
+ * 展开成长名（`runneradmin`）；而 `git worktree list` 返回的是长名。二者做前缀匹配会失配，
+ * 导致 worktree 扫不到（表现为任务列表为空、任务名回退成父目录）。realpathSync.native 走操作系统
+ * GetFinalPathNameByHandle，会把短名解析成长名，与 git 输出对齐。类 Unix 平台上 .native 与
+ * 普通 realpathSync 行为等价，是无副作用的恒等替换。极老的 Node 若无 .native 则兜底普通版。
+ * @param {string} p - 待规范化的路径
+ * @returns {string} 展开短名并消除 symlink 后的真实路径
+ */
+function realpathSync(p) {
+  // 优先用 native 版本展开 8.3 短名；运行时无该方法时兜底普通实现
+  return typeof _realpathSync.native === 'function' ? _realpathSync.native(p) : _realpathSync(p);
+}
+
+/**
  * 为 worktree 软链接源项目根目录的 node_modules，避免每个 worktree 重复 npm install。
  * 仅当源项目存在 node_modules（即已安装依赖的前端/Node 项目）且 worktree 内尚无同名目录时才创建。
  * 失败不抛出，仅返回结果，避免影响 worktree 创建主流程。
  * @param {string} sourceProjectPath - 源项目根目录
  * @param {string} worktreePath - worktree 目标路径
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定用 junction 还是 dir 类型软链接
  * @returns {{linked:boolean, reason?:string, error?:string}} 是否创建了软链接，未创建时附原因
  */
-export function linkNodeModules(sourceProjectPath, worktreePath) {
+export function linkNodeModules(sourceProjectPath, worktreePath, platform = process.platform) {
   // source 源项目的 node_modules 绝对路径，作为软链接指向的目标
   const source = join(sourceProjectPath, NODE_MODULES_DIR);
   // target worktree 内待创建的 node_modules 软链接路径
@@ -27,9 +58,13 @@ export function linkNodeModules(sourceProjectPath, worktreePath) {
   if (!existsSync(source)) return { linked: false, reason: 'source-missing' };
   // worktree 已存在同名目录（真实目录或既有软链接）：不覆盖，避免破坏已有依赖
   if (existsSync(target) || isSymlink(target)) return { linked: false, reason: 'target-exists' };
+  // linkType 为软链接类型：Windows 用 junction（NTFS 目录联结），类 Unix 用 dir（符号链接）。
+  // WHY 用 junction：Windows 上创建目录符号链接(symlink)默认需要管理员权限或开启开发者模式（SeCreateSymbolicLinkPrivilege），
+  // 普通用户会 EPERM 失败；junction 是文件系统层的目录联结，无需特殊权限即可创建，正好适配「复用 node_modules」这一目录级链接场景。
+  const linkType = platform === 'win32' ? 'junction' : 'dir';
   try {
-    // 用 'dir' 类型创建目录软链接，兼容跨平台（Windows 需显式指定）
-    symlinkSync(source, target, 'dir');
+    // 按平台类型创建目录链接：Windows junction / 类 Unix dir 符号链接
+    symlinkSync(source, target, linkType);
     return { linked: true };
   } catch (e) {
     return { linked: false, error: e.message };
@@ -141,11 +176,16 @@ async function mapWithConcurrency(items, fn, limit = SCAN_CONCURRENCY) {
  * @param {boolean} useNewBranch - 是否通过 -b 创建新分支
  * @param {boolean} [forceExistingBranch] - 复用已被其他 worktree 占用的已有分支时是否加 --force
  * @param {string} [startPoint] - 新建分支的起点引用（如 master/origin/main）；仅在 useNewBranch 时生效，不传则用源仓库当前 HEAD
+ * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定 hooksPath 指向的空设备路径
  * @returns {string[]} simple-git raw 所需的 git 参数数组
  */
-function buildWorktreeAddArgs(branch, targetPath, useNewBranch, forceExistingBranch = false, startPoint = '') {
+export function buildWorktreeAddArgs(branch, targetPath, useNewBranch, forceExistingBranch = false, startPoint = '', platform = process.platform) {
+  // nullDevice 为当前平台的「空设备」路径：Windows 用 NUL，类 Unix 用 /dev/null。
+  // WHY：把 core.hooksPath 指向空设备可跳过 worktree 创建时的 git hooks（husky 等常因依赖缺失非零退出导致 add 失败）；
+  // /dev/null 在 Windows 原生 git 下不是合法路径，需换成 Windows 的空设备名 NUL。
+  const nullDevice = platform === 'win32' ? 'NUL' : '/dev/null';
   // args 存储 simple-git raw 需要的完整 git 参数，包含跳过 hooks 的临时配置
-  const args = ['-c', 'core.hooksPath=/dev/null', 'worktree', 'add'];
+  const args = ['-c', `core.hooksPath=${nullDevice}`, 'worktree', 'add'];
   if (forceExistingBranch && !useNewBranch) {
     // 分支已被另一个 worktree 使用时，Git 默认拒绝；这里按用户选择显式复用该已有分支
     args.push('--force');
@@ -475,8 +515,9 @@ export async function scanWorktreesByTask(projectsRoot, worktreesRoot, opts = {}
   // 规范化 worktreesRoot 的真实路径，消除 symlink 差异(如 macOS /var → /private/var)，
   // 否则与 git 返回的绝对路径前缀匹配会失败
   const realWtRoot = existsSync(worktreesRoot) ? realpathSync(worktreesRoot) : worktreesRoot;
-  // 末尾补分隔符便于前缀匹配
-  const wtRootPrefix = realWtRoot.endsWith('/') ? realWtRoot : realWtRoot + '/';
+  // 归一化为正斜杠后末尾补分隔符便于前缀匹配；Windows 下 realWtRoot 是反斜杠，
+  // 而 git 返回路径是正斜杠，须统一到正斜杠才能与 wt.path 前缀对齐
+  const wtRootPrefix = toPosixPath(realWtRoot).replace(/\/?$/, '/');
   // 收集所有源项目目录
   const entries = readdirSync(projectsRoot);
   // projectDirs 为源项目绝对路径列表
@@ -522,10 +563,13 @@ export async function scanWorktreesByTask(projectsRoot, worktreesRoot, opts = {}
     // gitlabUrl 存储从 origin remote 推导出的 GitLab 项目网页地址。
     const gitlabUrl = projectResult.gitlabUrl;
     for (const wt of wts) {
+      // wtPathPosix 存储归一化为正斜杠的 worktree 路径；Windows 下 git 返回正斜杠但为稳妥统一处理，
+      // 用它与同为正斜杠的 wtRootPrefix 做前缀匹配与切片，避免分隔符不一致导致失配
+      const wtPathPosix = toPosixPath(wt.path);
       // 只关心位于 worktreesRoot 下的 worktree（跳过主工作区与其他位置）
-      if (!wt.path.startsWith(wtRootPrefix)) continue;
+      if (!wtPathPosix.startsWith(wtRootPrefix)) continue;
       // rel 存储 worktree 相对 worktreesRoot 的路径，如 TASK-1/projA 或 user/bugfix/TASK-1/projA
-      const rel = wt.path.slice(wtRootPrefix.length);
+      const rel = wtPathPosix.slice(wtRootPrefix.length);
       // taskName 存储完整任务名；任务名可包含 /，因此取最后一个目录（项目名）之前的全部路径
       const taskName = getTaskNameFromWorktreeRelativePath(rel);
       if (!taskName) continue;
@@ -581,8 +625,14 @@ export async function scanWorktreesByTask(projectsRoot, worktreesRoot, opts = {}
       try {
         // realFull 存储 full 的真实路径，用于和已识别任务目录做前缀关系判断
         const realFull = realpathSync(full);
+        // realFullPosix 存储归一化为正斜杠的 realFull，用于跨平台前缀匹配（Windows 下 realpathSync 返回反斜杠）
+        const realFullPosix = toPosixPath(realFull);
         // isParentOfKnownTask 表示该一级目录只是某个带 / 任务名的父级容器，不能作为独立任务展示
-        const isParentOfKnownTask = knownTaskPaths.some((taskPath) => taskPath !== realFull && taskPath.startsWith(realFull + '/'));
+        const isParentOfKnownTask = knownTaskPaths.some((taskPath) => {
+          // taskPathPosix 归一化任务真实路径为正斜杠，与 realFullPosix 统一分隔符后再做前缀判断
+          const taskPathPosix = toPosixPath(taskPath);
+          return taskPathPosix !== realFullPosix && taskPathPosix.startsWith(realFullPosix + '/');
+        });
         if (statSync(full).isDirectory() && !isParentOfKnownTask && !taskMap.has(entry)) {
           taskMap.set(entry, { task: entry, path: full, worktrees: [] });
         }
@@ -601,9 +651,10 @@ export async function scanWorktreesByTask(projectsRoot, worktreesRoot, opts = {}
  * @param {string} relPath - worktree 相对 worktreesRoot 的路径，格式通常为 {任务名}/{项目名}
  * @returns {string} 任务名；当任务名自身包含 / 时保留完整路径
  */
-function getTaskNameFromWorktreeRelativePath(relPath) {
-  // parts 存储相对路径按目录层级拆分后的非空片段
-  const parts = relPath.split('/').filter(Boolean);
+export function getTaskNameFromWorktreeRelativePath(relPath) {
+  // parts 存储相对路径按目录层级拆分后的非空片段；先归一化为正斜杠再 split，
+  // 使 Windows 反斜杠路径也能正确切分（否则 alice\bugfix\... 切不开会被整体当成任务名）
+  const parts = toPosixPath(relPath).split('/').filter(Boolean);
   // 路径为空时无法识别任务名
   if (parts.length === 0) return '';
   // 兼容旧数据：如果 worktree 直接在根目录下，沿用该目录名作为任务名
@@ -732,8 +783,11 @@ async function isExistingWorktree(projectPath, targetPath) {
   try {
     // realTarget 规范化目标路径，消除 symlink 差异以便与 git 输出精确匹配
     const realTarget = existsSync(targetPath) ? realpathSync(targetPath) : targetPath;
+    // realTargetPosix 归一化为正斜杠：Windows 下 realTarget 是反斜杠而 git 返回正斜杠，
+    // 须统一到正斜杠才能与 w.path 做相等比较，否则幂等复用判断失效
+    const realTargetPosix = toPosixPath(realTarget);
     const wts = await getWorktrees(projectPath);
-    return wts.some((w) => w.path === realTarget);
+    return wts.some((w) => toPosixPath(w.path) === realTargetPosix);
   } catch (e) {
     // 查询失败时保守视为非 worktree，让上层按原错误处理
     return false;
@@ -1101,8 +1155,9 @@ export async function getSafeToRemoveWorktrees(projectsRoot, worktreesRoot, main
 
   // realWtRoot 规范化 worktree 根目录真实路径，消除 symlink 差异以便前缀匹配
   const realWtRoot = existsSync(worktreesRoot) ? realpathSync(worktreesRoot) : worktreesRoot;
-  // wtRootPrefix 末尾补分隔符便于前缀匹配，只处理位于 worktreesRoot 下的 worktree
-  const wtRootPrefix = realWtRoot.endsWith('/') ? realWtRoot : realWtRoot + '/';
+  // wtRootPrefix 归一化为正斜杠后末尾补分隔符便于前缀匹配；Windows 下 realWtRoot 是反斜杠，
+  // 而 git 返回路径是正斜杠，须统一到正斜杠才能与 wt.path 前缀对齐
+  const wtRootPrefix = toPosixPath(realWtRoot).replace(/\/?$/, '/');
 
   // projectDirs 为源项目绝对路径列表：扫描 projectsRoot 下的 git 仓库目录
   const projectDirs = [];
@@ -1124,8 +1179,10 @@ export async function getSafeToRemoveWorktrees(projectsRoot, worktreesRoot, main
       // projectName 项目名（源项目目录 basename）
       const projectName = basename(projDir);
       for (const wt of worktrees) {
+        // wtPathPosix 存储归一化为正斜杠的 worktree 路径，与同为正斜杠的 wtRootPrefix 前缀匹配/切片，避免分隔符不一致失配
+        const wtPathPosix = toPosixPath(wt.path);
         // 只处理位于 worktreesRoot 下的 worktree（跳过主工作区与其他位置）
-        if (!wt.path.startsWith(wtRootPrefix)) continue;
+        if (!wtPathPosix.startsWith(wtRootPrefix)) continue;
 
         // 检查是否可安全删除（已合并+无改动）
         const check = await checkWorktreeSafeToRemove(projDir, wt.path, wt.branch, mainBranches);
@@ -1142,8 +1199,8 @@ export async function getSafeToRemoveWorktrees(projectsRoot, worktreesRoot, main
           // 获取失败：使用 0
         }
 
-        // relPath 相对 worktreesRoot 的路径，用于提取任务名
-        const relPath = wt.path.slice(wtRootPrefix.length);
+        // relPath 相对 worktreesRoot 的路径（正斜杠），用于提取任务名
+        const relPath = wtPathPosix.slice(wtRootPrefix.length);
         // taskName 任务名（worktree 路径格式：{任务名}/{项目名}）
         const taskName = getTaskNameFromWorktreeRelativePath(relPath);
 
