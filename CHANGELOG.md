@@ -23,6 +23,7 @@
   - GitHub CI 新增 `build-mac` job：在 macOS runner 上原生打包 arm64 DMG 并上传为 artifact，与 Windows 打包对称，保证 macOS 打包链路也随 PR 持续验证。
 - **正式发布流程**：新增 `release.yml` workflow，推送 `v*` 标签（如 `v1.3.0`）时自动在 macOS/Windows runner 上分别打包，并把 DMG、nsis 安装包、portable 便携版发布到以该标签命名的 GitHub Release 供公开下载。用内置 `secrets.GITHUB_TOKEN`（无需手动配置）+ `permissions: contents: write` 授权发布；`package.json` 的 `build.publish` 指向 `imberZsk/visual-worktree`。与日常 CI 分离：普通 push 只做测试与打包验证（`--publish never`），仅打 tag 才真正发布。
   - 发布采用「打包 / 发布分离」两阶段：各平台 job 仅 `--publish never` 打包并上传 artifact，最后由单个 `publish` job 汇总所有平台产物、用 `gh release create` 一次性创建公开 Release。WHY：若让多个平台 job 各自 `--publish` 并行发布，二者会同时检测到「Release 尚不存在」而各自创建，产生两个重复的草稿 Release（v1.3.0 实测踩坑）。只保留单一发布入口即根除竞态，且默认直接公开（非草稿），无需手动确认。
+  - Release 说明的「下载与安装」段按本次实际产物动态生成：扫描 `dist-release` 里实际存在的 DMG/Setup/portable 文件，据此列出对应平台的下载项与首次打开提示（macOS Gatekeeper / Windows SmartScreen），文件名从实际文件读取。WHY：写死平台/文件名会随版本失真（历史 v1.1.2 说明写死了「仅 macOS arm64」）；动态生成保证说明永远与该版本真实产物一致。动态说明作为前缀，其后由 `--generate-notes` 追加自动变更记录。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更
