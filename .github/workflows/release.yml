@@ -95,8 +95,40 @@ jobs:
           find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} dist-release/ \;
           ls -la dist-release
 
+      # 根据本次实际产出的安装包动态生成「下载与安装」说明，写入 release-notes.md。
+      # WHY 动态生成而非写死：产物文件名含版本号、且不同版本可能平台组合不同（如未来新增 win arm64），
+      # 写死平台/文件名会随版本失真（历史 v1.1.2 就写死了「仅 macOS arm64」）。这里扫描 dist-release
+      # 实际文件，按平台存在与否拼出对应下载项与首次打开提示，保证说明永远与该版本真实产物一致。
+      - name: Generate install notes
+        run: |
+          # notes 累积「下载与安装」段落，最终写入文件供 gh release 引用
+          notes="## 下载与安装"$'\n'
+          # macOS DMG：取实际文件名（含版本号/架构），附未签名首次打开提示
+          # shellcheck disable=SC2012
+          dmg=$(ls dist-release/*.dmg 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
+          if [ -n "$dmg" ]; then
+            notes+=$'\n'"### macOS"$'\n'
+            notes+="- \`${dmg}\`"$'\n'
+            notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」，或执行 \`xattr -cr /Applications/VisualWorktree.app\`。"$'\n'
+          fi
+          # Windows 安装版 + 便携版：分别列出实际文件名
+          setup=$(ls dist-release/*Setup*.exe 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
+          portable=$(ls dist-release/*portable*.exe 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
+          if [ -n "$setup" ] || [ -n "$portable" ]; then
+            notes+=$'\n'"### Windows"$'\n'
+            [ -n "$setup" ] && notes+="- \`${setup}\`（安装版）"$'\n'
+            [ -n "$portable" ] && notes+="- \`${portable}\`（便携版，免安装）"$'\n'
+            notes+="- 安装包未签名，首次运行可能触发 SmartScreen：请点「更多信息 → 仍要运行」。"$'\n'
+          fi
+          notes+=$'\n'"---"$'\n'
+          # 写入文件供下一步 --notes-file 使用
+          printf '%s' "$notes" > release-notes.md
+          echo "===== 生成的安装说明 ====="
+          cat release-notes.md
+
       # 一次性创建公开 Release 并上传所有平台安装包；gh release create 默认发布为公开（非草稿）。
-      # 用 tag 名作为 Release 名，--generate-notes 自动根据提交/PR 生成发布说明。
+      # 用 tag 名作为 Release 名；--notes-file 提供动态安装说明作为前缀，
+      # --generate-notes 在其后追加根据提交/PR 自动生成的变更记录。
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,4 +136,5 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" dist-release/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md \
             --generate-notes
