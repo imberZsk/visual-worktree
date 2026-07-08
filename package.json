@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
@@ -35,8 +35,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "verify:boot": "node scripts/verify-boot.mjs",
-    "dist": "pnpm run build:ui && electron-builder --mac --arm64",
-    "dist:win": "pnpm run build:ui && electron-builder --win --x64"
+    "dist": "pnpm run build:ui && electron-builder --mac --arm64 --publish never",
+    "dist:win": "pnpm run build:ui && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",

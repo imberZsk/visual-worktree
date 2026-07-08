@@ -19,6 +19,7 @@
   - 修通 Windows CI 上约 50 个历史失败用例：macOS 专属的终端/编辑器命令构建与打开逻辑（Ghostty/Terminal.app/iTerm2、VSCode 单引号）测试统一注入 `platform` 参数，在 Windows runner 上验证 darwin 分支；`openInTerminal`/`runWorkflowStep` 补充 `platform` 注入点；Git Bash 探测的 AppData 候选路径改用正斜杠字面量以匹配注入探针；`config`/`cleanup` 等测试断言不再用 `join` 拼比较路径（避免分隔符差异）。
   - 打包新增 Windows target（`nsis` 安装包 + `portable` 便携版，x64）与 `dist:win` 脚本，配套 `build/icon.ico` 图标。
   - GitHub CI 扩为 macOS/Windows 双平台跑测试，并新增在 Windows runner 上原生打包并上传产物的 job。
+  - 打包脚本 `dist`/`dist:win` 显式追加 `--publish never`：electron-builder 在「CI + push 事件」下会自动触发 publish 而要求 `GH_TOKEN`，缺失即在打包成功后仍报错退出（表现为 PR 事件通过、push 到 main 的 build-win job 失败）。显式关闭发布后打包只产出本地 artifact，不再尝试联网发布。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更
