@@ -13,10 +13,11 @@ permissions:
   contents: write
 
 jobs:
-  # 分平台原生打包并发布到 GitHub Release：Windows 出 nsis 安装包 + portable，macOS 出 arm64 DMG。
-  # 两个平台的产物会挂到同一个以 tag 命名的 Release 下，供用户公开下载。
-  release:
-    name: Build and publish (${{ matrix.os }})
+  # 阶段一：各平台只原生打包，产物上传为 artifact，不创建 Release。
+  # WHY 只打包不发布：若让两个平台 job 各自调 electron-builder --publish，二者并行时会同时检测到
+  # 「Release 尚不存在」而各自创建，产生两个重复的 Release/草稿（已实测踩坑）。故发布统一交给下方单个 publish job。
+  build:
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       # 某一平台失败不取消另一平台，便于单独重跑
@@ -51,13 +52,56 @@ jobs:
       - name: Build UI
         run: pnpm run build:ui
 
-      # 直接调 electron-builder 并显式 --publish always：真正把产物发布到 GitHub Release。
-      # WHY 不复用 dist/dist:win 脚本：那两个脚本带 --publish never（供 CI 仅验证打包用），
-      # 与这里的发布语义冲突，故在发布流程里独立指定打包参数与 --publish always。
-      - name: Build and publish
-        run: npx electron-builder ${{ matrix.build_args }} --publish always
+      # 只打包不发布（--publish never）：产物落到 release/ 目录，由 publish job 统一发布。
+      # package.json 保留 build.publish 配置，使 electron-builder 仍生成 latest*.yml 自动更新元数据。
+      - name: Package
+        run: npx electron-builder ${{ matrix.build_args }} --publish never
         env:
-          # 内置 token，自动注入，无需手动配置；electron-builder 用它创建 Release 并上传安装包
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 无签名证书时关闭自动发现，避免联网拖慢；产物未签名（mac 需右键打开 / win 点「仍要运行」）
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # 上传本平台产物（安装包 + blockmap + 自动更新元数据）供 publish job 汇总
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+          # 至少要有安装包，全为空说明打包异常，直接失败
+          if-no-files-found: error
+          retention-days: 3
+
+  # 阶段二：单个 job 汇总所有平台产物，一次性创建公开 Release（只有这一处建 Release，根除并行竞态）。
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    # 等所有平台打包完成后再统一发布
+    needs: build
+
+    steps:
+      # 下载全部平台 artifact 到 artifacts/ 下（每个 artifact 一个子目录）
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # 把各平台产物平铺到一个目录，便于一次性上传
+      - name: Flatten artifacts
+        run: |
+          mkdir -p dist-release
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} dist-release/ \;
+          ls -la dist-release
+
+      # 一次性创建公开 Release 并上传所有平台安装包；gh release create 默认发布为公开（非草稿）。
+      # 用 tag 名作为 Release 名，--generate-notes 自动根据提交/PR 生成发布说明。
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist-release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
