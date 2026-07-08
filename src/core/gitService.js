@@ -1,5 +1,5 @@
 import { simpleGit } from 'simple-git';
-import { existsSync, readdirSync, statSync, realpathSync, symlinkSync, lstatSync, rmSync } from 'fs';
+import { existsSync, readdirSync, statSync, realpathSync as _realpathSync, symlinkSync, lstatSync, rmSync } from 'fs';
 import { readdir as readdirAsync, lstat as lstatAsync, stat as statAsync } from 'fs/promises';
 import { join, basename, resolve } from 'path';
 import { ensureTaskDocsAssets, ensureTaskDocsGitExclude } from './taskDocsService.js';
@@ -23,6 +23,21 @@ export function toPosixPath(p) {
   // 空值兜底：非字符串直接原样返回，避免 replace 抛错
   if (!p) return p;
   return p.replace(/\\/g, '/');
+}
+
+/**
+ * 规范化路径的真实形态，优先用 realpathSync.native 展开 Windows 8.3 短名。
+ * WHY：Windows 上 Node 的 realpathSync 只消除 symlink，但不会把 8.3 短名（如 `RUNNER~1`）
+ * 展开成长名（`runneradmin`）；而 `git worktree list` 返回的是长名。二者做前缀匹配会失配，
+ * 导致 worktree 扫不到（表现为任务列表为空、任务名回退成父目录）。realpathSync.native 走操作系统
+ * GetFinalPathNameByHandle，会把短名解析成长名，与 git 输出对齐。类 Unix 平台上 .native 与
+ * 普通 realpathSync 行为等价，是无副作用的恒等替换。极老的 Node 若无 .native 则兜底普通版。
+ * @param {string} p - 待规范化的路径
+ * @returns {string} 展开短名并消除 symlink 后的真实路径
+ */
+function realpathSync(p) {
+  // 优先用 native 版本展开 8.3 短名；运行时无该方法时兜底普通实现
+  return typeof _realpathSync.native === 'function' ? _realpathSync.native(p) : _realpathSync(p);
 }
 
 /**

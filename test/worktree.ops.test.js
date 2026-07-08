@@ -51,7 +51,11 @@ describe('addWorktree', () => {
     expect(existsSync(target)).toBe(true);
     // wts 存储当前仓库登记在册的 worktree 列表
     const wts = await getWorktrees(repo);
-    expect(wts.some((w) => w.path === realpathSync(target) && w.branch === 'feat/in-use')).toBe(true);
+    // expectedPath 存储与 git worktree list 对齐后的目标真实路径：
+    // git 返回长名+正斜杠（Windows 上如 runneradmin），而 Node realpathSync 会保留 8.3 短名（RUNNER~1）且用反斜杠，
+    // 故用 realpathSync.native 展开短名再归一化为正斜杠，两端才能精确相等
+    const expectedPath = (realpathSync.native ? realpathSync.native(target) : realpathSync(target)).replace(/\\/g, '/');
+    expect(wts.some((w) => w.path.replace(/\\/g, '/') === expectedPath && w.branch === 'feat/in-use')).toBe(true);
   });
 
   it('reuses an existing worktree at the same path (idempotent) instead of failing', async () => {
