@@ -22,6 +22,7 @@
   - 打包脚本 `dist`/`dist:win` 显式追加 `--publish never`：electron-builder 在「CI + push 事件」下会自动触发 publish 而要求 `GH_TOKEN`，缺失即在打包成功后仍报错退出（表现为 PR 事件通过、push 到 main 的 build-win job 失败）。显式关闭发布后打包只产出本地 artifact，不再尝试联网发布。
   - GitHub CI 新增 `build-mac` job：在 macOS runner 上原生打包 arm64 DMG 并上传为 artifact，与 Windows 打包对称，保证 macOS 打包链路也随 PR 持续验证。
 - **正式发布流程**：新增 `release.yml` workflow，推送 `v*` 标签（如 `v1.3.0`）时自动在 macOS/Windows runner 上分别打包，并把 DMG、nsis 安装包、portable 便携版发布到以该标签命名的 GitHub Release 供公开下载。用内置 `secrets.GITHUB_TOKEN`（无需手动配置）+ `permissions: contents: write` 授权发布；`package.json` 的 `build.publish` 指向 `imberZsk/visual-worktree`。与日常 CI 分离：普通 push 只做测试与打包验证（`--publish never`），仅打 tag 才真正发布。
+  - 发布采用「打包 / 发布分离」两阶段：各平台 job 仅 `--publish never` 打包并上传 artifact，最后由单个 `publish` job 汇总所有平台产物、用 `gh release create` 一次性创建公开 Release。WHY：若让多个平台 job 各自 `--publish` 并行发布，二者会同时检测到「Release 尚不存在」而各自创建，产生两个重复的草稿 Release（v1.3.0 实测踩坑）。只保留单一发布入口即根除竞态，且默认直接公开（非草稿），无需手动确认。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更
