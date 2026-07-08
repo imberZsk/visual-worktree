@@ -1,0 +1,63 @@
+name: Release
+
+# 仅在推送 v* 标签时触发正式发布（如 v1.2.3）。
+# WHY 用 tag 而非普通 push：日常提交只跑 ci.yml 做测试与打包验证，不发布；
+# 只有主动打 tag 才代表「就发这个版本」，避免每次 push 都误发一个 Release。
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 给内置 GITHUB_TOKEN 写权限：默认 token 只读，创建 Release / 上传附件需要 contents: write，否则 403。
+permissions:
+  contents: write
+
+jobs:
+  # 分平台原生打包并发布到 GitHub Release：Windows 出 nsis 安装包 + portable，macOS 出 arm64 DMG。
+  # 两个平台的产物会挂到同一个以 tag 命名的 Release 下，供用户公开下载。
+  release:
+    name: Build and publish (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 某一平台失败不取消另一平台，便于单独重跑
+      fail-fast: false
+      matrix:
+        include:
+          # Windows：nsis 安装包 + portable 便携版，x64
+          - os: windows-latest
+            build_args: --win --x64
+          # macOS：DMG，arm64
+          - os: macos-latest
+            build_args: --mac --arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI
+        run: pnpm run build:ui
+
+      # 直接调 electron-builder 并显式 --publish always：真正把产物发布到 GitHub Release。
+      # WHY 不复用 dist/dist:win 脚本：那两个脚本带 --publish never（供 CI 仅验证打包用），
+      # 与这里的发布语义冲突，故在发布流程里独立指定打包参数与 --publish always。
+      - name: Build and publish
+        run: npx electron-builder ${{ matrix.build_args }} --publish always
+        env:
+          # 内置 token，自动注入，无需手动配置；electron-builder 用它创建 Release 并上传安装包
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 无签名证书时关闭自动发现，避免联网拖慢；产物未签名（mac 需右键打开 / win 点「仍要运行」）
+          CSC_IDENTITY_AUTO_DISCOVERY: false
