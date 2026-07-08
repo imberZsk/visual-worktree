@@ -20,6 +20,7 @@
   - 打包新增 Windows target（`nsis` 安装包 + `portable` 便携版，x64）与 `dist:win` 脚本，配套 `build/icon.ico` 图标。
   - GitHub CI 扩为 macOS/Windows 双平台跑测试，并新增在 Windows runner 上原生打包并上传产物的 job。
   - 打包脚本 `dist`/`dist:win` 显式追加 `--publish never`：electron-builder 在「CI + push 事件」下会自动触发 publish 而要求 `GH_TOKEN`，缺失即在打包成功后仍报错退出（表现为 PR 事件通过、push 到 main 的 build-win job 失败）。显式关闭发布后打包只产出本地 artifact，不再尝试联网发布。
+  - GitHub CI 新增 `build-mac` job：在 macOS runner 上原生打包 arm64 DMG 并上传为 artifact，与 Windows 打包对称，保证 macOS 打包链路也随 PR 持续验证。
 - 补充 MIT 许可证、贡献指南、安全策略、行为准则与 GitHub CI，方便外部开发者安装、验证和参与。
 
 ### 变更

@@ -84,3 +84,46 @@ jobs:
             release/*.exe
           if-no-files-found: error
           retention-days: 14
+
+  # 打包 macOS DMG：在 macOS runner 上原生打包（arm64），产物上传为 artifact 供下载验收。
+  # 与 build-win 对称，确保 mac 打包链路（icns 图标、未签名 DMG）不会在改动中悄悄坏掉。
+  build-mac:
+    name: Build macOS package
+    runs-on: macos-latest
+    # 测试全绿后再打包，避免为坏代码浪费打包时间
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 用 electron-builder 在 macOS 上原生打包（DMG，arm64）；dist 脚本已带 --publish never，不触发自动发布
+      - name: Build macOS package
+        run: pnpm run dist
+        env:
+          # 无签名证书时关闭自动发现，避免联网拖慢 CI（DMG 未签名，首次打开需右键或 xattr -cr）
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # 上传打包产物：DMG 安装镜像，供下载到 macOS 机器验收
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: |
+            release/*.dmg
+          if-no-files-found: error
+          retention-days: 14
