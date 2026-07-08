@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
@@ -63,6 +63,13 @@
   "build": {
     "appId": "com.imber.visual-worktree",
     "productName": "VisualWorktree",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "imberZsk",
+        "repo": "visual-worktree"
+      }
+    ],
     "directories": {
       "output": "release",
       "buildResources": "build"
