@@ -262,12 +262,28 @@ describe('SettingsModal 流程配置布局', () => {
     ]);
   });
 
+  it('路径 Tab 主体只展示当前组合和短说明，路径组合详情收进弹层', async () => {
+    renderWithApp(<SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />);
+
+    expect(screen.getByText('可用于切换工作和个人项目工作路径。')).toBeTruthy();
+    expect(screen.queryByText(/保存后当前组合会用于扫描项目/)).toBeNull();
+    expect(screen.getByRole('button', { name: /管理路径组合/ })).toBeTruthy();
+    expect(screen.queryByPlaceholderText('/Users/you/work/projects')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }));
+
+    await waitFor(() => expect(document.querySelector('.ant-modal-title')?.textContent).toBe('管理路径组合'));
+    expect(screen.getByPlaceholderText('/Users/you/work/projects')).toBeTruthy();
+  });
+
   it('路径输入支持点击选择目录并写回表单', async () => {
     mockApi.selectDirectory.mockResolvedValueOnce({ canceled: false, path: '/picked/source' });
     renderWithApp(<SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />);
 
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }));
+
     // sourceInput 存储源项目根目录输入框，用于验证选择目录前后的值变化。
-    const sourceInput = screen.getByPlaceholderText('/Users/you/work/projects');
+    const sourceInput = await screen.findByPlaceholderText('/Users/you/work/projects');
     fireEvent.click(screen.getByRole('button', { name: /选择源项目根目录/ }));
 
     await waitFor(() => expect(sourceInput.value).toBe('/picked/source'));
@@ -278,12 +294,80 @@ describe('SettingsModal 流程配置布局', () => {
     mockApi.selectDirectory.mockResolvedValueOnce({ canceled: true });
     renderWithApp(<SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />);
 
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }));
+
     // worktreeInput 存储 Worktree 根目录输入框，取消选择后应保持配置原值。
-    const worktreeInput = screen.getByPlaceholderText('/Users/you/work/worktrees');
+    const worktreeInput = await screen.findByPlaceholderText('/Users/you/work/worktrees');
     fireEvent.click(screen.getByRole('button', { name: /选择 Worktree 根目录/ }));
 
     await waitFor(() => expect(mockApi.selectDirectory).toHaveBeenCalledWith({ defaultPath: '/wt' }));
     expect(worktreeInput.value).toBe('/wt');
+  });
+
+  it('路径 Tab 可切换当前路径组合并按当前组合保存顶层路径', async () => {
+    // config 存储本用例的两套路径组合配置。
+    const config = makeConfig();
+    config.activePathProfileId = 'work';
+    config.sourceProjectsPath = '/work/source';
+    config.worktreesPath = '/work/worktrees';
+    config.pathProfiles = [
+      { id: 'work', name: '工作', sourceProjectsPath: '/work/source', worktreesPath: '/work/worktrees' },
+      { id: 'personal', name: '个人', sourceProjectsPath: '/personal/source', worktreesPath: '/personal/worktrees' },
+    ];
+    mockApi.saveConfig.mockImplementationOnce(async (savedConfig) => savedConfig);
+    renderWithApp(<SettingsModal open config={config} onClose={() => {}} onSaved={() => {}} />);
+
+    // selector 存储当前路径组合下拉选择器。
+    const selector = within(screen.getByTestId('active-path-profile-select')).getByRole('combobox');
+    fireEvent.mouseDown(selector);
+    // personalOption 存储下拉浮层中的个人路径组合选项。
+    const personalOption = await screen.findByText('个人');
+    fireEvent.mouseDown(personalOption);
+    fireEvent.click(personalOption);
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }));
+
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1));
+    // savedConfig 存储提交给主进程的配置，应把当前组合路径同步到顶层字段。
+    const savedConfig = mockApi.saveConfig.mock.calls[0][0];
+    expect(savedConfig.activePathProfileId).toBe('personal');
+    expect(savedConfig.sourceProjectsPath).toBe('/personal/source');
+    expect(savedConfig.worktreesPath).toBe('/personal/worktrees');
+    expect(savedConfig.pathProfiles).toHaveLength(2);
+  });
+
+  it('路径组合名称支持手动输入并持久化', async () => {
+    mockApi.saveConfig.mockImplementationOnce(async (savedConfig) => savedConfig);
+    renderWithApp(<SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }));
+
+    // nameInput 存储路径组合名称输入框，用户可手动改成任意名称。
+    const nameInput = await screen.findByPlaceholderText('例如：工作 / 个人');
+    fireEvent.change(nameInput, { target: { value: '路径组合666' } });
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }));
+
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1));
+    // savedConfig 存储提交给主进程的配置对象，用于验证名称进入 pathProfiles 并可持久化。
+    const savedConfig = mockApi.saveConfig.mock.calls[0][0];
+    expect(savedConfig.pathProfiles[0].name).toBe('路径组合666');
+  });
+
+  it('新增路径组合默认留空并走必填校验', async () => {
+    renderWithApp(<SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }));
+    fireEvent.click(screen.getByRole('button', { name: /添加路径组合/ }));
+
+    // newRow 存储新增的第二个路径组合行，用于确认新增内容不会继承上一组路径。
+    const newRow = await screen.findByTestId('path-profile-row-1');
+    expect(within(newRow).getByPlaceholderText('例如：工作 / 个人').value).toBe('');
+    expect(within(newRow).getByPlaceholderText('/Users/you/work/projects').value).toBe('');
+    expect(within(newRow).getByPlaceholderText('/Users/you/work/worktrees').value).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }));
+
+    await waitFor(() => expect(screen.getByText('请输入组合名称')).toBeTruthy());
+    expect(mockApi.saveConfig).not.toHaveBeenCalled();
   });
 
   it('确认恢复默认设置后调用 resetConfig 并用返回配置刷新外层状态', async () => {

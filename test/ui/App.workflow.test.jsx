@@ -450,6 +450,12 @@ describe('App worktree 流程执行', () => {
       await Promise.resolve();
     });
 
+    expect(mockApi.removeTaskHistory).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getAllByText('移除历史任务「LONG-TASK」？').length).toBeGreaterThan(0));
+    // confirmButton 存储历史任务二次确认框中的危险操作按钮。
+    const confirmButton = document.querySelector('.ant-modal-confirm .ant-btn-dangerous');
+    fireEvent.click(confirmButton);
+
     expect(mockApi.removeTaskHistory).toHaveBeenCalledWith(0);
   });
 
@@ -506,6 +512,12 @@ describe('App worktree 流程执行', () => {
       fireEvent.click(document.querySelector('.ant-pagination-item-2'));
       await waitFor(() => expect(screen.getByText('REMOVE-5')).toBeTruthy());
       fireEvent.click(screen.getAllByTitle('从历史中移除')[0]);
+
+      expect(mockApi.removeTaskHistory).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getAllByText('移除历史任务「REMOVE-5」？').length).toBeGreaterThan(0));
+      // confirmButton 存储历史任务二次确认框中的危险操作按钮。
+      const confirmButton = document.querySelector('.ant-modal-confirm .ant-btn-dangerous');
+      fireEvent.click(confirmButton);
 
       await waitFor(() => expect(mockApi.removeTaskHistory).toHaveBeenCalledWith(4));
     } finally {

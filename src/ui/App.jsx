@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Layout, Input, Segmented, Button, Space, Statistic, Row, Col, Card, Modal, Progress, App as AntApp, Dropdown, Grid, Tooltip, Spin, theme, List, Typography, Tag, Pagination } from 'antd';
+import { Layout, Input, Segmented, Button, Space, Statistic, Row, Col, Card, Modal, Progress, App as AntApp, Dropdown, Grid, Tooltip, Spin, theme, List, Typography, Tag, Pagination, Select } from 'antd';
 import { ReloadOutlined, SettingOutlined, DownOutlined, PlusOutlined, SunOutlined, MoonOutlined, HistoryOutlined, DeleteOutlined, ThunderboltOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { useStore } from './store/useStore.js';
 import { filterProjects, summarize, FILTERS } from './projectLogic.js';
@@ -691,6 +691,10 @@ export default function App() {
   const runningOutputs = useRef({});
   // autoEnvCheckedTaskKeys 记录本次 App 会话已自动触发过环境检查的任务，防止刷新状态时重复后台检查。
   const autoEnvCheckedTaskKeys = useRef(new Set());
+  // projectTabInitialFetchDoneRef 记录本次 App 会话是否已在项目 Tab 自动 fetch 过远程，避免视图切换时重复拉远程。
+  const projectTabInitialFetchDoneRef = useRef(false);
+  // initialViewScanHandledRef 记录首屏视图扫描是否已由首次加载 effect 处理，避免挂载后的视图 effect 重复扫描。
+  const initialViewScanHandledRef = useRef(false);
   // hideTaskTimers 保存任务隐藏退出动画的定时器；恢复或卸载时清理，避免过期写入隐藏状态。
   const hideTaskTimers = useRef(new Map());
   // hideProjectTimers 保存项目隐藏退出动画的定时器；恢复或卸载时清理，避免过期写入隐藏状态。
@@ -701,6 +705,21 @@ export default function App() {
   const screens = useBreakpoint();
   // isNarrow 窄屏标记：lg 断点未命中（<992px）时为真，用于压缩 Header 与工具栏
   const isNarrow = !screens.lg;
+  // pathProfiles 存储当前配置里的所有路径组合；缺失时回退空数组。
+  const pathProfiles = useMemo(() => (
+    Array.isArray(config?.pathProfiles) ? config.pathProfiles : []
+  ), [config?.pathProfiles]);
+  // activePathProfileId 存储当前启用的路径组合 id；配置缺失时回退第一组。
+  const activePathProfileId = config?.activePathProfileId || pathProfiles[0]?.id || '';
+  // pathProfileOptions 存储顶部快速切换路径组合的下拉选项。
+  const pathProfileOptions = useMemo(() => (
+    pathProfiles
+      .filter((profile) => profile?.id)
+      .map((profile) => ({
+        value: profile.id,
+        label: profile.name || profile.id,
+      }))
+  ), [pathProfiles]);
 
   // 首次加载：读配置 + 从文件加载任务状态/链接/工作流进度。
   // 只扫当前视图（默认 worktrees）的数据，另一视图等切过去时由下方 useEffect 按需补扫，
@@ -709,8 +728,13 @@ export default function App() {
     // cancelled 标记组件卸载后不再写入本地 loaded state。
     let cancelled = false;
     loadConfig();
-    if (activeView === 'projects') scan();
-    else scanWorktrees();
+    if (activeView === 'projects') {
+      // 项目视图首屏需要强制 fetch 一次，确保刚打开软件时能拿到最新 behind。
+      projectTabInitialFetchDoneRef.current = true;
+      scan({ fetch: true });
+    } else {
+      scanWorktrees();
+    }
     loadTaskStatus();
     loadTaskLinks();
     loadTaskVisibility();
@@ -745,11 +769,23 @@ export default function App() {
     hideProjectTimers.current.clear();
   }, []);
 
-  // 切换视图时按需补扫：切到对应视图且尚无数据时拉取一次
+  // 切换视图时按需补扫：项目 Tab 首次进入强制 fetch 一次，其余视图无数据时补扫本地状态。
   useEffect(() => {
+    if (!initialViewScanHandledRef.current) {
+      // 挂载后的第一次 activeView effect 与首次加载 effect 处在同一轮渲染，跳过可避免首屏重复扫描。
+      initialViewScanHandledRef.current = true;
+      return;
+    }
     // worktrees 和 kanban 视图都基于 worktree 数据，无数据时补扫
     if ((activeView === 'worktrees' || activeView === 'kanban') && worktreeTasks.length === 0) scanWorktrees();
-    if (activeView === 'projects' && projects.length === 0) scan();
+    if (activeView !== 'projects') return;
+    if (!projectTabInitialFetchDoneRef.current) {
+      // 首次真正进入项目 Tab 时不依赖 autoFetch 设置，强制 fetch 远程以拿到准确落后提交数。
+      projectTabInitialFetchDoneRef.current = true;
+      scan({ fetch: true });
+      return;
+    }
+    if (projects.length === 0) scan();
   }, [activeView]);
 
   // taskTitleBadges 当前任务标题徽标展示配置；老配置缺失字段时默认全部展示。
@@ -1352,6 +1388,24 @@ export default function App() {
     setTaskHistory((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  /**
+   * 请求移除历史任务记录，先弹出确认框避免误删历史列表项。
+   * @param {number} idx - 要删除的记录在 taskHistory 中的下标
+   * @param {string} taskName - 历史记录对应的任务名，用于确认框展示
+   */
+  const requestDeleteHistory = (idx, taskName) => {
+    // confirmTaskName 存储确认框内展示的任务名；历史脏数据缺失 task 时用兜底文案。
+    const confirmTaskName = taskName || '未命名任务';
+    modal.confirm(withConfirmDefaults({
+      title: `移除历史任务「${confirmTaskName}」？`,
+      content: '仅会从历史任务列表移除此记录，不会删除 worktree、分支或归档工作记录。',
+      okType: 'danger',
+      okText: '移除',
+      cancelText: '取消',
+      onOk: () => handleDeleteHistory(idx),
+    }));
+  };
+
   useEffect(() => {
     if (!historyOpen) return undefined;
 
@@ -1673,25 +1727,78 @@ export default function App() {
     else if (key === 'stash') handleBatch('stash', {}, '暂存变更');
   };
 
+  /**
+   * 配置变更后刷新当前视图使用的数据。
+   * @param {object} nextConfig - 保存后的完整配置
+   */
+  const applySavedConfig = (nextConfig) => {
+    // nextState 存储配置切换后需要同步清空的旧目录数据，避免短暂展示上一套路径的项目或任务。
+    const nextState = { config: nextConfig, projects: [], worktreeTasks: [], selectedPaths: [] };
+    useStore.setState(nextState);
+    setDetailProject(null);
+    setWorktreeActiveKeys([]);
+    if (activeView === 'projects') {
+      scan();
+      return;
+    }
+    if (activeView === 'worktrees' || activeView === 'kanban') scanWorktrees();
+  };
+
+  /**
+   * 顶部快速切换路径组合，并保存为当前配置。
+   * @param {string} profileId - 用户选择的路径组合 id
+   */
+  const handleSwitchPathProfile = async (profileId) => {
+    if (!config || profileId === activePathProfileId) return;
+    // targetProfile 存储用户选择的目标路径组合。
+    const targetProfile = pathProfiles.find((profile) => profile.id === profileId);
+    if (!targetProfile) return;
+    try {
+      // nextConfig 存储主进程保存后返回的完整配置；顶层路径会同步为目标组合路径。
+      const nextConfig = await api.saveConfig({
+        ...config,
+        activePathProfileId: targetProfile.id,
+        sourceProjectsPath: targetProfile.sourceProjectsPath,
+        worktreesPath: targetProfile.worktreesPath,
+      });
+      applySavedConfig(nextConfig);
+      message.success(`已切换到「${targetProfile.name || targetProfile.id}」`);
+    } catch (e) {
+      message.error(`切换路径组合失败：${e.message}`);
+    }
+  };
+
   return (
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
       <Header style={{ background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', gap: 12 }}>
         {/* 左侧：标题 + 视图切换 */}
-        <Space size={16} style={{ minWidth: 0 }}>
+        <Space size={12} style={{ minWidth: 0 }}>
           <span style={{ fontSize: 16, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Visual Worktree
           </span>
-          <Segmented
-            value={activeView}
-            // 切换主视图时清空项目搜索关键词，避免切回项目视图时输入框已空但列表仍按旧关键词过滤
-            onChange={(v) => { setActiveView(v); localStorage.setItem('vw-active-view', v); setKeyword(''); }}
-            options={[
-              { label: 'Worktree', value: 'worktrees' },
-              { label: '项目', value: 'projects' },
-              { label: '看板', value: 'kanban' },
-              // { label: '工作流', value: 'workflow' },
-            ]}
-          />
+          <Space size={8} style={{ minWidth: 0 }}>
+            <Segmented
+              value={activeView}
+              // 切换主视图时清空项目搜索关键词，避免切回项目视图时输入框已空但列表仍按旧关键词过滤
+              onChange={(v) => { setActiveView(v); localStorage.setItem('vw-active-view', v); setKeyword(''); }}
+              options={[
+                { label: 'Worktree', value: 'worktrees' },
+                { label: '项目', value: 'projects' },
+                { label: '看板', value: 'kanban' },
+                // { label: '工作流', value: 'workflow' },
+              ]}
+            />
+            {pathProfileOptions.length > 1 && (
+              <Select
+                className="path-profile-select"
+                value={activePathProfileId}
+                options={pathProfileOptions}
+                style={{ width: isNarrow ? 104 : 132 }}
+                popupMatchSelectWidth={false}
+                onChange={handleSwitchPathProfile}
+              />
+            )}
+          </Space>
         </Space>
         <Space>
           {/* 创建 worktree：worktree 和看板视图显示 */}
@@ -1803,12 +1910,13 @@ export default function App() {
                 <Space size={4}>
                   <span style={{ color: token.colorTextSecondary, fontSize: 12 }}>排序：</span>
                   <Segmented
+                    className="worktree-sort-segmented"
                     size="small"
                     value={wtSortOrder}
                     onChange={setWtSortOrder}
                     options={[
-                      { label: '名称', value: 'name' },
                       { label: '状态', value: 'status' },
+                      { label: '名称', value: 'name' },
                     ]}
                   />
                 </Space>
@@ -2023,7 +2131,7 @@ export default function App() {
         open={settingsOpen}
         config={config}
         onClose={() => setSettingsOpen(false)}
-        onSaved={(cfg) => { useStore.setState({ config: cfg }); scan(); }}
+        onSaved={applySavedConfig}
       />
 
       {/* 按任务创建 worktree 弹窗 */}
@@ -2198,7 +2306,7 @@ export default function App() {
                             title="从历史中移除"
                             aria-label="从历史中移除"
                             icon={<DeleteOutlined />}
-                            onClick={() => handleDeleteHistory(historyIndex)}
+                            onClick={() => requestDeleteHistory(historyIndex, historyTaskName)}
                           />
                         </span>
                       </Tooltip>

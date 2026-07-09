@@ -9,6 +9,8 @@ import { ensureTaskDocsAssets, ensureTaskDocsGitExclude } from './taskDocsServic
 
 // 依赖目录名：前端项目的依赖安装在此目录，worktree 通过软链接复用源项目的同名目录
 const NODE_MODULES_DIR = 'node_modules';
+// PROJECT_WORK_DOCUMENT_TEMPLATES 存储项目 worktree 级固定模板；空数组代表只生成 CLAUDE.md/AGENTS.md，不创建任务级工作文档目录。
+const PROJECT_WORK_DOCUMENT_TEMPLATES = [];
 
 /**
  * 把路径归一化为正斜杠（POSIX 风格）分隔符，用于跨平台路径比较与切分。
@@ -671,7 +673,7 @@ export function getTaskNameFromWorktreeRelativePath(relPath) {
  * @param {string} projectPath - 源项目路径
  * @param {string} targetPath - worktree 目标路径
  * @param {string} branch - 分支名（新建或已有）
- * @param {{newBranch?:boolean, linkNodeModules?:boolean, mainBranches?:string[], fetchMain?:boolean, fetchTimeout?:number, workDocumentTemplates?:Array}} [opts] - newBranch 为 true 强制创建新分支，false 强制 checkout，undefined 时自动检测；linkNodeModules 为真（默认）时自动软链接源项目 node_modules；mainBranches 新建分支时作为起点的候选主分支名；fetchMain 为真（默认）时新建分支前先 fetch 主分支远程引用；fetchTimeout 单次 fetch 超时毫秒数；workDocumentTemplates 为工作文档模板
+ * @param {{newBranch?:boolean, linkNodeModules?:boolean, mainBranches?:string[], fetchMain?:boolean, fetchTimeout?:number}} [opts] - newBranch 为 true 强制创建新分支，false 强制 checkout，undefined 时自动检测；linkNodeModules 为真（默认）时自动软链接源项目 node_modules；mainBranches 新建分支时作为起点的候选主分支名；fetchMain 为真（默认）时新建分支前先 fetch 主分支远程引用；fetchTimeout 单次 fetch 超时毫秒数
  * @returns {Promise<{success:boolean, error?:string, nodeModulesLinked?:boolean, reused?:boolean}>} 操作结果；reused 表示复用了已存在的 worktree
  */
 export async function addWorktree(projectPath, targetPath, branch, opts = {}) {
@@ -684,7 +686,6 @@ export async function addWorktree(projectPath, targetPath, branch, opts = {}) {
     mainBranches = DEFAULT_MAIN_BRANCHES,
     fetchMain = true,
     fetchTimeout = DEFAULT_FETCH_TIMEOUT_MS,
-    workDocumentTemplates,
   } = opts;
   // autoDetect 为 true 时：先尝试 checkout 已有分支，失败再建新分支（适合 UI 不传 newBranch 的场景）
   const autoDetect = newBranch === undefined;
@@ -736,8 +737,8 @@ export async function addWorktree(projectPath, targetPath, branch, opts = {}) {
     if (doLink) {
       nodeModulesLinked = linkNodeModules(projectPath, targetPath).linked;
     }
-    await ensureTaskDocsIgnored(git, projectPath, workDocumentTemplates);
-    ensureTaskDocsAssets(targetPath, workDocumentTemplates);
+    await ensureTaskDocsIgnored(git, projectPath, PROJECT_WORK_DOCUMENT_TEMPLATES);
+    ensureTaskDocsAssets(targetPath, PROJECT_WORK_DOCUMENT_TEMPLATES);
     return { success: true, nodeModulesLinked };
   } catch (e) {
     // 目标已存在：可能是之前已建好的合法 worktree（如旧版本创建、未带软链接）。
@@ -749,8 +750,8 @@ export async function addWorktree(projectPath, targetPath, branch, opts = {}) {
       }
       // git 用于读取仓库 common git dir，并写入本地 exclude 规则。
       const git = simpleGit(projectPath);
-      await ensureTaskDocsIgnored(git, projectPath, workDocumentTemplates);
-      ensureTaskDocsAssets(targetPath, workDocumentTemplates);
+      await ensureTaskDocsIgnored(git, projectPath, PROJECT_WORK_DOCUMENT_TEMPLATES);
+      ensureTaskDocsAssets(targetPath, PROJECT_WORK_DOCUMENT_TEMPLATES);
       return { success: true, nodeModulesLinked, reused: true };
     }
     return { success: false, error: e.message };
@@ -758,10 +759,10 @@ export async function addWorktree(projectPath, targetPath, branch, opts = {}) {
 }
 
 /**
- * 将自动生成的工作文档写入仓库本地忽略规则，避免 worktree 安全删除被这些文件阻塞。
+ * 将自动生成的固定说明文件写入仓库本地忽略规则，避免 worktree 安全删除被这些文件阻塞。
  * @param {import('simple-git').SimpleGit} git - simple-git 实例
  * @param {string} projectPath - 源项目路径，用于解析 git 返回的相对 common dir
- * @param {Array} [workDocumentTemplates] - 工作文档模板列表
+ * @param {Array} [workDocumentTemplates] - 工作文档模板列表；项目 worktree 传空数组表示仅忽略固定说明文件
  * @returns {Promise<void>} 无返回值
  */
 async function ensureTaskDocsIgnored(git, projectPath, workDocumentTemplates) {
@@ -848,7 +849,7 @@ export async function pruneWorktrees(projectPath) {
  * @param {string[]} [params.mainBranches] - 新建分支时作为起点的候选主分支名（master/main）
  * @param {boolean} [params.fetchMain] - 新建分支前是否先 fetch 主分支远程引用（默认开启）
  * @param {number} [params.fetchTimeout] - 单次 fetch 超时毫秒数
- * @param {Array} [params.workDocumentTemplates] - 工作文档模板列表
+ * @param {Array} [params.workDocumentTemplates] - 任务根目录工作文档模板列表
  * @param {(progress:{done:number,total:number,current:string})=>void} [onProgress] - 进度回调
  * @returns {Promise<Array<{project:string,projectPath:string,targetPath:string,success:boolean,error?:string}>>} 每个项目的结果
  */
@@ -874,7 +875,7 @@ export async function batchAddWorktree(params, onProgress) {
     const targetPath = join(worktreesRoot, task, projectName);
     if (onProgress) onProgress({ done: i, total, current: projectName });
     // 单项失败捕获为结果，不抛出
-    const res = await addWorktree(projPath, targetPath, branch, { newBranch, mainBranches, fetchMain, fetchTimeout, workDocumentTemplates });
+    const res = await addWorktree(projPath, targetPath, branch, { newBranch, mainBranches, fetchMain, fetchTimeout });
     results.push({ project: projectName, projectPath: projPath, targetPath, ...res });
     if (onProgress) onProgress({ done: i + 1, total, current: projectName });
   }

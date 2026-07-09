@@ -48,6 +48,87 @@ html, body, #root {
   transform-origin: center center !important;
 }
 
+/* 顶部路径组合下拉压缩到接近主视图 Segmented 的尺寸，避免 Header 左侧控件一宽一窄割裂 */
+.path-profile-select .ant-select-selector {
+  border-radius: 6px !important;
+  height: 32px !important;
+  padding-inline: 8px 24px !important;
+}
+
+/* 路径组合名称单行省略，保留箭头区宽度，长名称不把 Header 撑宽 */
+.path-profile-select .ant-select-selection-item {
+  font-size: 14px;
+  line-height: 30px !important;
+  padding-inline-end: 0 !important;
+}
+
+/* 路径组合下拉箭头收窄，和紧凑选择器的右侧留白匹配 */
+.path-profile-select .ant-select-arrow {
+  font-size: 10px;
+  inset-inline-end: 8px;
+}
+
+/* Worktree 排序切换器沿用顶部视图 Segmented 的质感，只按小尺寸轻微增强边界 */
+.worktree-sort-segmented {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+/* 小号选中块只给极轻的贴合阴影，避免像独立悬浮卡片 */
+.worktree-sort-segmented .ant-segmented-thumb,
+.worktree-sort-segmented .ant-segmented-item-selected {
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10);
+}
+
+/* 暗色模式使用更暗的内边界，避免出现白边 */
+html[data-theme='dark'] .worktree-sort-segmented {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* 暗色模式下选中块只保留贴近默认控件的微弱阴影 */
+html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-thumb,
+html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-item-selected {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}
+
+/* 任务标题徽标统一为 22px 高度，图标和文字垂直居中，避免环境/链接/Token 标签各自错位 */
+.worktree-title-tag {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  height: 22px;
+  justify-content: center;
+  line-height: 20px;
+  margin-inline-end: 0;
+  padding-inline: 6px;
+}
+
+/* AntD Tag 默认给 icon 追加外边距；这里改由 flex gap 统一控制图标与文字距离 */
+.worktree-title-tag .anticon {
+  align-items: center;
+  display: inline-flex;
+  line-height: 1;
+  margin-inline-end: 0;
+}
+
+/* AntD Tag 会给「图标 + 文字」里的文字追加 7px margin；清掉后只保留上面的统一 gap */
+.worktree-title-tag .anticon + span {
+  margin-inline-start: 0;
+}
+
+/* 标签内部的单行文本随标签居中，链接名称过长时仍按既有 Tooltip 省略 */
+.worktree-title-tag .single-line-tooltip-text {
+  line-height: 20px;
+}
+
+/* Claude 用量标签字号略小但高度与其他任务标题徽标保持一致 */
+.claude-usage-tag {
+  cursor: help;
+  font-size: 11px;
+  text-align: center;
+}
+
 /* 环境检查刷新遮罩默认跟随亮色浮层背景；暗色主题在下方用根主题属性覆盖，避免 React 状态切换瞬间闪白 */
 .env-health-refresh-overlay {
   background: rgba(255, 255, 255, 0.72);

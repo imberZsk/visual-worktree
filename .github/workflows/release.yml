@@ -60,7 +60,7 @@ jobs:
           # 无签名证书时关闭自动发现，避免联网拖慢；产物未签名（mac 需右键打开 / win 点「仍要运行」）
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 上传本平台产物（安装包 + blockmap + 自动更新元数据）供 publish job 汇总
+      # 上传本平台面向用户下载的安装包，供 publish job 汇总到 GitHub Release Assets。
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -68,8 +68,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.exe
-            release/*.blockmap
-            release/latest*.yml
           # 至少要有安装包，全为空说明打包异常，直接失败
           if-no-files-found: error
           retention-days: 3
@@ -92,7 +90,7 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p dist-release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} dist-release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} dist-release/ \;
           ls -la dist-release
 
       # 根据本次实际产出的安装包动态生成「下载与安装」说明，写入 release-notes.md。
@@ -133,7 +131,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist-release/* \
+          # release_assets 存储最终展示在 GitHub Release Assets 中、面向用户下载的文件。
+          release_assets=()
+          while IFS= read -r file; do
+            release_assets+=("$file")
+          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' \) | sort)
+          if [ "${#release_assets[@]}" -eq 0 ]; then
+            echo "没有找到可发布的安装包"
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" "${release_assets[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --notes-file release-notes.md \

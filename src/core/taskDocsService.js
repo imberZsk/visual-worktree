@@ -1,5 +1,5 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
-import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from 'path';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { dirname, isAbsolute, join, normalize, relative, resolve } from 'path';
 
 // Claude Code 固定说明文件名：随任务根和项目 worktree 自动生成，但不属于工作文档归档模板。
 const CLAUDE_FILE_NAME = 'CLAUDE.md';
@@ -14,13 +14,14 @@ const CLAUDE_TEMPLATE = `# CLAUDE.md
 请先阅读并遵守同目录下的 AGENTS.md。AGENTS.md 是 Codex、Claude Code 等 AI 协作工具共用的项目规则。
 `;
 
-// AGENTS_TEMPLATE 存储通用 AI 协作说明内容，提示工作记录默认落在 docs/ 下。
+// AGENTS_TEMPLATE 存储通用 AI 协作说明内容，提示工作记录默认落在任务目录工作文档中。
 const AGENTS_TEMPLATE = `# AGENTS.md
 
 ## 工作记录
 
-- 所有输出文档、计划、总结、排查记录、交接说明优先放到当前目录的工作文档中，默认目录是 docs/。
-- 如果 Visual Worktree 设置里配置了其他工作文档目录或文件，以当前目录下已生成的工作文档为准。
+- 所有输出文档、计划、总结、排查记录、交接说明优先放到任务目录的工作文档中，默认目录是任务根的 docs/。
+- 如果 Visual Worktree 设置里配置了其他工作文档目录或文件，以任务目录下已生成的工作文档为准。
+- 项目 worktree 根目录只放项目代码相关改动；除非当前目录已经存在工作文档入口，否则不要额外新建 docs/ 或其他记录目录。
 - 不要把临时工作记录散落在项目根目录。
 - 修改代码时优先遵守仓库已有的 AGENTS.md、CLAUDE.md 或项目说明；本文件只补充当前 worktree 的工作记录约定。
 `;
@@ -67,8 +68,8 @@ export function normalizeWorkDocumentTemplates(templates = DEFAULT_WORK_DOCUMENT
 }
 
 /**
- * 初始化工作入口目录内的固定说明文件，以及工作文档目录与文件。
- * @param {string} worktreePath - 目标工作入口目录，既可以是任务目录，也可以是项目 worktree 根目录
+ * 初始化工作入口目录内的固定说明文件，以及可选的工作文档目录与文件。
+ * @param {string} worktreePath - 目标工作入口目录；任务目录传入模板，项目 worktree 传空模板只生成固定说明文件
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 工作文档模板列表
  * @returns {{created:string[],skipped:string[],templates:Array<{type:'directory'|'file',path:string,content:string}>,docsPath:string}} 初始化结果
  */
@@ -152,12 +153,12 @@ export function buildTaskDocsArchivePath(archiveRoot, taskName) {
 }
 
 /**
- * 归档任务根目录和每个项目 worktree 的工作文档。
+ * 归档任务根目录的工作文档。
  * @param {string} taskDir - 待删除的任务目录，格式通常为 worktreesRoot/{任务名}
  * @param {string} taskName - 任务名，用于生成归档目录名
  * @param {string} archiveRoot - 历史任务工作文档的根目录
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 工作文档模板列表
- * @returns {{success:boolean, docsPath:string, archivedProjects:number, error?:string}} 归档结果
+ * @returns {{success:boolean, docsPath:string, archivedProjects:number, error?:string}} 归档结果；archivedProjects 保留兼容旧调用方，任务级归档固定返回 0
  */
 export function archiveTaskDocs(taskDir, taskName, archiveRoot, templates = DEFAULT_WORK_DOCUMENT_TEMPLATES) {
   // docsPath 存储本任务最终的归档目录。
@@ -170,25 +171,8 @@ export function archiveTaskDocs(taskDir, taskName, archiveRoot, templates = DEFA
 
     archiveWorkDocumentsFromBase(taskDir, docsPath, normalizedTemplates);
 
-    // projectDirs 存储任务目录下一层项目目录；任务目录不存在时视为空任务归档。
-    const projectDirs = existsSync(taskDir)
-      ? readdirSync(taskDir, { withFileTypes: true }).filter((entry) => entry.isDirectory())
-      : [];
-    // archivedProjects 存储已成功复制 docs 的项目数量。
-    let archivedProjects = 0;
-
-    // projectEntry 存储当前遍历到的项目目录项。
-    for (const projectEntry of projectDirs) {
-      // sourceBasePath 存储该项目 worktree 根路径，用于在其下按模板收集工作文档。
-      const sourceBasePath = join(taskDir, projectEntry.name);
-      // targetDocsPath 存储该项目在历史归档中的目标根目录路径。
-      const targetDocsPath = join(docsPath, sanitizeProjectName(projectEntry.name));
-
-      if (archiveWorkDocumentsFromBase(sourceBasePath, targetDocsPath, normalizedTemplates)) {
-        archivedProjects += 1;
-      }
-    }
-
+    // archivedProjects 存储旧版项目级归档数量；工作文档已收敛到任务根，固定返回 0 兼容字段结构。
+    const archivedProjects = 0;
     return { success: true, docsPath, archivedProjects };
   } catch (e) {
     // e 存储归档过程中出现的文件系统错误，返回给调用方展示。
@@ -205,16 +189,6 @@ function sanitizeTaskName(taskName) {
   // rawName 存储规整后的任务名字符串，空值时给一个稳定兜底名。
   const rawName = String(taskName || 'untitled-task').trim() || 'untitled-task';
   return rawName.replace(/[\\/]+/g, '__').replace(/[:*?"<>|]/g, '_');
-}
-
-/**
- * 将项目目录名转换成安全的单层目录名。
- * @param {string} projectName - 原始项目目录名
- * @returns {string} 可安全作为目录名的项目名
- */
-function sanitizeProjectName(projectName) {
-  // basename 会丢弃潜在路径片段，额外替换非法字符避免归档路径穿越或平台保留字符。
-  return basename(String(projectName || 'project')).replace(/[\\/]+/g, '__').replace(/[:*?"<>|]/g, '_');
 }
 
 /**

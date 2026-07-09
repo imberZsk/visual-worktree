@@ -36,6 +36,43 @@ describe('config', () => {
     expect(cfg.mainBranches).toEqual(['master', 'main']);
   });
 
+  it('loads legacy path fields as a default path profile', () => {
+    // dir 存储本用例的临时配置目录。
+    const dir = join(ctx.root, 'cfgdir');
+    // file 存储配置文件路径，用于手写旧版配置结构。
+    const { file } = getConfigPaths(dir);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify({ sourceProjectsPath: '/legacy/source', worktreesPath: '/legacy/worktrees' }), 'utf8');
+
+    // cfg 存储读取并自动迁移后的配置。
+    const cfg = loadConfig(dir);
+
+    expect(cfg.sourceProjectsPath).toBe('/legacy/source');
+    expect(cfg.worktreesPath).toBe('/legacy/worktrees');
+    expect(cfg.activePathProfileId).toBe('default');
+    expect(cfg.pathProfiles).toEqual([
+      { id: 'default', name: '工作路径', sourceProjectsPath: '/legacy/source', worktreesPath: '/legacy/worktrees' },
+    ]);
+  });
+
+  it('saves multiple path profiles and syncs active profile to top-level paths', () => {
+    // dir 存储本用例的临时配置目录。
+    const dir = join(ctx.root, 'cfgdir');
+    // saved 存储保存多套路径组合后的完整配置。
+    const saved = saveConfig({
+      activePathProfileId: 'personal',
+      pathProfiles: [
+        { id: 'work', name: '工作', sourceProjectsPath: '/work/source', worktreesPath: '/work/worktrees' },
+        { id: 'personal', name: '个人', sourceProjectsPath: '/personal/source', worktreesPath: '/personal/worktrees' },
+      ],
+    }, dir);
+
+    expect(saved.sourceProjectsPath).toBe('/personal/source');
+    expect(saved.worktreesPath).toBe('/personal/worktrees');
+    expect(loadConfig(dir).sourceProjectsPath).toBe('/personal/source');
+    expect(loadConfig(dir).pathProfiles.length).toBe(2);
+  });
+
   it('falls back to default on corrupted file', () => {
     const dir = join(ctx.root, 'cfgdir');
     const { file } = getConfigPaths(dir);

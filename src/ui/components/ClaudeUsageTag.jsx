@@ -68,7 +68,12 @@ export default function ClaudeUsageTag({ taskName, summary }) {
   // minWidth 固定标签宽度：loading 态与有数据态共用同一最小宽度，避免三态（loading→null→数据）切换时标题行内其他徽标横向跳动（CLS）
   if (loading) {
     return (
-      <Tag icon={<Spin size="small" />} color="default" style={{ fontSize: 11, minWidth: 72, textAlign: 'center' }}>
+      <Tag
+        className="worktree-title-tag claude-usage-tag"
+        icon={<Spin size="small" />}
+        color="default"
+        style={{ minWidth: 72 }}
+      >
         AI 用量
       </Tag>
     );
@@ -120,9 +125,10 @@ export default function ClaudeUsageTag({ taskName, summary }) {
   return (
     <Tooltip title={tooltipContent}>
       <Tag
+        className="worktree-title-tag claude-usage-tag"
         icon={<ThunderboltOutlined />}
         color="purple"
-        style={{ fontSize: 11, cursor: 'help', minWidth: 72, textAlign: 'center' }}
+        style={{ minWidth: 72 }}
       >
         {formatTokens(totalTokens)} · {costText}
       </Tag>

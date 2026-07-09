@@ -68,7 +68,7 @@ describe('addWorktree', () => {
     expect(res.reused).toBe(true);
   });
 
-  it('创建 worktree 后默认初始化固定说明文件和 docs 工作文档目录', async () => {
+  it('创建项目 worktree 后只初始化固定说明文件', async () => {
     // repo 存储源项目路径。
     const repo = initRepo(join(ctx.root, 'projDocs'), 'master');
     // target 存储新建 worktree 的目标路径。
@@ -78,26 +78,26 @@ describe('addWorktree', () => {
     const res = await addWorktree(repo, target, 'feat/docs', { newBranch: true });
 
     expect(res.success).toBe(true);
-    expect(existsSync(join(target, 'docs'))).toBe(true);
+    expect(existsSync(join(target, 'docs'))).toBe(false);
     expect(readFileSync(join(target, 'CLAUDE.md'), 'utf8')).toContain('AGENTS.md');
     expect(readFileSync(join(target, 'AGENTS.md'), 'utf8')).toContain('docs/');
   });
 
-  it('工作文档不阻塞干净 worktree 的安全删除', async () => {
+  it('固定说明文件不阻塞干净 worktree 的安全删除', async () => {
     // repo 存储源项目路径。
     const repo = initRepo(join(ctx.root, 'projCleanRemoveDocs'), 'master');
     // target 存储带自动工作文档的新 worktree 路径。
     const target = join(ctx.root, 'worktrees', 'TASK-CLEAN-REMOVE-DOCS', 'projCleanRemoveDocs');
     await addWorktree(repo, target, 'feat/clean-remove-docs', { newBranch: true });
 
-    // res 存储非 force 删除结果；自动生成工作文档应被 git 忽略，不应导致 dirty 拦截。
+    // res 存储非 force 删除结果；自动生成固定说明文件应被 git 忽略，不应导致 dirty 拦截。
     const res = await removeWorktree(repo, target);
 
     expect(res.success).toBe(true);
     expect(existsSync(target)).toBe(false);
   });
 
-  it('复用已有 worktree 时补齐缺失的工作文档', async () => {
+  it('复用已有项目 worktree 时补齐缺失的固定说明文件', async () => {
     // repo 存储源项目路径。
     const repo = initRepo(join(ctx.root, 'projReuseDocs'), 'master');
     // target 存储要复用的 worktree 目标路径。
@@ -112,12 +112,12 @@ describe('addWorktree', () => {
 
     expect(res.success).toBe(true);
     expect(res.reused).toBe(true);
-    expect(existsSync(join(target, 'docs'))).toBe(true);
+    expect(existsSync(join(target, 'docs'))).toBe(false);
     expect(existsSync(join(target, 'CLAUDE.md'))).toBe(true);
     expect(existsSync(join(target, 'AGENTS.md'))).toBe(true);
   });
 
-  it('创建 worktree 时按自定义工作文档模板初始化文件内容', async () => {
+  it('创建项目 worktree 时不应用自定义工作文档模板', async () => {
     // repo 存储源项目路径。
     const repo = initRepo(join(ctx.root, 'projCustomDocs'), 'master');
     // target 存储新建 worktree 的目标路径。
@@ -132,8 +132,10 @@ describe('addWorktree', () => {
     const res = await addWorktree(repo, target, 'feat/custom-docs', { newBranch: true, workDocumentTemplates });
 
     expect(res.success).toBe(true);
-    expect(existsSync(join(target, 'records'))).toBe(true);
-    expect(readFileSync(join(target, '.ai', 'notes.md'), 'utf8')).toBe('# Notes\n');
+    expect(existsSync(join(target, 'records'))).toBe(false);
+    expect(existsSync(join(target, '.ai', 'notes.md'))).toBe(false);
+    expect(existsSync(join(target, 'CLAUDE.md'))).toBe(true);
+    expect(existsSync(join(target, 'AGENTS.md'))).toBe(true);
   });
 
   it('新建分支基于主分支 master 而非源仓库当前所在分支（如 test）', async () => {
@@ -291,6 +293,7 @@ describe('batchAddWorktree', () => {
     expect(readFileSync(join(worktreesRoot, 'PROJ-100', 'AGENTS.md'), 'utf8')).toContain('docs/');
     expect(existsSync(join(worktreesRoot, 'PROJ-100', 'projA'))).toBe(true);
     expect(existsSync(join(worktreesRoot, 'PROJ-100', 'projB'))).toBe(true);
+    expect(existsSync(join(worktreesRoot, 'PROJ-100', 'projA', 'docs'))).toBe(false);
   });
 
   it('批量创建 worktree 时按自定义工作文档模板初始化任务根目录', async () => {
@@ -317,7 +320,7 @@ describe('batchAddWorktree', () => {
     expect(results.every((r) => r.success)).toBe(true);
     expect(existsSync(join(worktreesRoot, 'PROJ-101', 'records'))).toBe(true);
     expect(readFileSync(join(worktreesRoot, 'PROJ-101', '.ai', 'task.md'), 'utf8')).toBe('task notes');
-    expect(readFileSync(join(worktreesRoot, 'PROJ-101', 'projA', '.ai', 'task.md'), 'utf8')).toBe('task notes');
+    expect(existsSync(join(worktreesRoot, 'PROJ-101', 'projA', '.ai', 'task.md'))).toBe(false);
   });
 
   it('项目列表为空时仍创建任务根目录和工作文档', async () => {

@@ -102,10 +102,10 @@ function EnvHealthStatusTag({ task, entry, onClick }) {
     <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
       <Tooltip title={tooltipText}>
         <Tag
-          className="env-health-status-tag"
+          className="worktree-title-tag env-health-status-tag"
           color={color}
           onClick={() => onClick?.(task)}
-          style={{ marginInlineEnd: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 112, whiteSpace: 'nowrap' }}
+          style={{ cursor: 'pointer', minWidth: 92, whiteSpace: 'nowrap' }}
         >
           {icon}
           <span>{label}</span>
@@ -556,6 +556,7 @@ export default function WorktreePanel({ tasks, loading, activeKeys, onActiveKeys
     const projectCountTag = (
       <Tooltip title={`${projectCount} 个项目`}>
         <Tag
+          className="worktree-title-tag"
           aria-label={`项目数量 ${projectCount}`}
           style={{
             marginInlineEnd: 0,
@@ -581,9 +582,10 @@ export default function WorktreePanel({ tasks, loading, activeKeys, onActiveKeys
     const taskLinkTags = taskLinks.map((item, index) => (
       <Tooltip title={item.name ? `${item.name}：${item.url}` : item.url} key={`${item.url}-${index}`}>
         <Tag
+          className="worktree-title-tag task-link-title-tag"
           color="processing"
           onClick={(e) => { e.stopPropagation(); onOpenUrl?.(item.url); }}
-          style={{ marginInlineEnd: 0, cursor: 'pointer', maxWidth: 220, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          style={{ cursor: 'pointer', maxWidth: 220 }}
         >
           <LinkOutlined style={{ flexShrink: 0 }} />
           <SingleLineText text={item.name || item.url} inline style={{ maxWidth: 180 }} />
