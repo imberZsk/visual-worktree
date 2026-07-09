@@ -50,6 +50,7 @@ jobs:
       # WHY 自动打 tag 后，源码中的 package.json 可能仍停留在上一个发布版本；这里在 CI 工作区临时同步，
       # 既能保证安装包文件名/应用版本号正确，也避免为了发版额外创建版本号 PR。
       - name: Sync package version from tag
+        shell: bash
         run: |
           node <<'NODE'
           // fs 模块用于读取和写回 package.json。
@@ -133,7 +134,7 @@ jobs:
           if [ -n "$dmg" ]; then
             notes+=$'\n'"### macOS"$'\n'
             notes+="- \`${dmg}\`"$'\n'
-            notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」，或执行 \`xattr -cr /Applications/VisualWorktree.app\`。"$'\n'
+            notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」，或执行 \`xattr -cr \"/Applications/Visual Worktree.app\"\`。"$'\n'
           fi
           # Windows 安装版 + 便携版：分别列出实际文件名
           setup=$(ls dist-release/*Setup*.exe 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
