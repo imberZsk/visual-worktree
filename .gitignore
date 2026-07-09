@@ -1,17 +1,22 @@
 node_modules/
-# 也忽略 node_modules 软链接本身：worktree 复用源项目依赖时创建的是符号链接文件，上面带斜杠的目录规则匹配不到
+# 也忽略 node_modules 软链接本身：worktree 复用源项目依赖时创建的是符号链接文件，上面带斜杠的目录规则匹配不到。
 node_modules
 
 # 构建与发布产物
 dist/
+dist-electron/
+dist-ssr/
 release/
-*.dmg
-*.zip
-*.tar.gz
-
-# 测试与覆盖率产物
 coverage/
 .nyc_output/
+*.dmg
+*.exe
+*.zip
+*.tar.gz
+*.blockmap
+latest*.yml
+builder-debug.yml
+builder-effective-config.yaml
 
 # 本地环境与日志
 .DS_Store
@@ -19,6 +24,7 @@ coverage/
 .env
 .env.*
 !.env.example
+*.local
 *.log
 npm-debug.log*
 pnpm-debug.log*
@@ -29,9 +35,14 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
-# 本地 AI/工具状态，不应进入公开仓库
+# 本地 AI/工具状态，不应进入仓库
 .claude/*.local.md
 .superpowers/
+.agents/
+docs/superpowers/
+
+# 旧桌面框架或工具链缓存
+src-tauri/target/
 
 # 编辑器本地状态
 .idea/

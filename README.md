@@ -2,6 +2,8 @@
 
 Visual Worktree 是一个跨平台（macOS / Windows）桌面应用，用于可视化管理本地多个 Git 仓库，并按“任务/需求”组织跨仓库 worktree。它适合需要同时改多个仓库、频繁检查分支状态、批量拉取或清理 worktree 的开发者。
 
+官网文档：<https://visual-worktree-docs.netlify.app>
+
 ## 主要功能
 
 - **项目扫描**：扫描指定目录下的 Git 仓库，展示当前分支、未提交变更、领先/落后远程等状态。

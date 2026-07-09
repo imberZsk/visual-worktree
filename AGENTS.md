@@ -9,15 +9,15 @@ Visual Worktree 是一个 Electron 桌面应用，用于可视化管理本地多
 ## 常用命令
 
 ```bash
-npm run dev            # 开发模式：vite dev server (端口 5273) + electron 热联调
-npm test               # 跑全部测试 (vitest run)
-npm run test:watch     # watch 模式
-npm run test:coverage  # 测试 + 覆盖率 (仅统计 src/core)
-npm run verify:boot    # Electron 启动冒烟验证 (headless，设置 PM_SMOKE=1)
-npm run build:ui       # 仅构建前端产物到 dist/
-npm start              # 生产模式：先 build:ui 再用 electron 加载本地文件
-npm run dist           # 打包为 macOS arm64 DMG，产物在 release/
-npm run dist:win       # 打包为 Windows x64 NSIS 安装包 + 便携版（须在 Windows 上运行），产物在 release/
+pnpm dev               # 开发模式：vite dev server (端口 5275) + electron 热联调
+pnpm test              # 跑全部测试 (vitest run)
+pnpm run test:watch    # watch 模式
+pnpm run test:coverage # 测试 + 覆盖率 (仅统计 src/core)
+pnpm run verify:boot   # Electron 启动冒烟验证 (headless，设置 PM_SMOKE=1)
+pnpm run build:ui      # 仅构建前端产物到 dist/
+pnpm start             # 生产模式：先 build:ui 再用 electron 加载本地文件
+pnpm run dist          # 打包为 macOS arm64 DMG，产物在 release/
+pnpm run dist:win      # 打包为 Windows x64 NSIS 安装包 + 便携版（须在 Windows 上运行），产物在 release/
 
 # 跑单个测试文件
 npx vitest run test/gitService.ops.test.js
