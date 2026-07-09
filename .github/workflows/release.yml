@@ -128,17 +128,27 @@ jobs:
         run: |
           # notes 累积「下载与安装」段落，最终写入文件供 gh release 引用
           notes="## 下载与安装"$'\n'
+          # nullglob 让无匹配安装包时通配符展开为空数组，避免把字面量当成文件名。
+          shopt -s nullglob
           # macOS DMG：取实际文件名（含版本号/架构），附未签名首次打开提示
-          # shellcheck disable=SC2012
-          dmg=$(ls dist-release/*.dmg 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
-          if [ -n "$dmg" ]; then
+          # dmg_files 存储实际产出的 macOS DMG 文件；文件名可能包含空格，必须用数组保留完整路径。
+          dmg_files=(dist-release/*.dmg)
+          if [ "${#dmg_files[@]}" -gt 0 ]; then
+            # dmg 存储 GitHub Release 中展示的 DMG 文件名。
+            dmg="$(basename "${dmg_files[0]}")"
             notes+=$'\n'"### macOS"$'\n'
             notes+="- \`${dmg}\`"$'\n'
             notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」，或执行 \`xattr -cr \"/Applications/Visual Worktree.app\"\`。"$'\n'
           fi
           # Windows 安装版 + 便携版：分别列出实际文件名
-          setup=$(ls dist-release/*Setup*.exe 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
-          portable=$(ls dist-release/*portable*.exe 2>/dev/null | xargs -n1 basename 2>/dev/null | head -n1 || true)
+          # setup_files 存储 Windows 安装版 exe 文件列表。
+          setup_files=(dist-release/*Setup*.exe)
+          # portable_files 存储 Windows 便携版 exe 文件列表。
+          portable_files=(dist-release/*portable*.exe)
+          # setup 存储安装版 exe 文件名；不存在时为空字符串。
+          setup="$([ "${#setup_files[@]}" -gt 0 ] && basename "${setup_files[0]}" || true)"
+          # portable 存储便携版 exe 文件名；不存在时为空字符串。
+          portable="$([ "${#portable_files[@]}" -gt 0 ] && basename "${portable_files[0]}" || true)"
           if [ -n "$setup" ] || [ -n "$portable" ]; then
             notes+=$'\n'"### Windows"$'\n'
             [ -n "$setup" ] && notes+="- \`${setup}\`（安装版）"$'\n'
