@@ -46,6 +46,32 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # 让安装包版本跟触发发布的 tag 保持一致，而不依赖仓库里的 package.json 是否提前 bump。
+      # WHY 自动打 tag 后，源码中的 package.json 可能仍停留在上一个发布版本；这里在 CI 工作区临时同步，
+      # 既能保证安装包文件名/应用版本号正确，也避免为了发版额外创建版本号 PR。
+      - name: Sync package version from tag
+        run: |
+          node <<'NODE'
+          // fs 模块用于读取和写回 package.json。
+          const fs = require('node:fs');
+          // packageFile 存储待同步版本号的 package.json 文件路径。
+          const packageFile = 'package.json';
+          // tagName 存储触发 Release workflow 的 Git tag 名称。
+          const tagName = process.env.GITHUB_REF_NAME || '';
+          // version 存储从 tag 中解析出的应用版本号。
+          const version = tagName.replace(/^v/, '');
+          // semverPattern 存储允许用于打包的版本号格式。
+          const semverPattern = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+          if (!semverPattern.test(version)) {
+            throw new Error(`无法从 tag ${tagName} 解析出合法版本号`);
+          }
+          // packageJson 存储 package.json 解析后的配置对象。
+          const packageJson = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+          packageJson.version = version;
+          fs.writeFileSync(packageFile, `${JSON.stringify(packageJson, null, 2)}\n`);
+          console.log(`package.json version synced to ${version}`);
+          NODE
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

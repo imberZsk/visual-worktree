@@ -1,0 +1,155 @@
+name: Auto Tag Release
+
+# PR 合并到 main 后自动判断是否需要发布；只打 tag，不直接创建 Release。
+# Release 仍交给 release.yml 统一处理，保证打包、上传、发布链路只有一个入口。
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: auto-tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create release tag
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - name: Checkout main with tags
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Decide release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+
+          # pr_number 存储当前要分析的 Pull Request 编号。
+          pr_number="${PR_NUMBER}"
+          # pr_title 存储当前 Pull Request 标题，用于跳过显式 release PR。
+          pr_title="${PR_TITLE}"
+          # merge_sha 存储 PR 合并后 main 上对应的提交，用作 tag 目标。
+          merge_sha="${MERGE_SHA}"
+
+          # 手动 release PR 只负责版本号或发布元信息，不再触发二次自动打 tag。
+          if [[ "$pr_title" =~ ^chore:\ release\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=release-pr" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # pr_json 存储 GitHub CLI 拉取到的 PR 元数据和变更文件清单。
+          pr_json="$(mktemp)"
+          gh pr view "$pr_number" --json files,labels,title > "$pr_json"
+
+          # product_file_count 存储本次 PR 中属于产品代码或打包资源的文件数量。
+          product_file_count="$(
+            jq '[.files[].path | select(
+              test("^(src|electron|build|scripts)/")
+              or . == "package.json"
+              or . == "pnpm-lock.yaml"
+            )] | length' "$pr_json"
+          )"
+
+          if [ "$product_file_count" -eq 0 ]; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=docs-or-non-product" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch origin main --tags --force
+
+          # rebase merge 等场景理论上也会提供 merge_commit_sha；这里保底校验，避免空 SHA 导致误打 tag。
+          if [ -z "$merge_sha" ] || ! git cat-file -e "$merge_sha^{commit}" 2>/dev/null; then
+            merge_sha="$(git rev-parse origin/main)"
+          fi
+
+          # existing_tag 存储 tag 目标提交上已有的版本 tag，避免重复发版。
+          existing_tag="$(git tag --points-at "$merge_sha" --list 'v[0-9]*.[0-9]*.[0-9]*' | head -n 1 || true)"
+          if [ -n "$existing_tag" ]; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=already-tagged" >> "$GITHUB_OUTPUT"
+            echo "existing_tag=$existing_tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # latest_tag 存储当前仓库里最大的语义化版本 tag。
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+          # latest_version 存储去掉 v 前缀后的最新版本号。
+          latest_version="${latest_tag#v}"
+          # major 存储最新版本号的主版本。
+          major="${latest_version%%.*}"
+          # minor_and_patch 存储最新版本号中除主版本外的剩余部分。
+          minor_and_patch="${latest_version#*.}"
+          # minor 存储最新版本号的次版本。
+          minor="${minor_and_patch%%.*}"
+          # patch 存储最新版本号的修订版本。
+          patch="${minor_and_patch#*.}"
+
+          # label_names 存储 PR 标签名称列表，用于允许手动选择 major/minor/patch 级别。
+          label_names="$(jq -r '(.labels // [])[].name' "$pr_json")"
+          # bump_level 存储本次自动发版的语义化版本递增级别；默认 patch，避免过度放大版本号。
+          bump_level="patch"
+          if grep -qx 'release:major' <<< "$label_names"; then
+            bump_level="major"
+          elif grep -qx 'release:minor' <<< "$label_names"; then
+            bump_level="minor"
+          fi
+
+          if [ "$bump_level" = "major" ]; then
+            major=$((major + 1))
+            minor=0
+            patch=0
+          elif [ "$bump_level" = "minor" ]; then
+            minor=$((minor + 1))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+
+          # new_tag 存储即将创建并推送的新版本 tag。
+          new_tag="v${major}.${minor}.${patch}"
+          if git rev-parse "$new_tag" >/dev/null 2>&1; then
+            echo "Tag $new_tag already exists"
+            exit 1
+          fi
+
+          echo "release_needed=true" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "merge_sha=$merge_sha" >> "$GITHUB_OUTPUT"
+          echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.release.outputs.release_needed == 'true'
+        env:
+          NEW_TAG: ${{ steps.release.outputs.new_tag }}
+          MERGE_SHA: ${{ steps.release.outputs.merge_sha }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # new_tag 存储上一步计算出的待发布版本 tag。
+          new_tag="${NEW_TAG}"
+          # merge_sha 存储上一步确认的 tag 目标提交。
+          merge_sha="${MERGE_SHA}"
+
+          git tag -a "$new_tag" "$merge_sha" -m "$new_tag"
+          git push origin "$new_tag"
