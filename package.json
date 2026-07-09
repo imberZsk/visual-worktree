@@ -4,13 +4,14 @@
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
+  "packageManager": "pnpm@11.7.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/imber/visual-worktree.git"
+    "url": "git+https://github.com/imberZsk/visual-worktree.git"
   },
-  "homepage": "https://github.com/imber/visual-worktree#readme",
+  "homepage": "https://visual-worktree-docs.netlify.app",
   "bugs": {
-    "url": "https://github.com/imber/visual-worktree/issues"
+    "url": "https://github.com/imberZsk/visual-worktree/issues"
   },
   "keywords": [
     "electron",
