@@ -422,7 +422,7 @@ export async function getProjectStatus(projectPath, opts = {}) {
   const name = basename(projectPath);
   // 非 git 目录直接返回占位状态，避免 simple-git 抛错
   if (!isGitRepo(projectPath)) {
-    return { name, path: projectPath, isGitRepo: false, currentBranch: '', isMainBranch: false, hasUncommittedChanges: false, hasUnpushedCommits: false, canPull: false, ahead: 0, behind: 0, changedFiles: [], worktrees: [], fetchFailed: false, remoteUrl: '', gitlabUrl: '' };
+    return { name, path: projectPath, isGitRepo: false, currentBranch: '', isMainBranch: false, hasUncommittedChanges: false, hasTrackedChanges: false, hasUntrackedChanges: false, untrackedFilesCount: 0, hasUnpushedCommits: false, canPull: false, ahead: 0, behind: 0, changedFiles: [], worktrees: [], fetchFailed: false, remoteUrl: '', gitlabUrl: '' };
   }
   const git = simpleGit(projectPath);
   // remoteInfo 存储 origin remote 原始地址与可打开的 GitLab 网页地址；读取失败不影响状态扫描。
@@ -440,6 +440,12 @@ export async function getProjectStatus(projectPath, opts = {}) {
     }
   }
   const status = await git.status();
+  // changedFiles 存储 simple-git 返回的工作区文件状态，供详情抽屉和状态标签复用。
+  const changedFiles = status.files.map((f) => ({ path: f.path, index: f.index, working_dir: f.working_dir }));
+  // untrackedFiles 存储尚未被 Git 跟踪的新增文件/目录；simple-git 用 ?? 表示。
+  const untrackedFiles = changedFiles.filter((f) => f.index === '?' && f.working_dir === '?');
+  // trackedFiles 存储已被 Git 跟踪的修改、删除、暂存等文件；用于把 diff 类改动和未跟踪目录分开展示。
+  const trackedFiles = changedFiles.filter((f) => !(f.index === '?' && f.working_dir === '?'));
   // worktree 列表失败不阻断主流程
   let worktrees = [];
   try {
@@ -456,12 +462,15 @@ export async function getProjectStatus(projectPath, opts = {}) {
     currentBranch,
     isMainBranch: isMainBranch(currentBranch, mainBranches),
     hasUncommittedChanges: status.files.length > 0,
+    hasTrackedChanges: trackedFiles.length > 0,
+    hasUntrackedChanges: untrackedFiles.length > 0,
+    untrackedFilesCount: untrackedFiles.length,
     hasUnpushedCommits: status.ahead > 0,
     canPull: status.behind > 0,
     ahead: status.ahead,
     behind: status.behind,
     tracking: status.tracking || '',
-    changedFiles: status.files.map((f) => ({ path: f.path, index: f.index, working_dir: f.working_dir })),
+    changedFiles,
     worktrees,
     fetchFailed,
     remoteUrl: remoteInfo.remoteUrl,
@@ -602,17 +611,26 @@ export async function scanWorktreesByTask(projectsRoot, worktreesRoot, opts = {}
       // prunable 的 worktree 目录可能已不存在，跳过状态查询
       if (item.prunable || !existsSync(item.path)) {
         item.hasUncommittedChanges = false;
+        item.hasTrackedChanges = false;
+        item.hasUntrackedChanges = false;
+        item.untrackedFilesCount = 0;
         item.missing = item.prunable || !existsSync(item.path);
         return;
       }
       try {
         const st = await getProjectStatus(item.path, { mainBranches });
         item.hasUncommittedChanges = st.hasUncommittedChanges;
+        item.hasTrackedChanges = st.hasTrackedChanges;
+        item.hasUntrackedChanges = st.hasUntrackedChanges;
         item.ahead = st.ahead;
         item.behind = st.behind;
         item.changedFilesCount = st.changedFiles.length;
+        item.untrackedFilesCount = st.untrackedFilesCount;
       } catch (e) {
         item.hasUncommittedChanges = false;
+        item.hasTrackedChanges = false;
+        item.hasUntrackedChanges = false;
+        item.untrackedFilesCount = 0;
       }
     });
   }

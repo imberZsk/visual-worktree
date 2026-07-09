@@ -76,7 +76,9 @@ export function statusTags(p) {
     tags.push({ text: '非主分支', color: 'orange' });
   }
   // 未提交变更
-  if (p.hasUncommittedChanges) tags.push({ text: '有变更', color: 'red' });
+  if (p.hasTrackedChanges || (p.hasUncommittedChanges && !p.hasUntrackedChanges)) tags.push({ text: '有变更', color: 'red' });
+  // 未跟踪文件单独展示，避免只有新增未纳管目录时被误解为已有文件 diff。
+  if (p.hasUntrackedChanges) tags.push({ text: `未跟踪${p.untrackedFilesCount ? ` ${p.untrackedFilesCount}` : ''}`, color: 'volcano' });
   // 领先远程（有未推送提交）
   if (p.hasUnpushedCommits) tags.push({ text: `领先 ${p.ahead}`, color: 'blue' });
   // 可拉取

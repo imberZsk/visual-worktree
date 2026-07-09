@@ -241,6 +241,14 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
       expect.arrayContaining([longTaskName, longBranch, longPath]),
     );
   });
+
+  it('任务标题使用可横向滚动容器承载长标签', () => {
+    const { container } = render(<WorktreePanel {...baseProps()} />);
+    // titleScroll 存储任务标题滚动容器，长任务名和多个标签超出时由它水平滚动。
+    const titleScroll = container.querySelector('.worktree-task-title-scroll');
+    expect(titleScroll).toBeTruthy();
+    expect(container.querySelector('.worktree-task-collapse')).toBeTruthy();
+  });
 });
 
 describe('WorktreePanel 隐藏置顶与标题徽标展示', () => {

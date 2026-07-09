@@ -35,7 +35,7 @@ const DISPLAY_BADGE_DESCRIPTIONS = {
 };
 
 // 编辑器打开命令的预置选项：覆盖常见编辑器；用 AutoComplete 既可下拉选择也可手动输入自定义命令。
-// {path} 为路径占位符；code 命令会在主进程自动注入 -r 复用窗口。
+// {path} 为路径占位符；code 命令会在主进程自动注入 -n 新窗口打开，避免替换当前窗口。
 const EDITOR_COMMAND_OPTIONS = [
   { label: 'VSCode（code {path}）', value: 'code {path}' },
   { label: 'Cursor（cursor {path}）', value: 'cursor {path}' },
@@ -535,7 +535,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
           <Form.Item
             label="编辑器打开命令"
             name="vscodeCommand"
-            tooltip="可下拉选择常见编辑器，也可手动输入。使用 {path} 作为路径占位符。VSCode：code {path}（自动加 -r 复用窗口）；Cursor：cursor {path}；Trae：trae {path}"
+            tooltip="可下拉选择常见编辑器，也可手动输入。使用 {path} 作为路径占位符。VSCode：code {path}（自动加 -n 新窗口打开）；Cursor：cursor {path}；Trae：trae {path}"
             rules={[{ required: true, message: '请选择或输入编辑器命令' }]}
           >
             <AutoComplete

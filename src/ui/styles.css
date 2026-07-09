@@ -122,6 +122,36 @@ html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-item-selected {
   line-height: 20px;
 }
 
+/* Worktree 任务标题列允许收缩，避免标题徽标过多时把右侧操作按钮挤出可视区 */
+.worktree-task-collapse .ant-collapse-header-text {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Worktree 任务标题横向滚动：长任务名和多个标题标签保持单行，用户可左右滑动查看 */
+.worktree-task-title-scroll {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+/* 标题内的标签与文本固定自身宽度，由外层滚动容器承接溢出 */
+.worktree-task-title-scroll > * {
+  flex: 0 0 auto;
+}
+
+/* 右侧任务操作按钮固定在可视区，标题过长时只滚动标题区域 */
+.worktree-task-collapse .ant-collapse-extra {
+  flex: 0 0 auto;
+}
+
 /* Claude 用量标签字号略小但高度与其他任务标题徽标保持一致 */
 .claude-usage-tag {
   cursor: help;

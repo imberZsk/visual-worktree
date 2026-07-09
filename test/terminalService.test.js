@@ -34,12 +34,12 @@ describe('buildTerminalCommand', () => {
     expect(inheritFlagIndex).toBeLessThan(workingDirIndex);
   });
 
-  it('Ghostty command explicitly cd into the target dir before starting the interactive shell', () => {
+  it('Ghostty command only uses official config args and does not inject a shell script', () => {
     // cmd 存储 Ghostty 启动命令；显式传 'darwin' 保证走 macOS 分支
     const cmd = buildTerminalCommand('/wt/TASK-A/projA', 'ghostty', 'darwin');
-    expect(cmd).toContain('-e /bin/zsh -lc');
-    expect(cmd).toContain("cd '\\''/wt/TASK-A/projA'\\''");
-    expect(cmd).toContain('exec "${SHELL:-/bin/zsh}"');
+    expect(cmd).toContain("--working-directory='/wt/TASK-A/projA'");
+    expect(cmd).toContain('--window-inherit-working-directory=false');
+    expect(cmd).not.toContain('-e /bin/zsh -lc');
   });
 
   it('builds a Terminal.app command via AppleScript that cd into the target dir', () => {

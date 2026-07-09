@@ -107,7 +107,7 @@ export function buildVscodeCommand(template, targetPath, platform = process.plat
  * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台；决定引号风格与最终兜底命令
  * @returns {Promise<{success:boolean, error?:string}>} 操作结果
  */
-function openInVscode(targetPath, template, platform = process.platform) {
+export function openInVscode(targetPath, template, platform = process.platform) {
   // isWin 标记是否 Windows 平台，决定路径引号风格与 CLI 候选路径/兜底命令
   const isWin = platform === 'win32';
   // quoted 为按平台包裹的目标路径：Windows 双引号、其余 POSIX 单引号
@@ -130,15 +130,31 @@ function openInVscode(targetPath, template, platform = process.platform) {
         fallbackOpen();
       }
     });
-    // 兜底：用系统方式启动 VSCode 应用打开目录。
-    // Windows 无 open -a：改用 start 调 code（首个 "" 为窗口标题占位）；macOS 用 open -a 按应用名启动。
+    /**
+     * 兜底用系统方式启动 VSCode 应用打开目录。
+     * Windows 无 open -a：改用 start 调 code（首个 "" 为窗口标题占位）；macOS 用 open -na 直接拉起 VSCode 应用并把 -n/path 透传给应用。
+     */
     function fallbackOpen() {
-      // fallbackCmd 为平台相关的最终兜底命令
-      const fallbackCmd = isWin ? `start "" code -n ${quoted}` : `open -a "Visual Studio Code" ${quoted}`;
-      exec(fallbackCmd, (err3) => {
-        if (!err3) resolve({ success: true });
-        else resolve({ success: false, error: '未找到 VSCode，请确认已安装' });
-      });
+      // fallbackCommands 存储平台相关的兜底命令链；macOS 第一条绕过 PATH，第二条兼容旧 open 文件参数语义。
+      const fallbackCommands = isWin
+        ? [`start "" code -n ${quoted}`]
+        : [`open -na "Visual Studio Code" --args -n ${quoted}`, `open -a "Visual Studio Code" ${quoted}`];
+      /**
+       * 按顺序尝试兜底命令，某条失败时继续下一条。
+       * @param {number} index - 当前要尝试的兜底命令下标
+       */
+      const runFallbackAt = (index) => {
+        // 兜底链用尽仍失败，向 UI 返回安装/命令不可用提示。
+        if (index >= fallbackCommands.length) {
+          resolve({ success: false, error: '未找到 VSCode，请确认已安装' });
+          return;
+        }
+        exec(fallbackCommands[index], (err3) => {
+          if (!err3) resolve({ success: true });
+          else runFallbackAt(index + 1);
+        });
+      };
+      runFallbackAt(0);
     }
   });
 }
@@ -486,7 +502,7 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     return { success: true };
   });
 
-  // 在 VSCode 中打开目录（命令模板来自用户配置，默认 code -r 复用窗口避免新建程序坞图标）
+  // 在 VSCode 中打开目录（命令模板来自用户配置，默认 code -n 新窗口打开，避免替换当前窗口）
   ipcMain.handle(IPC.OPEN_IN_VSCODE, async (_e, targetPath) => {
     // cfg 当前应用配置，读取用户自定义的 VSCode 命令模板
     const cfg = loadConfig(configBaseDir);

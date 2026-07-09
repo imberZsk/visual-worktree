@@ -63,6 +63,14 @@ describe('statusTags', () => {
     expect(tags.map((t) => t.text)).toContain('有变更');
   });
 
+  it('separates untracked files from tracked changes', () => {
+    // tags 存储仅有未跟踪文件时的状态标签，避免误显示为“有变更”。
+    const tags = statusTags({ isGitRepo: true, isMainBranch: true, hasUncommittedChanges: true, hasTrackedChanges: false, hasUntrackedChanges: true, untrackedFilesCount: 2 });
+    const texts = tags.map((t) => t.text);
+    expect(texts).toContain('未跟踪 2');
+    expect(texts).not.toContain('有变更');
+  });
+
   it('tags ahead/behind counts', () => {
     const tags = statusTags(projects[2]);
     const texts = tags.map((t) => t.text);

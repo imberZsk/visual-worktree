@@ -65,6 +65,20 @@ describe('getProjectStatus', () => {
     expect(status.changedFiles.length).toBeGreaterThan(0);
   });
 
+  it('separates untracked files from tracked file changes', async () => {
+    const repo = initRepo(join(ctx.root, 'untracked-only'), 'master');
+    const { mkdirSync, writeFileSync } = await import('fs');
+    mkdirSync(join(repo, 'scratch'), { recursive: true });
+    writeFileSync(join(repo, 'scratch', 'note.md'), 'draft\n');
+
+    const status = await getProjectStatus(repo);
+
+    expect(status.hasUncommittedChanges).toBe(true);
+    expect(status.hasTrackedChanges).toBe(false);
+    expect(status.hasUntrackedChanges).toBe(true);
+    expect(status.untrackedFilesCount).toBe(1);
+  });
+
   it('detects ahead commits (unpushed)', async () => {
     const { local } = makeRemoteAndClone(join(ctx.root, 'ahead'), 'master');
     commitFile(local, 'a.txt', 'a', 'local commit');
