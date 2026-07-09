@@ -6,14 +6,14 @@ import { isStepDone, computeWorkflowProgress } from '../workflowLogic.js';
 import { getRunnableWorkflowSteps, getWorkflowStepRunStatus, getWorkflowTaskRunSummary } from '../workflowRunLogic.js';
 import { hasVisibilityKey, normalizeTaskTitleBadges } from '../visibilityLogic.js';
 import { stepRunKey } from '../../core/stepOutputLog.js';
-
-// 进度徽标用圆点展示的最大步骤数阈值：步骤数 ≤ 此值时用一排圆点直观展示，
-// 超过则改用紧凑的「✓ N/M」文字，避免圆点过多把任务行撑长。
-const PROGRESS_DOT_MAX = 5;
 import { VscodeIcon } from '../icons.jsx';
 import ClaudeUsageTag from './ClaudeUsageTag.jsx';
 import TaskLinksEditor from './TaskLinksEditor.jsx';
 import SingleLineText from './SingleLineText.jsx';
+
+// 进度徽标用圆点展示的最大步骤数阈值：步骤数 ≤ 此值时用一排圆点直观展示，
+// 超过则改用紧凑的「✓ N/M」文字，避免圆点过多把任务行撑长。
+const PROGRESS_DOT_MAX = 5;
 
 // Worktree 任务视角面板：按任务（worktreesRoot 下的目录）分组，
 // 每组展示该任务涉及的所有项目 worktree 及其分支/状态，支持打开/删除/prune。
@@ -434,10 +434,14 @@ function WorkflowControl({ taskName, task, steps = [], workflowMap = {}, onToggl
 function wtStatusTags(wt) {
   // tags 累积状态标签
   const tags = [];
+  // trackedFilesCount 存储已跟踪文件改动数量；总数中剔除未跟踪文件，避免只有新增目录时误报成 diff。
+  const trackedFilesCount = Math.max((wt.changedFilesCount || 0) - (wt.untrackedFilesCount || 0), 0);
   // 失效（目录被手动删除）
   if (wt.prunable || wt.missing) tags.push(<Tag color="default" key="missing">失效</Tag>);
-  // 有未提交变更
-  if (wt.hasUncommittedChanges) tags.push(<Tag color="red" key="dirty">有变更{wt.changedFilesCount ? ` ${wt.changedFilesCount}` : ''}</Tag>);
+  // 有已跟踪文件改动：展示为“有变更”，与仅新增未跟踪目录区分开。
+  if (wt.hasTrackedChanges || (wt.hasUncommittedChanges && !wt.hasUntrackedChanges)) tags.push(<Tag color="red" key="dirty">有变更{trackedFilesCount ? ` ${trackedFilesCount}` : ''}</Tag>);
+  // 未跟踪文件/目录单独展示，解释 git diff 为空但 status 仍不干净的场景。
+  if (wt.hasUntrackedChanges) tags.push(<Tag color="volcano" key="untracked">未跟踪{wt.untrackedFilesCount ? ` ${wt.untrackedFilesCount}` : ''}</Tag>);
   // 领先远程
   if (wt.ahead > 0) tags.push(<Tag color="blue" key="ahead">领先 {wt.ahead}</Tag>);
   // 落后远程
@@ -628,7 +632,7 @@ export default function WorktreePanel({ tasks, loading, activeKeys, onActiveKeys
       key: t.task,
       className: taskHiding ? 'worktree-task-hiding' : undefined,
       label: (
-        <Space wrap>
+        <div className="worktree-task-title-scroll">
           <SingleLineText text={t.task} inline style={{ maxWidth: 360, fontWeight: 600 }} />
           {taskPinned && <Tag color="blue" style={{ marginInlineEnd: 0 }}>置顶</Tag>}
           {taskHidden && <Tag color="default" style={{ marginInlineEnd: 0 }}>已隐藏</Tag>}
@@ -663,7 +667,7 @@ export default function WorktreePanel({ tasks, loading, activeKeys, onActiveKeys
               <WarningOutlined style={{ color: '#faad14' }} />
             </Tooltip>
           )}
-        </Space>
+        </div>
       ),
       extra: (
         <Space size={0}>
@@ -871,6 +875,7 @@ export default function WorktreePanel({ tasks, loading, activeKeys, onActiveKeys
 
   return (
     <Collapse
+      className="worktree-task-collapse"
       items={items}
       activeKey={activeKeys ?? []}
       onChange={onActiveKeysChange}

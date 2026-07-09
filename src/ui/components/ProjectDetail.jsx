@@ -96,7 +96,7 @@ export default function ProjectDetail({ project, drawerWidth = 560, onClose, onO
     />
   );
 
-  // 变更文件 Tab 内容
+  // 工作区文件 Tab 内容：包含已跟踪改动与未跟踪文件，名称避免被误解为仅 git diff。
   const filesTab = (
     <List
       size="small"
@@ -174,7 +174,7 @@ export default function ProjectDetail({ project, drawerWidth = 560, onClose, onO
       <Tabs
         items={[
           { key: 'commits', label: '提交历史', children: commitsTab },
-          { key: 'files', label: `变更文件 (${(project.changedFiles || []).length})`, children: filesTab },
+          { key: 'files', label: `工作区文件 (${(project.changedFiles || []).length})`, children: filesTab },
           { key: 'worktrees', label: `Worktree (${worktrees.length})`, children: worktreeTab },
         ]}
       />

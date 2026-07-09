@@ -57,15 +57,13 @@ export function buildTerminalCommand(targetPath, kind, platform = process.platfo
     return buildWindowsTerminalCommand(targetPath, kind);
   }
 
-  // Ghostty 在 macOS 不支持用 CLI 直接开窗，必须经 open -na 启动并通过 --working-directory 设初始目录。
-  // WHY：Ghostty 的目录继承配置可能让新窗口沿用上一个窗口目录，并覆盖 --working-directory，
-  // 因此每次从应用打开任务目录时既显式关闭继承，又在 Ghostty 内部执行一次 cd 兜底。
+  // Ghostty 在 macOS 不支持用 CLI 直接开窗，必须经 open -na 启动并通过配置参数设初始目录。
+  // WHY：Ghostty 的目录继承配置可能让新窗口沿用上一个窗口目录，并覆盖 working-directory；
+  // 因此每次从应用打开任务目录时显式关闭窗口目录继承，再传入目标 working-directory。
   if (kind === 'ghostty') {
     // quotedWorkingDirectory 存储传给 Ghostty working-directory 参数的 shell 安全路径。
     const quotedWorkingDirectory = shellSingleQuote(targetPath);
-    // interactiveShellScript 存储 Ghostty 启动后执行的脚本：先 cd 到目标目录，再替换成用户默认交互 shell。
-    const interactiveShellScript = `cd ${shellSingleQuote(targetPath)} && exec "\${SHELL:-/bin/zsh}"`;
-    return `open -na Ghostty.app --args --window-inherit-working-directory=false --working-directory=${quotedWorkingDirectory} -e /bin/zsh -lc ${shellSingleQuote(interactiveShellScript)}`;
+    return `open -na Ghostty.app --args --window-inherit-working-directory=false --working-directory=${quotedWorkingDirectory}`;
   }
 
   // cdScript 为在终端里执行的命令：cd 到单引号包裹的目标路径（路径先做 POSIX 单引号转义，shell 与 cd 安全）。

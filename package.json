@@ -63,7 +63,7 @@
   },
   "build": {
     "appId": "com.imber.visual-worktree",
-    "productName": "VisualWorktree",
+    "productName": "Visual Worktree",
     "publish": [
       {
         "provider": "github",
@@ -93,7 +93,7 @@
       "identity": null
     },
     "dmg": {
-      "title": "VisualWorktree ${version}"
+      "title": "Visual Worktree ${version}"
     },
     "win": {
       "icon": "build/icon.ico",
