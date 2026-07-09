@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Drawer, Form, Input, Switch, Select, AutoComplete, Button, Space, Tabs, App as AntApp, Typography, theme, Tag, Modal } from 'antd';
 import { PlusOutlined, MinusCircleOutlined, EditOutlined } from '@ant-design/icons';
 import { api } from '../api.js';
@@ -16,6 +16,8 @@ const { Text } = Typography;
 const WORKFLOW_STEP_EDITOR_Z_INDEX = 1300;
 // 工作文档详情弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
 const WORK_DOCUMENT_EDITOR_Z_INDEX = 1300;
+// 路径组合管理弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
+const PATH_PROFILE_EDITOR_Z_INDEX = 1300;
 // WORKFLOW_TASK_ARG_MODE_OPTIONS 存储流程步骤「任务目录参数」的下拉选项。
 const WORKFLOW_TASK_ARG_MODE_OPTIONS = [
   { label: '自动', value: TASK_ARG_MODE_AUTO },
@@ -54,6 +56,100 @@ const TERMINAL_OPTIONS_DARWIN = [
   { value: 'iTerm2', label: 'iTerm2' },
   { value: 'Ghostty', label: 'Ghostty' },
 ];
+// PATH_PROFILE_ID_PREFIX 存储设置页新建路径组合时使用的 id 前缀。
+const PATH_PROFILE_ID_PREFIX = 'path-profile';
+// DEFAULT_PATH_PROFILE_NAME 存储旧配置迁移到路径组合时使用的默认名称。
+const DEFAULT_PATH_PROFILE_NAME = '工作路径';
+
+/**
+ * 将配置里的路径组合规范化为设置表单可直接使用的结构。
+ * @param {object|null} config - 当前应用配置
+ * @returns {{pathProfiles:Array,activePathProfileId:string}} 表单路径组合与当前启用 id
+ */
+function normalizePathProfilesForForm(config) {
+  // fallbackProfile 存储从旧版顶层路径字段构造出的默认组合。
+  const fallbackProfile = {
+    id: 'default',
+    name: DEFAULT_PATH_PROFILE_NAME,
+    sourceProjectsPath: config?.sourceProjectsPath || '',
+    worktreesPath: config?.worktreesPath || '',
+  };
+  // rawProfiles 存储配置里的路径组合数组；旧配置没有该字段时用 fallbackProfile 迁移。
+  const rawProfiles = Array.isArray(config?.pathProfiles) && config.pathProfiles.length > 0
+    ? config.pathProfiles
+    : [fallbackProfile];
+  // profiles 存储清洗后的路径组合表单值。
+  let profiles = rawProfiles.map((profile, index) => ({
+    id: String(profile?.id || (index === 0 ? 'default' : `${PATH_PROFILE_ID_PREFIX}-${index + 1}`)).trim(),
+    name: String(profile?.name || `路径组合 ${index + 1}`).trim(),
+    sourceProjectsPath: String(profile?.sourceProjectsPath || fallbackProfile.sourceProjectsPath || '').trim(),
+    worktreesPath: String(profile?.worktreesPath || fallbackProfile.worktreesPath || '').trim(),
+  })).filter((profile) => profile.id);
+  if (profiles.length === 0) profiles = [fallbackProfile];
+  // activePathProfileId 存储当前启用组合 id；失效时回退第一组。
+  const activePathProfileId = profiles.some((profile) => profile.id === config?.activePathProfileId)
+    ? config.activePathProfileId
+    : profiles[0].id;
+  return { pathProfiles: profiles, activePathProfileId };
+}
+
+/**
+ * 创建一个新的路径组合草稿。
+ * @param {number} index - 新组合即将插入的下标
+ * @returns {{id:string,name:string,sourceProjectsPath:string,worktreesPath:string}} 新路径组合草稿
+ */
+function createPathProfileDraft(index) {
+  // timestamp 存储当前时间戳，确保连续新增的组合 id 不与已有组合冲突。
+  const timestamp = Date.now();
+  // id 存储新组合的唯一标识。
+  const id = `${PATH_PROFILE_ID_PREFIX}-${timestamp}-${index + 1}`;
+  // name 存储新组合名称；新增时留空，让用户手动输入并走必填校验。
+  const name = '';
+  // sourceProjectsPath 存储新组合源项目根目录；新增时留空，让用户明确选择/输入。
+  const sourceProjectsPath = '';
+  // worktreesPath 存储新组合 worktree 根目录；新增时留空，让用户明确选择/输入。
+  const worktreesPath = '';
+  return { id, name, sourceProjectsPath, worktreesPath };
+}
+
+/**
+ * 把 Form 字段路径转成稳定字符串 key，用于目录选择按钮 loading 状态。
+ * @param {string|string[]} fieldName - Form 字段名或字段路径数组
+ * @returns {string} 可比较的字段 key
+ */
+function getFormFieldKey(fieldName) {
+  return Array.isArray(fieldName) ? fieldName.join('.') : String(fieldName || '');
+}
+
+/**
+ * 保存前清洗路径组合列表，过滤损坏项并补齐展示名。
+ * @param {Array} rawProfiles - 表单收集到的路径组合数组
+ * @returns {Array<{id:string,name:string,sourceProjectsPath:string,worktreesPath:string}>} 可保存的路径组合
+ */
+function normalizePathProfilesForSave(rawProfiles) {
+  // profiles 存储表单里的路径组合数组；非数组时回退空数组。
+  const profiles = Array.isArray(rawProfiles) ? rawProfiles : [];
+  return profiles.map((profile, index) => ({
+    id: String(profile?.id || `${PATH_PROFILE_ID_PREFIX}-${index + 1}`).trim(),
+    name: String(profile?.name || `路径组合 ${index + 1}`).trim(),
+    sourceProjectsPath: String(profile?.sourceProjectsPath || '').trim(),
+    worktreesPath: String(profile?.worktreesPath || '').trim(),
+  })).filter((profile) => profile.id && profile.sourceProjectsPath && profile.worktreesPath);
+}
+
+/**
+ * 从路径组合列表中解析当前启用的组合 id。
+ * @param {string} rawActivePathProfileId - 表单当前选择的组合 id
+ * @param {Array<{id:string}>} pathProfiles - 已清洗的路径组合列表
+ * @returns {string} 有效的当前组合 id
+ */
+function resolveActivePathProfileId(rawActivePathProfileId, pathProfiles) {
+  // activePathProfileId 存储去空白后的候选组合 id。
+  const activePathProfileId = String(rawActivePathProfileId || '').trim();
+  return pathProfiles.some((profile) => profile.id === activePathProfileId)
+    ? activePathProfileId
+    : pathProfiles[0]?.id;
+}
 
 /**
  * 按运行平台返回终端应用下拉选项。
@@ -77,10 +173,30 @@ function getTerminalOptions(platform) {
 export default function SettingsModal({ open, config, onClose, onSaved }) {
   // antd 表单实例
   const [form] = Form.useForm();
+  // fallbackPathProfileState 存储从配置推导出的路径组合，用于路径组合表单尚未挂载时给当前组合下拉兜底。
+  const fallbackPathProfileState = useMemo(() => normalizePathProfilesForForm(config), [config]);
+  // watchedPathProfiles 存储路径组合表单当前值，用于驱动「当前路径组合」下拉选项实时刷新；preserve 允许读取尚未挂载到弹层中的字段。
+  const watchedPathProfiles = Form.useWatch('pathProfiles', { form, preserve: true }) || form.getFieldValue('pathProfiles');
+  // effectivePathProfiles 存储当前用于渲染路径组合下拉的列表；表单未挂载/未同步时先使用配置兜底。
+  const effectivePathProfiles = Array.isArray(watchedPathProfiles) && watchedPathProfiles.length > 0
+    ? watchedPathProfiles
+    : fallbackPathProfileState.pathProfiles;
+  // pathProfileOptions 存储当前路径组合下拉选项，名称编辑后立即反映在 Select 中。
+  const pathProfileOptions = useMemo(() => {
+    // profiles 存储可用于生成下拉选项的路径组合数组。
+    return effectivePathProfiles
+      .filter((profile) => profile?.id)
+      .map((profile, index) => ({
+        value: profile.id,
+        label: String(profile.name || `路径组合 ${index + 1}`).trim() || `路径组合 ${index + 1}`,
+      }));
+  }, [effectivePathProfiles]);
   // workflowEditorIndex 当前正在编辑的流程步骤下标；null 表示未打开编辑弹层。
   const [workflowEditorIndex, setWorkflowEditorIndex] = useState(null);
   // workDocumentEditorIndex 当前正在编辑的工作文档模板下标；null 表示未打开编辑弹层。
   const [workDocumentEditorIndex, setWorkDocumentEditorIndex] = useState(null);
+  // pathProfileEditorOpen 标记路径组合管理弹层是否打开。
+  const [pathProfileEditorOpen, setPathProfileEditorOpen] = useState(false);
   // pickingPathField 当前正在打开系统目录选择器的字段名；空字符串表示没有选择器在执行。
   const [pickingPathField, setPickingPathField] = useState('');
   // saving 标记保存操作是否正在进行，防止重复提交并给按钮提供 loading 反馈。
@@ -126,7 +242,9 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       const workDocumentTemplates = normalizeWorkDocumentTemplatesForForm(config.workDocumentTemplates ?? DEFAULT_WORK_DOCUMENT_TEMPLATES);
       // taskTitleBadges 为任务标题旁徽标展示开关；缺失字段默认全开。
       const taskTitleBadges = normalizeTaskTitleBadges(config.taskTitleBadges);
-      form.setFieldsValue({ ...config, cicdLinksArr, workflowSteps, workDocumentTemplates, taskTitleBadges });
+      // pathProfileState 存储路径组合表单状态，兼容旧配置里的顶层路径字段。
+      const pathProfileState = normalizePathProfilesForForm(config);
+      form.setFieldsValue({ ...config, ...pathProfileState, cicdLinksArr, workflowSteps, workDocumentTemplates, taskTitleBadges });
     }
   }, [open, config, form]);
 
@@ -142,11 +260,34 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       // WHY：antd Tabs 默认懒渲染，未进入「流程/工作文档/CI/CD」页时 validateFields 只返回已挂载字段，
       // 若直接保存会把这些 Form.List 当空数组写盘，导致重启后流程步骤等配置丢失。
       const values = form.getFieldsValue(true);
-      // 拆出 Form.List 字段单独处理：cicdLinksArr 转对象、workflowSteps / workDocumentTemplates 规范化；envCheckRoles 不再暴露在 UI 中
-      const { cicdLinksArr = [], workflowSteps: rawSteps = [], workDocumentTemplates: rawWorkDocumentTemplates = [], taskTitleBadges: rawTaskTitleBadges = {}, ...rest } = values;
+      // 拆出 Form.List 字段单独处理：路径组合、cicdLinksArr 转对象、workflowSteps / workDocumentTemplates 规范化；envCheckRoles 不再暴露在 UI 中
+      const {
+        pathProfiles: rawPathProfiles = [],
+        activePathProfileId: rawActivePathProfileId,
+        sourceProjectsPath: legacySourceProjectsPath,
+        worktreesPath: legacyWorktreesPath,
+        cicdLinksArr = [],
+        workflowSteps: rawSteps = [],
+        workDocumentTemplates: rawWorkDocumentTemplates = [],
+        taskTitleBadges: rawTaskTitleBadges = {},
+        ...rest
+      } = values;
+      // legacySourceProjectsPath/legacyWorktreesPath 存储旧表单残留顶层路径字段；新版统一由 activePathProfile 同步，避免双源状态。
+      void legacySourceProjectsPath;
+      void legacyWorktreesPath;
       const cicdLinks = Object.fromEntries(
         cicdLinksArr.filter((i) => i?.project?.trim()).map((i) => [i.project.trim(), (i.url || '').trim()])
       );
+      // pathProfiles 存储保存前清洗后的路径组合列表；至少需要一组完整路径。
+      const pathProfiles = normalizePathProfilesForSave(rawPathProfiles);
+      if (pathProfiles.length === 0) {
+        message.error('请至少保留一组完整的路径组合');
+        return;
+      }
+      // activePathProfileId 存储有效的当前路径组合 id；原选择失效时回退第一组。
+      const activePathProfileId = resolveActivePathProfileId(rawActivePathProfileId, pathProfiles);
+      // activePathProfile 存储当前启用的路径组合，用于同步顶层路径字段。
+      const activePathProfile = pathProfiles.find((profile) => profile.id === activePathProfileId) || pathProfiles[0];
       // workflowSteps 规范化：过滤空 label、补全/去重 key
       const workflowSteps = normalizeWorkflowSteps(rawSteps);
       // workDocumentTemplates 规范化：过滤空路径，目录内容置空。
@@ -155,10 +296,25 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       const taskTitleBadges = normalizeTaskTitleBadges(rawTaskTitleBadges);
       // envCheckRoles 为历史兼容字段：新 UI 改为自动识别前后端，不再要求用户维护角色映射
       const envCheckRoles = Array.isArray(config?.envCheckRoles) ? config.envCheckRoles : [];
-      const saved = await api.saveConfig({ ...rest, cicdLinks, workflowSteps, workDocumentTemplates, taskTitleBadges, envCheckRoles });
+      const saved = await api.saveConfig({
+        ...rest,
+        sourceProjectsPath: activePathProfile.sourceProjectsPath,
+        worktreesPath: activePathProfile.worktreesPath,
+        activePathProfileId,
+        pathProfiles,
+        cicdLinks,
+        workflowSteps,
+        workDocumentTemplates,
+        taskTitleBadges,
+        envCheckRoles,
+      });
       message.success('配置已保存');
       onSaved(saved);
       onClose();
+    } catch (e) {
+      // isValidationError 标记 antd 表单校验失败；字段错误已由表单展示，不额外弹全局错误。
+      const isValidationError = Array.isArray(e?.errorFields);
+      if (!isValidationError) message.error(`保存配置失败：${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -222,13 +378,29 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
   };
 
   /**
+   * 打开路径组合管理弹层。
+   */
+  const openPathProfileEditor = () => {
+    setPathProfileEditorOpen(true);
+  };
+
+  /**
+   * 关闭路径组合管理弹层。
+   */
+  const closePathProfileEditor = () => {
+    setPathProfileEditorOpen(false);
+  };
+
+  /**
    * 打开系统目录选择器，并把选中的目录写回指定表单字段。
    * @param {string} fieldName - 要写回的路径字段名
    */
   const handlePickDirectory = async (fieldName) => {
+    // fieldKey 存储当前选择动作的字段标识，用于定位对应按钮 loading。
+    const fieldKey = getFormFieldKey(fieldName);
     // currentPath 存储当前表单字段里的路径，用作系统选择器默认打开目录。
     const currentPath = form.getFieldValue(fieldName);
-    setPickingPathField(fieldName);
+    setPickingPathField(fieldKey);
     try {
       // result 存储主进程目录选择结果；取消选择时不覆盖用户已输入路径。
       const result = await api.selectDirectory({ defaultPath: currentPath });
@@ -242,6 +414,40 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       message.error(`选择目录失败：${e.message}`);
     } finally {
       setPickingPathField('');
+    }
+  };
+
+  /**
+   * 新增路径组合，新组合内容留空并由表单必填校验约束。
+   * @param {(value:object)=>void} add - Form.List 新增函数
+   * @param {number} index - 新组合插入下标
+   */
+  const handleAddPathProfile = (add, index) => {
+    // activePathProfileId 存储当前启用组合 id。
+    const activePathProfileId = form.getFieldValue('activePathProfileId');
+    // draft 存储即将新增到表单里的路径组合草稿。
+    const draft = createPathProfileDraft(index);
+    add(draft);
+    if (!activePathProfileId) form.setFieldValue('activePathProfileId', draft.id);
+  };
+
+  /**
+   * 删除路径组合；若删除的是当前启用组合，则自动切到剩余第一组。
+   * @param {(index:number)=>void} remove - Form.List 删除函数
+   * @param {number} index - 待删除组合下标
+   */
+  const handleRemovePathProfile = (remove, index) => {
+    // profiles 存储删除前的路径组合数组。
+    const profiles = form.getFieldValue('pathProfiles') || [];
+    // activePathProfileId 存储当前启用组合 id。
+    const activePathProfileId = form.getFieldValue('activePathProfileId');
+    // removedProfile 存储即将删除的组合，用于判断是否需要切换当前组合。
+    const removedProfile = profiles[index];
+    // remainingProfiles 存储删除后的剩余组合列表。
+    const remainingProfiles = profiles.filter((_, profileIndex) => profileIndex !== index);
+    remove(index);
+    if (removedProfile?.id === activePathProfileId && remainingProfiles[0]?.id) {
+      form.setFieldValue('activePathProfileId', remainingProfiles[0].id);
     }
   };
 
@@ -285,36 +491,22 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       children: (
         <>
           <Form.Item
-            label="源项目根目录"
-            required
+            label="当前路径组合"
+            name="activePathProfileId"
+            extra={<Text type="secondary" style={{ fontSize: 12 }}>可用于切换工作和个人项目工作路径。</Text>}
+            rules={[{ required: true, message: '请选择当前路径组合' }]}
           >
             <Space.Compact style={{ width: '100%' }}>
-              <Form.Item name="sourceProjectsPath" rules={[{ required: true, message: '请输入源项目根目录' }]} noStyle>
-                <Input style={{ flex: 1, minWidth: 0 }} placeholder="/Users/you/work/projects" />
-              </Form.Item>
-              <Button
-                aria-label="选择源项目根目录"
-                loading={pickingPathField === 'sourceProjectsPath'}
-                onClick={() => handlePickDirectory('sourceProjectsPath')}
-              >
-                选择
-              </Button>
-            </Space.Compact>
-          </Form.Item>
-          <Form.Item
-            label="Worktree 根目录"
-            required
-          >
-            <Space.Compact style={{ width: '100%' }}>
-              <Form.Item name="worktreesPath" rules={[{ required: true, message: '请输入 Worktree 根目录' }]} noStyle>
-                <Input style={{ flex: 1, minWidth: 0 }} placeholder="/Users/you/work/worktrees" />
-              </Form.Item>
-              <Button
-                aria-label="选择 Worktree 根目录"
-                loading={pickingPathField === 'worktreesPath'}
-                onClick={() => handlePickDirectory('worktreesPath')}
-              >
-                选择
+              <Select
+                data-testid="active-path-profile-select"
+                showSearch
+                optionFilterProp="label"
+                options={pathProfileOptions}
+                placeholder="选择当前生效的路径组合"
+                onChange={(value) => form.setFieldValue('activePathProfileId', value)}
+              />
+              <Button icon={<EditOutlined />} onClick={openPathProfileEditor}>
+                管理路径组合
               </Button>
             </Space.Compact>
           </Form.Item>
@@ -370,13 +562,13 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       children: (
         <Form.Item
           label="工作文档模板"
-          tooltip="新建任务和项目 worktree 时按模板创建；删除任务前按同一模板归档。CLAUDE.md 和 AGENTS.md 会固定生成，但不会归档。路径必须是相对路径。"
+          tooltip="新建任务时在任务目录按模板创建；删除任务前按同一模板归档到历史工作目录。CLAUDE.md 和 AGENTS.md 会固定生成，但不会归档。路径必须是相对路径。"
         >
           <Form.List name="workDocumentTemplates">
             {(fields, { add, remove, move }) => (
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  默认工作文档为 docs 目录。CLAUDE.md 和 AGENTS.md 会固定生成，但不会收集到历史记录。
+                  默认工作文档为任务目录下的 docs 目录。项目 worktree 不会按这里的模板创建目录或文件；任务删除时会收集这些工作文档到历史记录。
                 </Text>
                 <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   {fields.map(({ key, name }, index) => (
@@ -879,6 +1071,98 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
     >
       <Form form={form} layout="vertical">
         <Tabs items={tabItems} />
+        <Modal
+          title="管理路径组合"
+          open={pathProfileEditorOpen}
+          zIndex={PATH_PROFILE_EDITOR_Z_INDEX}
+          width={720}
+          onOk={closePathProfileEditor}
+          onCancel={closePathProfileEditor}
+          okText="完成"
+          cancelButtonProps={{ style: { display: 'none' } }}
+          styles={{ body: { maxHeight: '62vh', overflowY: 'auto' } }}
+        >
+          <Form.List name="pathProfiles">
+            {(fields, { add, remove }) => (
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                {fields.map(({ key, name }, index) => (
+                  <div
+                    key={key}
+                    data-testid={`path-profile-row-${index}`}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      boxSizing: 'border-box',
+                      border: `1px solid ${token.colorBorderSecondary}`,
+                      borderRadius: token.borderRadius,
+                      background: token.colorFillQuaternary,
+                    }}
+                  >
+                    <Form.Item name={[name, 'id']} hidden>
+                      <Input />
+                    </Form.Item>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                      <Text strong>路径组合 {index + 1}</Text>
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<MinusCircleOutlined />}
+                        disabled={fields.length <= 1}
+                        aria-label={`删除路径组合 ${index + 1}`}
+                        onClick={() => handleRemovePathProfile(remove, name)}
+                      />
+                    </div>
+                    <Form.Item
+                      label="组合名称"
+                      name={[name, 'name']}
+                      rules={[{ required: true, message: '请输入组合名称' }]}
+                    >
+                      <Input placeholder="例如：工作 / 个人" />
+                    </Form.Item>
+                    <Form.Item label="源项目根目录" required>
+                      <Space.Compact style={{ width: '100%' }}>
+                        <Form.Item name={[name, 'sourceProjectsPath']} rules={[{ required: true, message: '请输入源项目根目录' }]} noStyle>
+                          <Input style={{ flex: 1, minWidth: 0 }} placeholder="/Users/you/work/projects" />
+                        </Form.Item>
+                        <Button
+                          aria-label={`选择源项目根目录 ${index + 1}`}
+                          loading={pickingPathField === getFormFieldKey(['pathProfiles', name, 'sourceProjectsPath'])}
+                          onClick={() => handlePickDirectory(['pathProfiles', name, 'sourceProjectsPath'])}
+                        >
+                          选择
+                        </Button>
+                      </Space.Compact>
+                    </Form.Item>
+                    <Form.Item label="Worktree 根目录" required style={{ marginBottom: 0 }}>
+                      <Space.Compact style={{ width: '100%' }}>
+                        <Form.Item name={[name, 'worktreesPath']} rules={[{ required: true, message: '请输入 Worktree 根目录' }]} noStyle>
+                          <Input style={{ flex: 1, minWidth: 0 }} placeholder="/Users/you/work/worktrees" />
+                        </Form.Item>
+                        <Button
+                          aria-label={`选择 Worktree 根目录 ${index + 1}`}
+                          loading={pickingPathField === getFormFieldKey(['pathProfiles', name, 'worktreesPath'])}
+                          onClick={() => handlePickDirectory(['pathProfiles', name, 'worktreesPath'])}
+                        >
+                          选择
+                        </Button>
+                      </Space.Compact>
+                    </Form.Item>
+                  </div>
+                ))}
+                <Button
+                  block
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  size="small"
+                  onClick={() => handleAddPathProfile(add, fields.length)}
+                >
+                  添加路径组合
+                </Button>
+              </Space>
+            )}
+          </Form.List>
+        </Modal>
       </Form>
     </Drawer>
   );

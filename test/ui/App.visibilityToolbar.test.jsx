@@ -148,6 +148,37 @@ describe('App 显示隐藏项工具栏', () => {
 
   afterEach(() => cleanup());
 
+  it('首次进入项目 Tab 会自动 fetch 一次，后续切回不重复自动 fetch', async () => {
+    localStorage.setItem('vw-active-view', 'worktrees');
+    renderApp();
+
+    await waitFor(() => expect(mockApi.scanWorktreesByTask).toHaveBeenCalledTimes(1));
+    expect(mockApi.scanProjects).not.toHaveBeenCalled();
+
+    // projectTab 存储顶部视图切换中的项目入口。
+    const projectTab = screen.getByText('项目');
+    fireEvent.click(projectTab);
+
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true }));
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
+
+    // worktreeTab 存储顶部视图切换中的 Worktree 入口，用于验证再次切回项目不会触发第二次自动 fetch。
+    const worktreeTab = screen.getByText('Worktree');
+    fireEvent.click(worktreeTab);
+    fireEvent.click(projectTab);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /显示隐藏项目/ })).toBeTruthy());
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('启动时停留在项目 Tab 只触发一次带 fetch 的项目扫描', async () => {
+    localStorage.setItem('vw-active-view', 'projects');
+    renderApp();
+
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true }));
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
+  });
+
   it('Worktree 工具栏显隐入口只展示文案，并与排序控件保持清晰间距', async () => {
     localStorage.setItem('vw-active-view', 'worktrees');
     renderApp();
@@ -157,6 +188,11 @@ describe('App 显示隐藏项工具栏', () => {
     await waitFor(() => expect(showButton.disabled).toBe(false));
     expectNoEyeIcon(showButton);
     expect(showButton.closest('.ant-space').style.columnGap).toBe('12px');
+    // statusSortOption 存储排序切换器里的“状态”选项。
+    const statusSortOption = screen.getByText('状态');
+    // nameSortOption 存储排序切换器里的“名称”选项。
+    const nameSortOption = screen.getByText('名称');
+    expect(statusSortOption.compareDocumentPosition(nameSortOption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(showButton);
 

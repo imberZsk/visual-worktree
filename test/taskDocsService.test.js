@@ -103,42 +103,36 @@ describe('taskDocsService', () => {
     ]);
   });
 
-  it('按模板归档任务目录下每个 worktree 的工作文档', () => {
-    // taskDir 存储一个任务下多个项目 worktree 的父目录。
+  it('按模板只归档任务根目录的工作文档', () => {
+    // taskDir 存储一个任务目录，根目录工作文档会进入历史记录。
     const taskDir = join(ctx.root, 'worktrees', 'TASK-3');
     // archiveRoot 存储所有历史任务工作文档的归档根目录。
     const archiveRoot = join(ctx.root, 'visualWorktree', 'task-docs');
-    // templates 存储要收集的工作文档模板。
+    // templates 存储要从任务根目录收集的工作文档模板。
     const templates = [
       { type: 'directory', path: 'docs', content: '' },
       { type: 'directory', path: 'records', content: '' },
       { type: 'file', path: '.ai/summary.md', content: '' },
     ];
+    mkdirSync(join(taskDir, 'docs'), { recursive: true });
+    mkdirSync(join(taskDir, 'records'), { recursive: true });
+    mkdirSync(join(taskDir, '.ai'), { recursive: true });
     mkdirSync(join(taskDir, 'projA', 'docs'), { recursive: true });
-    mkdirSync(join(taskDir, 'projB', 'docs'), { recursive: true });
-    mkdirSync(join(taskDir, 'projA', 'records'), { recursive: true });
-    mkdirSync(join(taskDir, 'projB', 'records'), { recursive: true });
-    mkdirSync(join(taskDir, 'projA', '.ai'), { recursive: true });
-    mkdirSync(join(taskDir, 'projB', '.ai'), { recursive: true });
-    writeFileSync(join(taskDir, 'projA', 'docs', 'a.md'), 'A');
-    writeFileSync(join(taskDir, 'projB', 'docs', 'b.md'), 'B');
-    writeFileSync(join(taskDir, 'projA', 'records', 'record-a.md'), 'record A');
-    writeFileSync(join(taskDir, 'projB', 'records', 'record-b.md'), 'record B');
-    writeFileSync(join(taskDir, 'projA', '.ai', 'summary.md'), 'summary A');
-    writeFileSync(join(taskDir, 'projB', '.ai', 'summary.md'), 'summary B');
+    writeFileSync(join(taskDir, 'docs', 'task.md'), 'task docs');
+    writeFileSync(join(taskDir, 'records', 'record.md'), 'task record');
+    writeFileSync(join(taskDir, '.ai', 'summary.md'), 'task summary');
+    writeFileSync(join(taskDir, 'projA', 'docs', 'project.md'), 'project docs');
 
-    // result 存储归档结果，包含最终任务工作文档目录和被归档项目数。
+    // result 存储归档结果，包含最终任务工作文档目录；项目级归档数量兼容字段固定为 0。
     const result = archiveTaskDocs(taskDir, 'TASK-3', archiveRoot, templates);
 
     expect(result.success).toBe(true);
     expect(result.docsPath).toBe(join(archiveRoot, 'TASK-3'));
-    expect(result.archivedProjects).toBe(2);
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projA', 'a.md'), 'utf8')).toBe('A');
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projB', 'b.md'), 'utf8')).toBe('B');
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projA', 'records', 'record-a.md'), 'utf8')).toBe('record A');
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projB', 'records', 'record-b.md'), 'utf8')).toBe('record B');
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projA', '.ai', 'summary.md'), 'utf8')).toBe('summary A');
-    expect(readFileSync(join(archiveRoot, 'TASK-3', 'projB', '.ai', 'summary.md'), 'utf8')).toBe('summary B');
+    expect(result.archivedProjects).toBe(0);
+    expect(readFileSync(join(archiveRoot, 'TASK-3', 'task.md'), 'utf8')).toBe('task docs');
+    expect(readFileSync(join(archiveRoot, 'TASK-3', 'records', 'record.md'), 'utf8')).toBe('task record');
+    expect(readFileSync(join(archiveRoot, 'TASK-3', '.ai', 'summary.md'), 'utf8')).toBe('task summary');
+    expect(existsSync(join(archiveRoot, 'TASK-3', 'projA', 'project.md'))).toBe(false);
   });
 
   it('归档任务根目录工作文档到历史任务归档根', () => {
@@ -178,16 +172,16 @@ describe('taskDocsService', () => {
     writeFileSync(join(taskDir, 'projA', 'AGENTS.md'), 'project agents');
     writeFileSync(join(taskDir, 'projA', 'docs', 'note.md'), 'project note');
 
-    // result 存储归档结果，固定说明文件不应出现在历史目录中。
+    // result 存储归档结果，固定说明文件和项目级工作文档都不应出现在历史目录中。
     const result = archiveTaskDocs(taskDir, 'TASK-FIXED-DOCS', archiveRoot);
     // archivedPath 存储当前任务最终归档目录。
     const archivedPath = join(archiveRoot, 'TASK-FIXED-DOCS');
 
     expect(result.success).toBe(true);
     expect(readFileSync(join(archivedPath, 'summary.md'), 'utf8')).toBe('task summary');
-    expect(readFileSync(join(archivedPath, 'projA', 'note.md'), 'utf8')).toBe('project note');
     expect(existsSync(join(archivedPath, 'CLAUDE.md'))).toBe(false);
     expect(existsSync(join(archivedPath, 'AGENTS.md'))).toBe(false);
+    expect(existsSync(join(archivedPath, 'projA', 'note.md'))).toBe(false);
     expect(existsSync(join(archivedPath, 'projA', 'CLAUDE.md'))).toBe(false);
     expect(existsSync(join(archivedPath, 'projA', 'AGENTS.md'))).toBe(false);
   });

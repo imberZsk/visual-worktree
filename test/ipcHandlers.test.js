@@ -178,28 +178,33 @@ describe('registerIpcHandlers', () => {
     expect(existsSync(join(worktreesRoot, 'PROJ-1', 'projA'))).toBe(true);
   });
 
-  it('ARCHIVE_TASK_DOCS 归档任务 docs 并返回归档路径', async () => {
-    // taskDir 存储待删除任务目录，内部按项目保存 docs 工作记录。
+  it('ARCHIVE_TASK_DOCS 归档任务根 docs 并返回归档路径', async () => {
+    // taskDir 存储待删除任务目录，根目录保存任务级 docs 工作记录。
     const taskDir = join(ctx.root, 'worktrees', 'TASK-IPC');
+    mkdirSync(join(taskDir, 'docs'), { recursive: true });
     mkdirSync(join(taskDir, 'projA', 'docs'), { recursive: true });
-    writeFileSync(join(taskDir, 'projA', 'docs', 'note.md'), 'note');
+    writeFileSync(join(taskDir, 'docs', 'note.md'), 'note');
+    writeFileSync(join(taskDir, 'projA', 'docs', 'project.md'), 'project');
 
     // result 存储归档 IPC 返回值。
     const result = await mock.invoke(IPC.ARCHIVE_TASK_DOCS, taskDir, 'TASK-IPC');
 
     expect(result.success).toBe(true);
     expect(result.docsPath).toBe(join(dataDir, 'task-docs', 'TASK-IPC'));
-    expect(result.archivedProjects).toBe(1);
-    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC', 'projA', 'note.md'), 'utf8')).toBe('note');
+    expect(result.archivedProjects).toBe(0);
+    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC', 'note.md'), 'utf8')).toBe('note');
+    expect(existsSync(join(dataDir, 'task-docs', 'TASK-IPC', 'projA', 'project.md'))).toBe(false);
   });
 
   it('ARCHIVE_TASK_DOCS 按配置的工作文档模板归档文件和目录', async () => {
     // taskDir 存储待删除任务目录，内部包含用户自定义工作文档。
     const taskDir = join(ctx.root, 'worktrees', 'TASK-IPC-CUSTOM');
+    mkdirSync(join(taskDir, 'records'), { recursive: true });
+    mkdirSync(join(taskDir, '.ai'), { recursive: true });
     mkdirSync(join(taskDir, 'projA', 'records'), { recursive: true });
-    mkdirSync(join(taskDir, 'projA', '.ai'), { recursive: true });
-    writeFileSync(join(taskDir, 'projA', 'records', 'note.md'), 'note');
-    writeFileSync(join(taskDir, 'projA', '.ai', 'summary.md'), 'summary');
+    writeFileSync(join(taskDir, 'records', 'note.md'), 'note');
+    writeFileSync(join(taskDir, '.ai', 'summary.md'), 'summary');
+    writeFileSync(join(taskDir, 'projA', 'records', 'project.md'), 'project');
     saveConfig({
       workDocumentTemplates: [
         { type: 'directory', path: 'records', content: '' },
@@ -211,9 +216,10 @@ describe('registerIpcHandlers', () => {
     const result = await mock.invoke(IPC.ARCHIVE_TASK_DOCS, taskDir, 'TASK-IPC-CUSTOM');
 
     expect(result.success).toBe(true);
-    expect(result.archivedProjects).toBe(1);
-    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC-CUSTOM', 'projA', 'records', 'note.md'), 'utf8')).toBe('note');
-    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC-CUSTOM', 'projA', '.ai', 'summary.md'), 'utf8')).toBe('summary');
+    expect(result.archivedProjects).toBe(0);
+    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC-CUSTOM', 'records', 'note.md'), 'utf8')).toBe('note');
+    expect(readFileSync(join(dataDir, 'task-docs', 'TASK-IPC-CUSTOM', '.ai', 'summary.md'), 'utf8')).toBe('summary');
+    expect(existsSync(join(dataDir, 'task-docs', 'TASK-IPC-CUSTOM', 'projA', 'records', 'project.md'))).toBe(false);
   });
 
   it('RUN_WORKFLOW_STEP 流式执行真实命令并通过 STEP_OUTPUT 推送输出', async () => {

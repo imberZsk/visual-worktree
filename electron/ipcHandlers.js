@@ -434,10 +434,9 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   ipcMain.handle(IPC.ADD_WORKTREE, async (_e, projectPath, targetPath, branch, opts) => {
     // cfg 当前应用配置，用于取主分支候选名作为新建分支的起点
     const cfg = loadConfig(configBaseDir);
-    // 注入 mainBranches：新建分支时以 master/main 为起点，避免基于源仓库当前 HEAD（可能停在 test）
+    // 注入 mainBranches：新建分支时以 master/main 为起点；工作文档模板只在任务根目录生效，不注入项目 worktree。
     return gitService.addWorktree(projectPath, targetPath, branch, {
       mainBranches: cfg.mainBranches,
-      workDocumentTemplates: cfg.workDocumentTemplates,
       ...opts,
     });
   });
