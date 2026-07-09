@@ -66,7 +66,7 @@ pnpm run dist:win   # Windows：x64 NSIS 安装包 + 便携版（须在 Windows 
 
 构建产物输出到 `release/`。
 
-**macOS**：生成 arm64 DMG，`package.json` 中 `build.mac.identity` 为 `null`，表示应用未进行 Apple 开发者签名。首次打开未签名应用时，macOS 可能会提示安全拦截，可在 Finder 中右键应用选择“打开”，或自行签名/公证后分发。如需支持 Intel Mac 或 universal 包，可调整 `build.mac.target[].arch` 和 `dist` 脚本。
+**macOS**：生成 arm64 DMG，`package.json` 中 `build.mac.identity` 为 `null`，表示应用未进行 Apple 开发者签名。首次打开未签名应用时，macOS 可能会提示安全拦截，可在 Finder 中右键应用选择“打开”；如果仍提示“已损坏”，可执行 `sudo xattr -rd com.apple.quarantine "/Applications/Visual Worktree.app"` 移除隔离标记。如需支持 Intel Mac 或 universal 包，可调整 `build.mac.target[].arch` 和 `dist` 脚本。
 
 **Windows**：生成 x64 的 NSIS 安装包（`VisualWorktree-<版本>-Setup.exe`，支持自定义安装目录）与免安装便携版（`VisualWorktree-<版本>-portable.exe`）。electron-builder 需在 Windows 上原生打包 Windows 目标，跨平台从 macOS 直接打 Windows 包并不可靠；推荐用仓库内置的 GitHub Actions（`.github/workflows/ci.yml` 的 `build-win` job，在 `windows-latest` runner 上打包并上传产物）在 CI 里出包。Windows 包同样未做代码签名，首次运行可能触发 SmartScreen 提示，可选择“仍要运行”。
 

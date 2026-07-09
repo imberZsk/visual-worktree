@@ -138,7 +138,7 @@ jobs:
             dmg="$(basename "${dmg_files[0]}")"
             notes+=$'\n'"### macOS"$'\n'
             notes+="- \`${dmg}\`"$'\n'
-            notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」，或执行 \`xattr -cr \"/Applications/Visual Worktree.app\"\`。"$'\n'
+            notes+="- 安装包未签名，首次打开会被 Gatekeeper 拦截：请「右键 → 打开」；如果仍提示“已损坏”，可执行 \`sudo xattr -rd com.apple.quarantine \"/Applications/Visual Worktree.app\"\`。"$'\n'
           fi
           # Windows 安装版 + 便携版：分别列出实际文件名
           # setup_files 存储 Windows 安装版 exe 文件列表。

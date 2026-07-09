@@ -115,7 +115,7 @@ jobs:
       - name: Build macOS package
         run: pnpm run dist
         env:
-          # 无签名证书时关闭自动发现，避免联网拖慢 CI（DMG 未签名，首次打开需右键或 xattr -cr）
+          # 无签名证书时关闭自动发现，避免联网拖慢 CI（DMG 未签名，首次打开需右键，必要时移除 quarantine）
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       # 上传打包产物：DMG 安装镜像，供下载到 macOS 机器验收
