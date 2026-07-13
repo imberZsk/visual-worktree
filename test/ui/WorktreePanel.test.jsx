@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 import WorktreePanel from '../../src/ui/components/WorktreePanel.jsx';
 import { TASK_LINK_NAME_PLACEHOLDER, TASK_LINK_PLACEHOLDER } from '../../src/ui/components/TaskLinksEditor.jsx';
 
@@ -51,6 +51,8 @@ function baseProps(overrides = {}) {
       'TASK-A': { sessionCount: 0, usage: {}, cost: {} },
       'TASK-B': { sessionCount: 0, usage: {}, cost: {} },
     },
+    // 大多数 WorktreePanel 用例不验证 Claude 请求，默认关闭徽标以避免动态任务名触发无关异步加载。
+    taskTitleBadges: { claudeUsage: false },
     ...overrides,
   };
 }
@@ -383,6 +385,7 @@ describe('WorktreePanel 任务链接', () => {
       envHealthMap,
       claudeUsageMap,
       onEnvCheck: noopEnvCheck,
+      taskTitleBadges: { claudeUsage: true },
     })} />);
 
     // header 存储 TASK-A 的标题区域，用于限定顺序断言范围。
@@ -840,23 +843,25 @@ describe('WorktreePanel 任务状态标记', () => {
     expect(screen.getAllByText('未开始').length).toBe(1);
   });
 
-  it('点击状态标签选择状态会回调 onTaskStatusChange(任务名, 状态key)', () => {
+  it('点击状态标签选择状态会回调 onTaskStatusChange(任务名, 状态key)', async () => {
     // onTaskStatusChange 间谍，捕获下拉选择
     const onTaskStatusChange = vi.fn();
     render(<WorktreePanel {...baseProps({ onTaskStatusChange })} />);
     // 点击 TASK-A 的默认「未开始」标签展开下拉
     fireEvent.click(screen.getAllByText('未开始')[0]);
+    await waitFor(() => expect(screen.getByText('待发布')).toBeTruthy());
     // 下拉菜单项「待发布」出现后点击
     fireEvent.click(screen.getByText('待发布'));
-    expect(onTaskStatusChange).toHaveBeenCalledWith('TASK-A', 'pending-release');
+    await waitFor(() => expect(onTaskStatusChange).toHaveBeenCalledWith('TASK-A', 'pending-release'));
   });
 
-  it('点击状态标签不应触发面板展开/折叠（onActiveKeysChange 不被调用）', () => {
+  it('点击状态标签不应触发面板展开/折叠（onActiveKeysChange 不被调用）', async () => {
     // onActiveKeysChange 间谍：点状态标签时若冒泡到 Collapse 头部会被调用，断言其未触发
     const onActiveKeysChange = vi.fn();
     render(<WorktreePanel {...baseProps({ activeKeys: ['TASK-A'], onActiveKeysChange })} />);
     // 点击 TASK-A 的状态标签（默认「未开始」），仅应展开下拉、不应折叠面板
     fireEvent.click(screen.getAllByText('未开始')[0]);
+    await waitFor(() => expect(screen.getByText('待发布')).toBeTruthy());
     expect(onActiveKeysChange).not.toHaveBeenCalled();
   });
 });

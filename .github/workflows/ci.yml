@@ -2,128 +2,81 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
-  # 允许在 GitHub 页面手动触发（用于按需打 Windows 包）
+  # 保留手动触发入口，便于按需重新验证并下载双平台安装包。
   workflow_dispatch:
 
+# 同一 PR 推送新提交时取消旧运行，避免过期 commit 继续占用 macOS/Windows runner。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # 测试 + 构建 UI：在 macOS 与 Windows 双平台跑，确保跨平台改动两端都通过
-  test:
-    name: Test and build (${{ matrix.os }})
+  # 每个平台只初始化一次环境：测试通过后立即原生打包，避免拆成四个 job 后重复 checkout、安装依赖和构建 UI。
+  verify:
+    name: Test and package (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
-      # 某一平台失败不取消另一平台，便于同时看到两端结果
+      # 某一平台失败不取消另一平台，便于一次看到完整的跨平台结果。
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - label: macOS
+            os: macos-latest
+            package_command: pnpm run dist
+            artifact_name: macos-package
+            artifact_path: release/*.dmg
+            electron_cache_path: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
+          - label: Windows
+            os: windows-latest
+            package_command: pnpm run dist:win
+            artifact_name: windows-package
+            artifact_path: release/*.exe
+            electron_cache_path: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
 
+      # setup-node 已缓存 pnpm store；这里额外缓存 Electron 与 electron-builder 下载的运行时/打包工具。
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.electron_cache_path }}
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Run tests
         run: pnpm test
 
-      - name: Build UI
-        run: pnpm run build:ui
-
-  # 打包 Windows 安装包/便携版：仅在 Windows runner 上原生打包（无需 wine），产物上传为 artifact 供下载验收
-  build-win:
-    name: Build Windows package
-    runs-on: windows-latest
-    # 测试全绿后再打包，避免为坏代码浪费打包时间
-    needs: test
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # 用 electron-builder 在 Windows 上原生打包（nsis 安装包 + portable 便携版，x64）
-      - name: Build Windows package
-        run: pnpm run dist:win
+      # dist/dist:win 内部只执行一次 build:ui，然后调用对应平台 electron-builder。
+      - name: Build package
+        run: ${{ matrix.package_command }}
         env:
-          # electron-builder 打包时若无签名证书会尝试联网，关闭以加速 CI
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 上传打包产物：安装包与便携版 exe，供下载到 Windows 机器验收
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload package
+        uses: actions/upload-artifact@v7
         with:
-          name: windows-package
-          path: |
-            release/*.exe
-          if-no-files-found: error
-          retention-days: 14
-
-  # 打包 macOS DMG：在 macOS runner 上原生打包（arm64），产物上传为 artifact 供下载验收。
-  # 与 build-win 对称，确保 mac 打包链路（icns 图标、未签名 DMG）不会在改动中悄悄坏掉。
-  build-mac:
-    name: Build macOS package
-    runs-on: macos-latest
-    # 测试全绿后再打包，避免为坏代码浪费打包时间
-    needs: test
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # 用 electron-builder 在 macOS 上原生打包（DMG，arm64）；dist 脚本已带 --publish never，不触发自动发布
-      - name: Build macOS package
-        run: pnpm run dist
-        env:
-          # 无签名证书时关闭自动发现，避免联网拖慢 CI（DMG 未签名，首次打开需右键，必要时移除 quarantine）
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      # 上传打包产物：DMG 安装镜像，供下载到 macOS 机器验收
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-package
-          path: |
-            release/*.dmg
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: error
           retention-days: 14

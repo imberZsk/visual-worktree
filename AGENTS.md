@@ -95,6 +95,8 @@ src/ui/            React 渲染进程
 - 项目为 ESM（`"type": "module"`），唯一例外是 `preload.cjs`（Electron preload 要求 CommonJS）。
 - 所有交流与文档用中文。代码注释规则见全局 AGENTS.md：函数/方法、变量必须加注释；复杂逻辑注释说明 WHY。现有代码注释密度很高，新代码须匹配这一风格。
 - 小功能不要使用 worktree，直接当前分支开发，如果有必要再使用，使用了后需要合并到主分支并且删除worktree
+- 用户明确要求使用 worktree 时，从创建分支开始就在目标 worktree 内完成全部代码、`CHANGELOG.md` 和 `package.json` 版本修改；不得先在主工作区修改后再迁移，也不得把主工作区已有的未提交改动带入或作为中转。合并后若主工作区存在用户改动，更新 main 时必须原样保留。
+- 项目级 `.npmrc` 只允许公开、无凭据的 registry/Electron 镜像配置；私有 registry、认证 token 和内网地址必须放用户级 `~/.npmrc`，不得提交到仓库。
 - 容易阻塞的任务需要异步处理，需要增加loading，统一loading
 
 

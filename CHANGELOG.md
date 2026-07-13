@@ -8,6 +8,7 @@
 
 ### 新增
 
+- **CI 与测试日志优化**：GitHub Actions 从四个重复初始化的 job 合并为 macOS/Windows 两个「测试并打包」job，增加同 PR 旧运行自动取消、Electron 下载缓存并移除合并后 `main` push 的重复整套 CI；升级官方 actions 的 Node 运行时版本，并通过公开 npmmirror 加速 npm、Electron 与 electron-builder 二进制下载。修复 UI 测试中的 React `act(...)`、异步卸载更新和 antd `Empty` 废弃 API 警告，并增加测试期 warning 防回归检查。
 - **项目同步更新**：项目 Tab 在「拉取」后新增「同步更新」按钮，二次确认后以通用提交信息 `feat: 优化` 提交当前项目全部 Git 变更并推送当前分支；工作区无新变更时跳过空提交，仍会推送已有本地提交。
 - **Windows 平台支持**：应用现可在 Windows 上运行与打包。
   - 打开终端支持 Windows Terminal(`wt`)/PowerShell/cmd，按「主选 → 兜底」链依次尝试，未装某个终端时自动降级；设置页的「终端应用」下拉按运行平台展示对应选项。

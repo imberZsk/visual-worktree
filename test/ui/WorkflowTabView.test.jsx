@@ -12,6 +12,20 @@ function renderWithApp(ui) {
   return render(<AntApp>{ui}</AntApp>);
 }
 
+/**
+ * 渲染工作流视图并等待初始化请求完成，避免用例结束时仍有异步状态更新。
+ * @returns {Promise<ReturnType<typeof render>>} Testing Library 渲染结果
+ */
+async function renderLoadedView() {
+  // renderResult 存储 Testing Library 渲染结果，供需要访问 container 的后续用例扩展使用。
+  const renderResult = renderWithApp(<WorkflowTabView />);
+  await waitFor(() => {
+    expect(screen.getByText('快速实现')).toBeTruthy();
+    expect(screen.getByText('完整流程')).toBeTruthy();
+  });
+  return renderResult;
+}
+
 // mockWorkflows 两条工作流定义，模拟 api.loadIdeaWorkflows 返回
 const mockWorkflows = [
   { id: 'wf-1', name: '快速实现', description: '快速落地', steps: [{ key: 's1', label: '建分支', command: 'git checkout -b x' }] },
@@ -34,21 +48,18 @@ afterEach(() => { cleanup(); delete window.api; });
 
 describe('WorkflowTabView', () => {
   it('渲染时显示「新建工作流」按钮', async () => {
-    renderWithApp(<WorkflowTabView />);
+    await renderLoadedView();
     expect(screen.getByText(/新建工作流/)).toBeTruthy();
   });
 
   it('加载并渲染工作流列表（2 条）', async () => {
-    renderWithApp(<WorkflowTabView />);
-    // 等待异步加载完成后两条工作流名出现
-    await waitFor(() => {
-      expect(screen.getByText('快速实现')).toBeTruthy();
-      expect(screen.getByText('完整流程')).toBeTruthy();
-    });
+    await renderLoadedView();
+    expect(screen.getByText('快速实现')).toBeTruthy();
+    expect(screen.getByText('完整流程')).toBeTruthy();
   });
 
   it('点「新建工作流」弹出编辑弹窗', async () => {
-    renderWithApp(<WorkflowTabView />);
+    await renderLoadedView();
     // 按钮文案含「新建工作流」，点击后出现弹窗标题「新建工作流」与名称输入
     fireEvent.click(screen.getByText(/新建工作流/));
     await waitFor(() => {
@@ -57,8 +68,7 @@ describe('WorkflowTabView', () => {
   });
 
   it('选中工作流后右侧出现运行按钮', async () => {
-    renderWithApp(<WorkflowTabView />);
-    await waitFor(() => expect(screen.getByText('快速实现')).toBeTruthy());
+    await renderLoadedView();
     // 点击列表中的工作流名选中它
     fireEvent.click(screen.getByText('快速实现'));
     // 选中后运行按钮文案含工作流名
@@ -68,7 +78,7 @@ describe('WorkflowTabView', () => {
   });
 
   it('idea 输入框可输入文字', async () => {
-    renderWithApp(<WorkflowTabView />);
+    await renderLoadedView();
     // textarea 通过 placeholder 定位
     const textarea = screen.getByPlaceholderText(/输入你的想法/);
     fireEvent.change(textarea, { target: { value: '加个搜索框' } });

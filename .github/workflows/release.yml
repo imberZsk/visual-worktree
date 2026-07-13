@@ -27,24 +27,39 @@ jobs:
           # Windows：nsis 安装包 + portable 便携版，x64
           - os: windows-latest
             build_args: --win --x64
+            electron_cache_path: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
           # macOS：DMG，arm64
           - os: macos-latest
             build_args: --mac --arm64
+            electron_cache_path: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
+
+      # 缓存 Electron 运行时与 electron-builder 工具，减少每次正式发布重复下载大文件。
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.electron_cache_path }}
+          key: release-electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            release-electron-${{ runner.os }}-
 
       # 让安装包版本跟触发发布的 tag 保持一致，而不依赖仓库里的 package.json 是否提前 bump。
       # WHY 自动打 tag 后，源码中的 package.json 可能仍停留在上一个发布版本；这里在 CI 工作区临时同步，
@@ -74,7 +89,7 @@ jobs:
           NODE
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Build UI
         run: pnpm run build:ui
@@ -89,7 +104,7 @@ jobs:
 
       # 上传本平台面向用户下载的安装包，供 publish job 汇总到 GitHub Release Assets。
       - name: Upload platform artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
           path: |
@@ -109,7 +124,7 @@ jobs:
     steps:
       # 下载全部平台 artifact 到 artifacts/ 下（每个 artifact 一个子目录）
       - name: Download all platform artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 

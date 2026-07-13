@@ -28,7 +28,7 @@ export default defineConfig({
           environment: 'happy-dom',
           globals: true,
           include: ['test/ui/**/*.{test,spec}.{js,jsx,mjs}'],
-          setupFiles: [],
+          setupFiles: ['test/ui/setup.js'],
           testTimeout: 20000,
         },
       },
