@@ -46,6 +46,11 @@ function baseProps(overrides = {}) {
     onRemove: noop,
     onRemoveTask: noop,
     onPrune: noop,
+    // 默认提供零会话预加载数据，避免与 Claude 请求无关的同步用例在结束后残留异步状态更新。
+    claudeUsageMap: {
+      'TASK-A': { sessionCount: 0, usage: {}, cost: {} },
+      'TASK-B': { sessionCount: 0, usage: {}, cost: {} },
+    },
     ...overrides,
   };
 }

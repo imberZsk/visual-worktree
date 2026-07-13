@@ -33,6 +33,7 @@ function baseProps(overrides = {}) {
     onDetail: noop,
     onCheckoutMain: noop,
     onPull: noop,
+    onSyncUpdates: noop,
     onOpenFinder: noop,
     onOpenVscode: noop,
     onOpenTerminal: noop,
@@ -42,6 +43,23 @@ function baseProps(overrides = {}) {
 }
 
 describe('ProjectTable visibility actions', () => {
+  it('在拉取按钮后展示同步更新按钮并回调当前项目', () => {
+    // onSyncUpdates 存储同步更新点击回调，用于验证按钮接线与项目参数。
+    const onSyncUpdates = vi.fn();
+    render(<ProjectTable {...baseProps({
+      data: [{ ...makeProjects()[0], canPull: true }],
+      onSyncUpdates,
+    })} />);
+
+    // syncButton 存储右侧固定操作列内的同步更新按钮；antd 固定列会生成表格行副本，因此由按钮反查目标行。
+    const syncButton = screen.getByRole('button', { name: '同步更新' });
+    // pullButton 存储拉取按钮，用 DOM 顺序校验同步更新紧随其后；固定列副本不会影响两个按钮的相对位置。
+    const pullButton = screen.getByRole('button', { name: /拉\s*取/ });
+    expect(pullButton.compareDocumentPosition(syncButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(syncButton);
+    expect(onSyncUpdates).toHaveBeenCalledWith(expect.objectContaining({ path: '/repo/alpha' }));
+  });
+
   it('渲染隐藏和置顶项目按钮，点击时回调项目路径与目标状态', () => {
     // onProjectHiddenChange / onProjectPinnedChange 间谍，验证表格行按钮接线。
     const onProjectHiddenChange = vi.fn();

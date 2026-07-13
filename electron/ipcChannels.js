@@ -9,6 +9,8 @@ export const IPC = {
   CHECKOUT_BRANCH: 'checkout-branch',
   // 拉取更新
   PULL_UPDATES: 'pull-updates',
+  // 提交全部变更并推送当前分支
+  SYNC_UPDATES: 'sync-updates',
   // 批量操作
   BATCH_OPERATE: 'batch-operate',
   // 批量进度推送（主进程 → 渲染进程）

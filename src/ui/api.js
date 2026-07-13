@@ -19,6 +19,7 @@ const browserFallback = {
   getProjectStatus: async () => null,
   checkoutBranch: async () => ({ success: false, error: '非 Electron 环境' }),
   pullUpdates: async () => ({ success: false, error: '非 Electron 环境' }),
+  syncUpdates: async () => ({ success: false, error: '非 Electron 环境' }),
   batchOperate: async () => [],
   getWorktrees: async () => [],
   scanWorktreesByTask: async () => [],

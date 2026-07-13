@@ -18,6 +18,7 @@ import SingleLineText from './SingleLineText.jsx';
  * @param {(project:object)=>void} props.onDetail - 查看详情回调
  * @param {(project:object)=>void} props.onCheckoutMain - 切换主分支回调
  * @param {(project:object)=>void} props.onPull - 拉取更新回调
+ * @param {(project:object)=>void} props.onSyncUpdates - 提交并推送更新回调
  * @param {(project:object)=>void} props.onOpenFinder - 打开 Finder 回调
  * @param {(project:object)=>void} props.onOpenVscode - 打开 VSCode 回调
  * @param {(url:string)=>void} props.onOpenUrl - 打开外部链接回调
@@ -26,7 +27,7 @@ import SingleLineText from './SingleLineText.jsx';
  * @param {string[]} [props.hiddenProjectKeys] - 已隐藏项目路径列表
  * @param {string[]} [props.pinnedProjectKeys] - 已置顶项目路径列表
  * @param {string[]} [props.hidingProjectKeys] - 正在播放隐藏退出动画的项目路径列表
- * @param {Set<string>} [props.loadingPaths] - 正在执行操作（切分支/拉取）的项目路径集合，用于按钮 loading 反馈
+ * @param {Set<string>} [props.loadingPaths] - 正在执行操作（切分支/拉取/同步更新）的项目路径集合，用于按钮 loading 反馈
  * @param {(projectPath:string, hidden:boolean)=>void} [props.onProjectHiddenChange] - 隐藏/恢复项目回调
  * @param {(projectPath:string, pinned:boolean)=>void} [props.onProjectPinnedChange] - 置顶/取消置顶项目回调
  * @returns {JSX.Element} 表格元素
@@ -39,6 +40,7 @@ export default function ProjectTable({
   onDetail,
   onCheckoutMain,
   onPull,
+  onSyncUpdates,
   onOpenFinder,
   onOpenVscode,
   onOpenUrl,
@@ -165,6 +167,17 @@ export default function ProjectTable({
               onClick={() => onPull(record)}
             >
               拉取
+            </Button>
+          )}
+          {/* 同步更新会提交全部工作区变更并推送，因此仅对 Git 项目展示。 */}
+          {record.isGitRepo && (
+            <Button
+              size="small"
+              loading={loadingPaths.has(record.path)}
+              disabled={loadingPaths.has(record.path)}
+              onClick={() => onSyncUpdates(record)}
+            >
+              同步更新
             </Button>
           )}
           {/* Finder / VSCode / 终端 / 复制路径 直接展示为图标按钮，无需收入下拉 */}
