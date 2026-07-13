@@ -679,7 +679,7 @@ export default function App() {
   const [envCheckTaskName, setEnvCheckTaskName] = useState(null);
   // envCheckTaskDir 当前检查的任务目录
   const [envCheckTaskDir, setEnvCheckTaskDir] = useState(null);
-  // projectLoadingPaths 存储正在执行「切主分支」或「拉取」操作的项目路径集合，用于按钮 loading 反馈。
+  // projectLoadingPaths 存储正在执行「切主分支」「拉取」或「同步更新」操作的项目路径集合，用于按钮 loading 反馈。
   const [projectLoadingPaths, setProjectLoadingPaths] = useState(new Set());
   // lastStepOutputs 保存每个步骤最近一次的执行输出，key 为 stepRunKey(任务名,步骤key)。
   // WHY 用 ref：关闭 Modal 后输出不丢，用户可点步骤旁「查看」重新打开；ref 不触发重渲染，
@@ -932,6 +932,41 @@ export default function App() {
         return next;
       });
     }
+  };
+
+  /**
+   * 二次确认后提交项目全部变更，并推送当前分支到远程。
+   * @param {object} project - 待同步的项目
+   */
+  const handleSyncUpdates = (project) => {
+    modal.confirm(withConfirmDefaults({
+      title: `同步更新 ${project.name}`,
+      content: '此操作会提交当前项目的全部 Git 变更记录，并推送当前分支到远程。提交信息为「feat: 优化」，是否继续？',
+      okText: '提交并推送',
+      onOk: async () => {
+        if (projectLoadingPaths.has(project.path)) return;
+        setProjectLoadingPaths((prev) => new Set([...prev, project.path]));
+        try {
+          // commitMessage 存储同步更新统一使用的通用提交信息。
+          const commitMessage = 'feat: 优化';
+          // res 存储主进程返回的提交与推送结果，committed 用于区分是否产生新提交。
+          const res = await api.syncUpdates(project.path, commitMessage);
+          if (res.success) {
+            message.success(res.committed ? `${project.name} 已提交并推送` : `${project.name} 无新变更，已有提交已推送`);
+            scan();
+          } else {
+            message.error(`同步更新失败：${res.error}`);
+          }
+        } finally {
+          setProjectLoadingPaths((prev) => {
+            // next 存储移除当前项目后的 loading 路径集合。
+            const next = new Set(prev);
+            next.delete(project.path);
+            return next;
+          });
+        }
+      },
+    }));
   };
 
   /**
@@ -2035,6 +2070,7 @@ export default function App() {
           onDetail={setDetailProject}
           onCheckoutMain={handleCheckoutMain}
           onPull={handlePull}
+          onSyncUpdates={handleSyncUpdates}
           onOpenFinder={handleOpenFinder}
           onOpenVscode={handleOpenVscode}
           onOpenUrl={handleOpenUrl}

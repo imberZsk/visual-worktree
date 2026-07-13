@@ -10,6 +10,7 @@ const IPC = {
   GET_PROJECT_STATUS: 'get-project-status',
   CHECKOUT_BRANCH: 'checkout-branch',
   PULL_UPDATES: 'pull-updates',
+  SYNC_UPDATES: 'sync-updates',
   BATCH_OPERATE: 'batch-operate',
   BATCH_PROGRESS: 'batch-progress',
   GET_WORKTREES: 'get-worktrees',
@@ -74,6 +75,8 @@ contextBridge.exposeInMainWorld('api', {
   checkoutBranch: (path, branch) => ipcRenderer.invoke(IPC.CHECKOUT_BRANCH, path, branch),
   // 拉取更新
   pullUpdates: (path) => ipcRenderer.invoke(IPC.PULL_UPDATES, path),
+  // 提交全部变更并推送当前分支
+  syncUpdates: (path, message) => ipcRenderer.invoke(IPC.SYNC_UPDATES, path, message),
   // 批量操作
   batchOperate: (paths, op, args) => ipcRenderer.invoke(IPC.BATCH_OPERATE, paths, op, args),
   // 获取 worktree 列表

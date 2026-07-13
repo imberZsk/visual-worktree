@@ -996,6 +996,38 @@ export async function pullUpdates(projectPath) {
 }
 
 /**
+ * 提交当前项目的全部工作区变更并推送当前分支到远程。
+ * @param {string} projectPath - 项目路径
+ * @param {string} [message] - Git 提交信息
+ * @returns {Promise<{success:boolean, committed?:boolean, error?:string}>} 操作结果；committed 表示本次是否新建提交
+ */
+export async function syncUpdates(projectPath, message = 'feat: 优化') {
+  try {
+    // git 存储当前项目的 simple-git 客户端，用于串行执行状态检查、提交和推送。
+    const git = simpleGit(projectPath);
+    // status 存储提交前的工作区状态；干净工作区无需创建空提交，但仍要推送已有本地提交。
+    const status = await git.status();
+    // committed 标记本次同步是否创建了新提交，供界面展示准确结果。
+    const committed = !status.isClean();
+    if (committed) {
+      await git.add(['-A']);
+      await git.commit(message);
+    }
+    // currentBranch 存储当前分支名；无 upstream 时需要用它首次建立 origin 跟踪关系。
+    const currentBranch = status.current;
+    if (!status.tracking && currentBranch) {
+      // 新功能分支通常还未设置 upstream，首次同步需建立跟踪关系，否则普通 git push 会直接失败。
+      await git.push(['--set-upstream', 'origin', currentBranch]);
+    } else {
+      await git.push();
+    }
+    return { success: true, committed };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
  * 暂存当前变更（git stash），用于强制切换前保护数据
  * @param {string} projectPath - 项目路径
  * @returns {Promise<{success:boolean, error?:string}>} 操作结果

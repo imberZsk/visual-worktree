@@ -379,6 +379,11 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     return gitService.pullUpdates(projectPath);
   });
 
+  // 同步更新：提交当前项目全部变更，再推送当前分支。
+  ipcMain.handle(IPC.SYNC_UPDATES, async (_e, projectPath, message) => {
+    return gitService.syncUpdates(projectPath, message);
+  });
+
   // 打开系统目录选择器：设置页路径输入使用，取消选择不视为错误。
   ipcMain.handle(IPC.SELECT_DIRECTORY, async (_e, opts = {}) => {
     try {
