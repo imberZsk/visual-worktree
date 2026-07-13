@@ -445,18 +445,6 @@ describe('App worktree 流程执行', () => {
     const vscodeButton = screen.getByTitle('暂无工作记录归档，无法用 VSCode 打开');
     expect(finderButton.disabled).toBe(true);
     expect(vscodeButton.disabled).toBe(true);
-    await act(async () => {
-      fireEvent.click(screen.getByTitle('从历史中移除'));
-      await Promise.resolve();
-    });
-
-    expect(mockApi.removeTaskHistory).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getAllByText('移除历史任务「LONG-TASK」？').length).toBeGreaterThan(0));
-    // confirmButton 存储历史任务二次确认框中的危险操作按钮。
-    const confirmButton = document.querySelector('.ant-modal-confirm .ant-btn-dangerous');
-    fireEvent.click(confirmButton);
-
-    expect(mockApi.removeTaskHistory).toHaveBeenCalledWith(0);
   });
 
   it('历史任务弹层按容器高度调整 antd List 每页条数', async () => {

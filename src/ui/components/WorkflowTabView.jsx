@@ -64,14 +64,19 @@ export default function WorkflowTabView() {
 
   // 初始化：加载工作流定义和运行历史
   useEffect(() => {
+    // cancelled 标记组件是否已卸载，避免异步加载完成后继续更新已销毁组件。
+    let cancelled = false;
+    // api 存储 Electron preload 暴露的持久化接口。
     const api = window.api;
     Promise.all([
       api?.loadIdeaWorkflows?.() ?? Promise.resolve([]),
       api?.loadIdeaRuns?.() ?? Promise.resolve([]),
     ]).then(([defs, runs]) => {
+      if (cancelled) return;
       setWorkflows(Array.isArray(defs) ? defs : []);
       setHistoryRuns(Array.isArray(runs) ? runs.slice(0, 10) : []);
     });
+    return () => { cancelled = true; };
   }, []);
 
   // selectedWorkflow 当前选中的工作流定义对象
@@ -283,7 +288,7 @@ export default function WorkflowTabView() {
           </Button>
         </div>
         {workflows.length === 0 ? (
-          <Empty description="暂无工作流，点右上角新建" imageStyle={{ height: 40 }} />
+          <Empty description="暂无工作流，点右上角新建" styles={{ image: { height: 40 } }} />
         ) : (
           <List
             dataSource={workflows}
@@ -393,7 +398,7 @@ export default function WorkflowTabView() {
           key: 'history',
           label: `运行历史（最近 ${historyRuns.length} 条）`,
           children: historyRuns.length === 0 ? (
-            <Empty description="暂无运行记录" imageStyle={{ height: 32 }} />
+            <Empty description="暂无运行记录" styles={{ image: { height: 32 } }} />
           ) : (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               {historyRuns.map((run) => (

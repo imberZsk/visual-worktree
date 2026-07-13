@@ -20,7 +20,7 @@ builder-effective-config.yaml
 
 # 本地环境与日志
 .DS_Store
-.npmrc
+# 项目提交公开、无凭据的 npmmirror 配置；个人私有 registry/token 必须放用户级 ~/.npmrc。
 .env
 .env.*
 !.env.example
