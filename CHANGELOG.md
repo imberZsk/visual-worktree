@@ -8,6 +8,7 @@
 
 ### 新增
 
+- **代码质量工具链**：接入 ESLint、Prettier、Husky、Commitlint 与 lint-staged，并在 CI 中执行完整代码检查。
 - **CI 与测试日志优化**：GitHub Actions 从四个重复初始化的 job 合并为 macOS/Windows 两个「测试并打包」job，增加同 PR 旧运行自动取消、Electron 下载缓存并移除合并后 `main` push 的重复整套 CI；升级官方 actions 的 Node 运行时版本，并通过公开 npmmirror 加速 npm、Electron 与 electron-builder 二进制下载。修复 UI 测试中的 React `act(...)`、异步卸载更新和 antd `Empty` 废弃 API 警告，并增加测试期 warning 防回归检查。
 - **项目同步更新**：项目 Tab 在「拉取」后新增「同步更新」按钮，二次确认后以通用提交信息 `feat: 优化` 提交当前项目全部 Git 变更并推送当前分支；工作区无新变更时跳过空提交，仍会推送已有本地提交。
 - **Windows 平台支持**：应用现可在 Windows 上运行与打包。
@@ -50,8 +51,6 @@
 - **「切主分支」「拉取」按钮 loading**：`ProjectTable` 新增 `loadingPaths: Set<string>` prop，操作期间按钮进入 loading+disabled 状态，防止重复点击；`App.jsx` 用 `projectLoadingPaths` state 管理每行的进行中状态
 - **设置保存按钮 loading**：`SettingsModal` 保存按钮新增 `loading`/`disabled` 状态（`saving` state + try/finally 保证释放），防止重复提交
 
-
-
 ### 修复
 
 - **Claude Code 用量统计**：修复四层 bug，现在能正确统计所有任务（包括在源项目或多 agent 工作流里开发的任务）的 token 消耗与费用
@@ -73,6 +72,7 @@
 ### 新增
 
 **项目视图**
+
 - 项目扫描：扫描源目录下所有 Git 仓库，列出当前分支和状态
 - 状态标签：区分主分支 / 非主分支 / 有变更 / 领先远程 / 落后远程
 - 筛选搜索：按全部 / 非主分支 / 有变更 / 可拉取筛选，按名称搜索
@@ -81,6 +81,7 @@
 - 项目详情：查看提交历史、变更文件列表、worktree 列表
 
 **Worktree 视图（按任务组织）**
+
 - 按任务分组：聚合展示一个任务涉及的所有项目 worktree 及各自分支、变更、领先/落后状态
 - 按任务批量创建：填任务名 + 勾选多项目 + 分支名，一次性创建多个 worktree
 - 打开：单个 worktree 或整个任务目录用 Finder / VSCode / 终端打开
@@ -90,6 +91,7 @@
 - 智能清理建议：自动列出已合并且无未提交改动的可安全删除 worktree，批量删除
 
 **研发工作流**
+
 - 工作流步骤：内置一套需求研发步骤，支持自定义
 - 勾选进度：按任务记录每个步骤的完成状态
 - 执行命令：给步骤配 shell 命令后可在任务目录下直接执行
@@ -99,22 +101,26 @@
 - 任务链接：关联 Jira / 文档等外部 URL，一键浏览器打开
 
 **看板视图**
+
 - 三列看板：按人工状态分待启动 / 进行中 / 已完成展示任务卡片
 - 进度条：卡片显示工作流勾选进度
 - 快速跳转：点卡片跳转到 Worktree 视图对应任务
 
 **AI 用量追踪**
+
 - 用量统计：读取本地 Claude Code 会话数据，按任务统计 token 用量
 - 费用换算：按 Opus 4.8 定价计算成本，展示美元 + 人民币双币种
 - 任务标签：在任务标题栏展示该任务的 AI 成本
 
 **环境健康检查**
+
 - 依赖一致性：检查 package.json / lock / node_modules 是否齐备
 - 端口占用：从 scripts 提取常用端口，探测是否被占用
 - 服务连通性：从 .env 提取数据库/Redis/API 地址，TCP 探测可达性
 - Git 状态：检查未提交改动、领先/落后远程
 
 **设置与其它**
+
 - 路径配置：自定义源项目根目录、worktree 根目录
 - 主分支名：配置识别为主分支的分支名（默认 master/main）
 - 忽略列表：排除不想扫描的目录

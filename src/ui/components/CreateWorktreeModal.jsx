@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Form, Input, Select, Alert } from 'antd';
-import { normalizeTaskLinkItems } from '../worktreeLogic.js';
-import TaskLinksEditor from './TaskLinksEditor.jsx';
+import React, { useEffect, useRef, useState } from 'react'
+import { Modal, Form, Input, Select, Alert } from 'antd'
+import { normalizeTaskLinkItems } from '../worktreeLogic.js'
+import TaskLinksEditor from './TaskLinksEditor.jsx'
 
 // 按任务批量创建 worktree 弹窗：输入任务名 + 可选多个项目 + 需求链接 + 分支名。
 // 选择项目时在 worktreesRoot/{任务名}/{项目名} 下为每个选中项目各建一个 worktree；
@@ -19,42 +19,50 @@ import TaskLinksEditor from './TaskLinksEditor.jsx';
  * @param {()=>void} props.onClose - 关闭回调
  * @returns {JSX.Element} 弹窗元素
  */
-export default function CreateWorktreeModal({ open, projects, projectsLoading = false, worktreesPath, defaultTask, onSubmit, onClose }) {
+export default function CreateWorktreeModal({
+  open,
+  projects,
+  projectsLoading = false,
+  worktreesPath,
+  defaultTask,
+  onSubmit,
+  onClose,
+}) {
   // antd 表单实例
-  const [form] = Form.useForm();
+  const [form] = Form.useForm()
   // submitting 标记创建请求进行中，防止重复提交并给按钮加 loading 状态
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false)
   // 监听任务名、分支名与项目选择以实时预览将创建的路径
-  const task = Form.useWatch('task', form);
-  const branch = Form.useWatch('branch', form);
+  const task = Form.useWatch('task', form)
+  const branch = Form.useWatch('branch', form)
   // projectPaths 存储当前选择的项目路径数组；空数组表示只创建任务目录。
-  const projectPaths = Form.useWatch('projectPaths', form);
+  const projectPaths = Form.useWatch('projectPaths', form)
   // 上一次自动填充的分支名（用于判断用户是否手动修改过分支）
-  const prevAutoFilled = useRef('');
+  const prevAutoFilled = useRef('')
 
   // 打开时重置表单；若有预填任务名（从任务行入口打开），同步填入任务名和分支名
   useEffect(() => {
     if (open) {
-      form.resetFields();
-      prevAutoFilled.current = '';
+      form.resetFields()
+      prevAutoFilled.current = ''
       if (defaultTask) {
-        form.setFieldValue('task', defaultTask);
-        form.setFieldValue('branch', defaultTask);
-        prevAutoFilled.current = defaultTask;
+        form.setFieldValue('task', defaultTask)
+        form.setFieldValue('branch', defaultTask)
+        prevAutoFilled.current = defaultTask
       }
     }
-  }, [open, form, defaultTask]);
+  }, [open, form, defaultTask])
 
   // 任务名变化时自动同步分支名：
   // 仅当分支名为空或等于上次自动填充的值时才同步，避免覆盖用户手动修改的分支名
   useEffect(() => {
-    if (!task) return;
-    const currentBranch = form.getFieldValue('branch') || '';
+    if (!task) return
+    const currentBranch = form.getFieldValue('branch') || ''
     if (!currentBranch || currentBranch === prevAutoFilled.current) {
-      form.setFieldValue('branch', task);
-      prevAutoFilled.current = task;
+      form.setFieldValue('branch', task)
+      prevAutoFilled.current = task
     }
-  }, [task]);
+  }, [form, task])
 
   /**
    * 校验并提交；提交期间立即进入 loading 态，让用户感知到操作已发出
@@ -64,31 +72,42 @@ export default function CreateWorktreeModal({ open, projects, projectsLoading = 
     // 避免冒泡成 unhandled promise rejection；antd 会自动在对应表单项展示错误提示
     try {
       // values 为表单收集的创建参数
-      const values = await form.validateFields();
+      const values = await form.validateFields()
       // submittedValues 存储最终提交值：补齐可选数组字段，保证下游无需处理 undefined
       const submittedValues = {
         ...values,
-        projectPaths: Array.isArray(values.projectPaths) ? values.projectPaths : [],
+        projectPaths: Array.isArray(values.projectPaths)
+          ? values.projectPaths
+          : [],
         links: normalizeTaskLinkItems(values.links),
-      };
+      }
       // 校验通过后立即 loading，给用户即时反馈（创建大量 worktree 时后端耗时约 1-3s）
-      setSubmitting(true);
-      await onSubmit(submittedValues);
+      setSubmitting(true)
+      await onSubmit(submittedValues)
     } catch (e) {
       // 校验未通过：不提交，错误已由 antd 表单项内联展示，无需额外处理
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
   // 源项目下拉选项
   const projectOptions = (projects || [])
     .filter((p) => p.isGitRepo)
-    .map((p) => ({ label: p.name, value: p.path }));
+    .map((p) => ({ label: p.name, value: p.path }))
 
   return (
     // okButtonProps.loading 在点击「创建」后立即生效，避免用户等待约 1s 却无任何反馈
-    <Modal title="按任务创建 Worktree" open={open} onOk={handleOk} onCancel={onClose} width={600} destroyOnHidden okText="创建" okButtonProps={{ loading: submitting }}>
+    <Modal
+      title="按任务创建 Worktree"
+      open={open}
+      onOk={handleOk}
+      onCancel={onClose}
+      width={600}
+      destroyOnHidden
+      okText="创建"
+      okButtonProps={{ loading: submitting }}
+    >
       <Form form={form} layout="vertical">
         <Form.Item
           label="任务名（作为目录名，建议用需求号，如 PROJ-1234-xxx）"
@@ -111,10 +130,7 @@ export default function CreateWorktreeModal({ open, projects, projectsLoading = 
             loading={projectsLoading}
           />
         </Form.Item>
-        <Form.Item
-          label="需求链接"
-          name="links"
-        >
+        <Form.Item label="需求链接" name="links">
           <TaskLinksEditor />
         </Form.Item>
         <Form.Item
@@ -131,12 +147,14 @@ export default function CreateWorktreeModal({ open, projects, projectsLoading = 
             type="info"
             showIcon
             message="将创建到"
-            description={(projectPaths || []).length > 0
-              ? `${worktreesPath || '<worktree根目录>'}/${task}/<项目名>  →  分支 ${branch || '<分支名>'}`
-              : `${worktreesPath || '<worktree根目录>'}/${task}  →  暂不创建项目 worktree`}
+            description={
+              (projectPaths || []).length > 0
+                ? `${worktreesPath || '<worktree根目录>'}/${task}/<项目名>  →  分支 ${branch || '<分支名>'}`
+                : `${worktreesPath || '<worktree根目录>'}/${task}  →  暂不创建项目 worktree`
+            }
           />
         )}
       </Form>
     </Modal>
-  );
+  )
 }
