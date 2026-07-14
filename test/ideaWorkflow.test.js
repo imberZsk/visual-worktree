@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -62,6 +62,25 @@ describe('ideaWorkflowService', () => {
     // result 为未创建任何文件时的运行历史
     const result = loadIdeaRuns()
     expect(result).toEqual([])
+  })
+
+  it('loadIdeaWorkflows：文件损坏时回退内置默认', () => {
+    // 手写损坏的 idea-workflows.json，命中 readJson 的 catch 回退分支
+    const dir = join(tmpHome, '.visualWorktree')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'idea-workflows.json'), '{ broken json', 'utf8')
+    // result 为损坏时回退的内置默认工作流
+    const result = loadIdeaWorkflows()
+    expect(result).toHaveLength(2)
+    expect(result.map((w) => w.name)).toEqual(['快速实现', '完整流程'])
+  })
+
+  it('loadIdeaRuns：文件损坏时回退空数组', () => {
+    // 手写损坏的 idea-runs.json，验证运行历史读取也走 catch 回退
+    const dir = join(tmpHome, '.visualWorktree')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'idea-runs.json'), 'not json at all', 'utf8')
+    expect(loadIdeaRuns()).toEqual([])
   })
 
   it('appendIdeaRun：插入头部', () => {
