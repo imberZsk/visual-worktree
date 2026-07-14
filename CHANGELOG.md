@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-14
+
 ### 新增
 
 - **代码质量工具链**：接入 ESLint、Prettier、Husky、Commitlint 与 lint-staged，并在 CI 中执行完整代码检查。
@@ -34,6 +36,7 @@
 - 清理公开仓库边界：移除内网 `.npmrc` 配置，改用 pnpm 作为唯一锁文件来源，并忽略构建产物、覆盖率报告与本地 AI 工具状态。
 - GitHub Release Assets 只上传用户需要下载的安装包（macOS `.dmg`、Windows `.exe`），不再展示 `.blockmap` 与 `latest*.yml` 等自动更新/差分元数据文件。
 - 更新 README 的安装、打包、验证与隐私说明，使文档面向 GitHub 开源用户而非内部同事分发场景。
+- **版本口径收敛**：`auto-tag-release.yml` 改为直接读取 `main` 上 `package.json` 的 `version` 作为 tag 号（原先基于上一个 tag 递增 patch，与手动提升的 `package.json` 版本长期脱节，导致 `v1.3.8` 指向的代码 `package.json` 已是 `1.5.0`）。现在 tag 恒等于 `package.json` 版本；该版本已发过 tag 则跳过，保证「package.json 版本 = git tag = GitHub Release」三者一致。
 
 ## [1.1.2] - 2026-07-03
 
