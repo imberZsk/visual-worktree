@@ -89,51 +89,32 @@ jobs:
             exit 0
           fi
 
-          # latest_tag 存储当前仓库里最大的语义化版本 tag。
-          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-          # latest_version 存储去掉 v 前缀后的最新版本号。
-          latest_version="${latest_tag#v}"
-          # major 存储最新版本号的主版本。
-          major="${latest_version%%.*}"
-          # minor_and_patch 存储最新版本号中除主版本外的剩余部分。
-          minor_and_patch="${latest_version#*.}"
-          # minor 存储最新版本号的次版本。
-          minor="${minor_and_patch%%.*}"
-          # patch 存储最新版本号的修订版本。
-          patch="${minor_and_patch#*.}"
-
-          # label_names 存储 PR 标签名称列表，用于允许手动选择 major/minor/patch 级别。
-          label_names="$(jq -r '(.labels // [])[].name' "$pr_json")"
-          # bump_level 存储本次自动发版的语义化版本递增级别；默认 patch，避免过度放大版本号。
-          bump_level="patch"
-          if grep -qx 'release:major' <<< "$label_names"; then
-            bump_level="major"
-          elif grep -qx 'release:minor' <<< "$label_names"; then
-            bump_level="minor"
-          fi
-
-          if [ "$bump_level" = "major" ]; then
-            major=$((major + 1))
-            minor=0
-            patch=0
-          elif [ "$bump_level" = "minor" ]; then
-            minor=$((minor + 1))
-            patch=0
-          else
-            patch=$((patch + 1))
-          fi
-
-          # new_tag 存储即将创建并推送的新版本 tag。
-          new_tag="v${major}.${minor}.${patch}"
-          if git rev-parse "$new_tag" >/dev/null 2>&1; then
-            echo "Tag $new_tag already exists"
+          # pkg_version 存储 merge_sha 对应提交上 package.json 的 version 字段。
+          # WHY 以 package.json 为唯一版本源：原先基于「上一个 tag 递增 patch」计算 tag，
+          # 完全不参照 package.json，而 package.json 的 version 由开发者手动按语义化版本提升，
+          # 两套口径从不互相校准，会越差越远（实测 v1.3.8 指向的代码 package.json 已是 1.5.0）。
+          # 改为直接读 package.json，保证「package.json 版本 = git tag = GitHub Release」恒等。
+          pkg_version="$(git show "${merge_sha}:package.json" | jq -r '.version')"
+          if [ -z "$pkg_version" ] || [ "$pkg_version" = "null" ]; then
+            echo "无法从 package.json 读取 version，终止发版" >&2
             exit 1
+          fi
+
+          # new_tag 存储即将创建并推送的新版本 tag，恒等于 package.json 版本。
+          new_tag="v${pkg_version}"
+
+          # 该版本已存在同名 tag：说明本次 PR 未提升 package.json 版本，无需重复发版。
+          # WHY 跳过而非报错：日常改文档/CI/重构而不动版本号是正常的，不该阻断合并流程。
+          if git rev-parse "$new_tag" >/dev/null 2>&1; then
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=version-unchanged" >> "$GITHUB_OUTPUT"
+            echo "existing_tag=$new_tag" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           echo "release_needed=true" >> "$GITHUB_OUTPUT"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
           echo "merge_sha=$merge_sha" >> "$GITHUB_OUTPUT"
-          echo "bump_level=$bump_level" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
         if: steps.release.outputs.release_needed == 'true'

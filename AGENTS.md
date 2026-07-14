@@ -96,6 +96,7 @@ src/ui/            React 渲染进程
 - 所有交流与文档用中文。代码注释规则见全局 AGENTS.md：函数/方法、变量必须加注释；复杂逻辑注释说明 WHY。现有代码注释密度很高，新代码须匹配这一风格。
 - 小功能不要使用 worktree，直接当前分支开发，如果有必要再使用，使用了后需要合并到主分支并且删除worktree
 - 用户明确要求使用 worktree 时，从创建分支开始就在目标 worktree 内完成全部代码、`CHANGELOG.md` 和 `package.json` 版本修改；不得先在主工作区修改后再迁移，也不得把主工作区已有的未提交改动带入或作为中转。合并后若主工作区存在用户改动，更新 main 时必须原样保留。
+- **版本口径三者必须一致**：`package.json` 的 `version`、`CHANGELOG.md` 顶部的版本条目、git tag（及由其触发的 GitHub Release）三者必须保持严格相等，tag 恒为 `v${package.json.version}`。新增功能/修复时按语义化版本提升 `package.json` 版本并在 `CHANGELOG.md` 新增对应版本条目（不要长期堆在 `[Unreleased]`）；发布即打同名 tag `vX.Y.Z`。`auto-tag-release.yml` 已改为直接读 `package.json` 的 `version` 打 tag（不再基于上个 tag 递增 patch），故只要 `package.json` 版本提升并合入 main，就会自动发对应版本的 Release；版本未变的 PR 自动跳过。严禁再出现「tag/Release 版本 ≠ package.json 版本」的脱节。
 - 项目级 `.npmrc` 只允许公开、无凭据的 registry/Electron 镜像配置；私有 registry、认证 token 和内网地址必须放用户级 `~/.npmrc`，不得提交到仓库。
 - 容易阻塞的任务需要异步处理，需要增加loading，统一loading
 
