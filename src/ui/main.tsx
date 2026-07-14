@@ -1,10 +1,10 @@
-import React, { useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
-import { ConfigProvider, theme as antdTheme, App as AntApp } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
-import App from './App.jsx';
-import { useStore } from './store/useStore.js';
-import './styles.css';
+import React, { useEffect } from 'react'
+import { createRoot } from 'react-dom/client'
+import { ConfigProvider, theme as antdTheme, App as AntApp } from 'antd'
+import zhCN from 'antd/locale/zh_CN'
+import App from './App.tsx'
+import { useStore } from './store/useStore.ts'
+import './styles.css'
 
 // 渲染进程入口：挂载 React 应用，配置 antd 中文语言与明暗主题。
 
@@ -14,23 +14,28 @@ import './styles.css';
  */
 function Root() {
   // theme 当前主题，来自全局 store
-  const themeMode = useStore((s) => s.theme);
+  const themeMode = useStore((s) => s.theme)
   // isDark 是否暗色
-  const isDark = themeMode === 'dark';
+  const isDark = themeMode === 'dark'
 
   // 同步 body 背景，避免主题切换/首屏出现白底闪烁
   useEffect(() => {
-    document.body.style.background = isDark ? '#141414' : '#ffffff';
+    document.body.style.background = isDark ? '#141414' : '#ffffff'
     // 在根元素标记主题，供 styles.css 做少量自定义适配
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  }, [isDark]);
+    document.documentElement.setAttribute(
+      'data-theme',
+      isDark ? 'dark' : 'light'
+    )
+  }, [isDark])
 
   return (
     <ConfigProvider
       locale={zhCN}
       modal={{ centered: true }}
       theme={{
-        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        algorithm: isDark
+          ? antdTheme.darkAlgorithm
+          : antdTheme.defaultAlgorithm,
       }}
     >
       {/* AntApp 提供 message/Modal 的主题上下文，使弹窗也跟随明暗 */}
@@ -38,9 +43,9 @@ function Root() {
         <App />
       </AntApp>
     </ConfigProvider>
-  );
+  )
 }
 
-const container = document.getElementById('root');
-const root = createRoot(container);
-root.render(<Root />);
+const container = document.getElementById('root')
+const root = createRoot(container)
+root.render(<Root />)

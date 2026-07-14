@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-15
+
+### 变更
+
+- 统一升级至 React 19、Ant Design 6、Electron 43、Vite 8、TypeScript 6 与 pnpm 11.13；渲染层迁移为 TypeScript，并加入 `tsc` 构建门禁。
+- 适配 Ant Design 6 的表单时序与语义 DOM，统一 macOS arm64 与 Windows x64 双平台构建、测试和打包口径。
+- 统一 MIT 协议、安全策略与行为准则文档。
+
 ## [1.5.0] - 2026-07-14
 
 ### 新增

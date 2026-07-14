@@ -1,10 +1,19 @@
-import React from 'react';
-import { Table, Tag, Button, Space, Tooltip } from 'antd';
-import { EyeInvisibleOutlined, EyeOutlined, FolderOpenOutlined, CopyOutlined, PushpinFilled, PushpinOutlined, GitlabOutlined, ConsoleSqlOutlined } from '@ant-design/icons';
-import { statusTags } from '../projectLogic.js';
-import { hasVisibilityKey } from '../visibilityLogic.js';
-import { VscodeIcon } from '../icons.jsx';
-import SingleLineText from './SingleLineText.jsx';
+import React from 'react'
+import { Table, Tag, Button, Space, Tooltip } from 'antd'
+import {
+  EyeInvisibleOutlined,
+  EyeOutlined,
+  FolderOpenOutlined,
+  CopyOutlined,
+  PushpinFilled,
+  PushpinOutlined,
+  GitlabOutlined,
+  ConsoleSqlOutlined,
+} from '@ant-design/icons'
+import { statusTags } from '../projectLogic.ts'
+import { hasVisibilityKey } from '../visibilityLogic.ts'
+import { VscodeIcon } from '../icons.tsx'
+import SingleLineText from './SingleLineText.tsx'
 
 // 项目列表表格组件：展示项目名、当前分支、状态标签、操作按钮，支持多选。
 
@@ -54,28 +63,33 @@ export default function ProjectTable({
   onProjectPinnedChange,
 }) {
   // projectVisibility 存储项目隐藏/置顶偏好，复用纯逻辑判断函数。
-  const projectVisibility = { hidden: hiddenProjectKeys, pinned: pinnedProjectKeys };
+  const projectVisibility = {
+    hidden: hiddenProjectKeys,
+    pinned: pinnedProjectKeys,
+  }
 
   /**
    * 判断项目是否隐藏。
    * @param {object} project - 项目状态对象
    * @returns {boolean} 是否隐藏
    */
-  const isProjectHidden = (project) => hasVisibilityKey(projectVisibility, 'hidden', project.path);
+  const isProjectHidden = (project) =>
+    hasVisibilityKey(projectVisibility, 'hidden', project.path)
 
   /**
    * 判断项目是否置顶。
    * @param {object} project - 项目状态对象
    * @returns {boolean} 是否置顶
    */
-  const isProjectPinned = (project) => hasVisibilityKey(projectVisibility, 'pinned', project.path);
+  const isProjectPinned = (project) =>
+    hasVisibilityKey(projectVisibility, 'pinned', project.path)
 
   /**
    * 判断项目是否正在执行隐藏退出动画。
    * @param {object} project - 项目状态对象
    * @returns {boolean} 是否处于隐藏动画态
    */
-  const isProjectHiding = (project) => hidingProjectKeys.includes(project.path);
+  const isProjectHiding = (project) => hidingProjectKeys.includes(project.path)
 
   /**
    * 计算项目表格行 className。
@@ -84,11 +98,11 @@ export default function ProjectTable({
    */
   const getProjectRowClassName = (project) => {
     // classNames 存储当前行需要叠加的展示态类名。
-    const classNames = [];
-    if (isProjectHidden(project)) classNames.push('project-row-hidden');
-    if (isProjectHiding(project)) classNames.push('project-row-hiding');
-    return classNames.join(' ');
-  };
+    const classNames = []
+    if (isProjectHidden(project)) classNames.push('project-row-hidden')
+    if (isProjectHiding(project)) classNames.push('project-row-hiding')
+    return classNames.join(' ')
+  }
 
   // 表格列定义
   const columns = [
@@ -100,16 +114,27 @@ export default function ProjectTable({
       fixed: 'left',
       sorter: (a, b) => {
         // aPinned/bPinned 标记项目是否置顶；用户点击表头排序时也保持置顶在最上方。
-        const aPinned = isProjectPinned(a);
-        const bPinned = isProjectPinned(b);
-        if (aPinned !== bPinned) return aPinned ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        const aPinned = isProjectPinned(a)
+        const bPinned = isProjectPinned(b)
+        if (aPinned !== bPinned) return aPinned ? -1 : 1
+        return a.name.localeCompare(b.name)
       },
       render: (name, record) => (
         <Space size={4} style={{ maxWidth: '100%', minWidth: 0 }}>
-          <SingleLineText text={name} style={{ maxWidth: 150, fontWeight: 500 }} />
-          {isProjectPinned(record) && <Tag color="blue" style={{ marginInlineEnd: 0 }}>置顶</Tag>}
-          {isProjectHidden(record) && <Tag color="default" style={{ marginInlineEnd: 0 }}>已隐藏</Tag>}
+          <SingleLineText
+            text={name}
+            style={{ maxWidth: 150, fontWeight: 500 }}
+          />
+          {isProjectPinned(record) && (
+            <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+              置顶
+            </Tag>
+          )}
+          {isProjectHidden(record) && (
+            <Tag color="default" style={{ marginInlineEnd: 0 }}>
+              已隐藏
+            </Tag>
+          )}
         </Space>
       ),
     },
@@ -119,7 +144,12 @@ export default function ProjectTable({
       key: 'currentBranch',
       width: 200,
       ellipsis: { showTitle: false },
-      render: (branch, record) => (record.isGitRepo ? <SingleLineText text={branch || '(detached)'} as="code" /> : '-'),
+      render: (branch, record) =>
+        record.isGitRepo ? (
+          <SingleLineText text={branch || '(detached)'} as="code" />
+        ) : (
+          '-'
+        ),
     },
     {
       title: '状态',
@@ -182,10 +212,18 @@ export default function ProjectTable({
           )}
           {/* Finder / VSCode / 终端 / 复制路径 直接展示为图标按钮，无需收入下拉 */}
           <Tooltip title="在 Finder 中打开">
-            <Button size="small" icon={<FolderOpenOutlined />} onClick={() => onOpenFinder(record)} />
+            <Button
+              size="small"
+              icon={<FolderOpenOutlined />}
+              onClick={() => onOpenFinder(record)}
+            />
           </Tooltip>
           <Tooltip title="在 VSCode 中打开">
-            <Button size="small" icon={<VscodeIcon />} onClick={() => onOpenVscode(record)} />
+            <Button
+              size="small"
+              icon={<VscodeIcon />}
+              onClick={() => onOpenVscode(record)}
+            />
           </Tooltip>
           {/* GitLab 项目入口：由核心层根据 origin remote 自动推导，紧跟 VSCode 方便项目级跳转。 */}
           {record.gitlabUrl && (
@@ -199,41 +237,71 @@ export default function ProjectTable({
             </Tooltip>
           )}
           <Tooltip title="在终端中打开">
-            <Button size="small" icon={<ConsoleSqlOutlined />} onClick={() => onOpenTerminal?.(record)} />
+            <Button
+              size="small"
+              icon={<ConsoleSqlOutlined />}
+              onClick={() => onOpenTerminal?.(record)}
+            />
           </Tooltip>
           <Tooltip title="复制路径">
-            <Button size="small" icon={<CopyOutlined />} onClick={() => onCopyPath?.(record)} />
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => onCopyPath?.(record)}
+            />
           </Tooltip>
-          <Tooltip title={isProjectPinned(record) ? '取消置顶项目' : '置顶项目'}>
+          <Tooltip
+            title={isProjectPinned(record) ? '取消置顶项目' : '置顶项目'}
+          >
             <Button
               size="small"
               aria-label={`${isProjectPinned(record) ? '取消置顶项目' : '置顶项目'} ${record.name}`}
-              icon={isProjectPinned(record) ? <PushpinFilled /> : <PushpinOutlined />}
-              onClick={() => onProjectPinnedChange?.(record.path, !isProjectPinned(record))}
+              icon={
+                isProjectPinned(record) ? (
+                  <PushpinFilled />
+                ) : (
+                  <PushpinOutlined />
+                )
+              }
+              onClick={() =>
+                onProjectPinnedChange?.(record.path, !isProjectPinned(record))
+              }
             />
           </Tooltip>
           {/* 隐藏项目：图标表达当前可见状态，tooltip/aria 表达点击动作。 */}
-          <Tooltip title={isProjectHidden(record) ? '恢复显示项目' : '隐藏项目'}>
+          <Tooltip
+            title={isProjectHidden(record) ? '恢复显示项目' : '隐藏项目'}
+          >
             <Button
               size="small"
               aria-label={`${isProjectHidden(record) ? '恢复显示项目' : '隐藏项目'} ${record.name}`}
-              icon={isProjectHidden(record) ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              icon={
+                isProjectHidden(record) ? (
+                  <EyeInvisibleOutlined />
+                ) : (
+                  <EyeOutlined />
+                )
+              }
               disabled={isProjectHiding(record)}
-              onClick={() => onProjectHiddenChange?.(record.path, !isProjectHidden(record))}
+              onClick={() =>
+                onProjectHiddenChange?.(record.path, !isProjectHidden(record))
+              }
             />
           </Tooltip>
         </Space>
       ),
     },
-  ];
+  ]
 
   // 多选配置
   const rowSelection = {
     selectedRowKeys: selectedPaths,
     onChange: onSelectChange,
     // 隐藏项目即使临时展示出来，也不允许勾选参与批量操作。
-    getCheckboxProps: (record) => ({ disabled: isProjectHidden(record) || isProjectHiding(record) }),
-  };
+    getCheckboxProps: (record) => ({
+      disabled: isProjectHidden(record) || isProjectHiding(record),
+    }),
+  }
 
   return (
     <Table
@@ -248,5 +316,5 @@ export default function ProjectTable({
       // 横向滚动：窄屏保持列宽，左右列固定；纵向由外层 Content 处理，不再设 scroll.y
       scroll={{ x: 950 }}
     />
-  );
+  )
 }

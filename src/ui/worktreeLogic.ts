@@ -10,11 +10,11 @@
  */
 export function quotePathForCopy(path) {
   // p 为规范化的字符串路径，空值兜底为空串避免后续报错
-  const p = String(path ?? '');
+  const p = String(path ?? '')
   // 空路径直接返回空串：包裹成 '' 没有意义且会误导
-  if (p === '') return '';
+  if (p === '') return ''
   // 始终用 POSIX 单引号包裹，内部单引号转义为 '\''，保证任意特殊字符路径都能粘贴即 cd
-  return `'${p.replace(/'/g, `'\\''`)}'`;
+  return `'${p.replace(/'/g, `'\\''`)}'`
 }
 
 /**
@@ -26,8 +26,8 @@ export function quotePathForCopy(path) {
  */
 export function computeActiveKeysAfterCreate(taskName) {
   // 任务名缺失时不展开任何面板，避免传入 [undefined] 这类无效 key
-  if (!taskName) return [];
-  return [taskName];
+  if (!taskName) return []
+  return [taskName]
 }
 
 // ── 任务状态（人工标记） ──
@@ -38,26 +38,28 @@ export function computeActiveKeysAfterCreate(taskName) {
 // 任务状态定义列表（研发工作流）：key 为持久化标识，label 为展示名，color 对应 antd Tag 色
 // 「未开始」作为默认/清除状态；其余六个对应完整研发流程阶段
 export const TASK_STATUSES = [
-  { key: 'not-started',     label: '未开始', color: 'default'     },
-  { key: 'developing',      label: '开发中', color: 'processing'  },
-  { key: 'self-testing',    label: '自测中', color: 'cyan'        },
-  { key: 'pending-test',    label: '待提测', color: 'orange'      },
-  { key: 'testing',         label: '测试中', color: 'purple'      },
-  { key: 'pending-release', label: '待发布', color: 'gold'        },
-  { key: 'released',        label: '已发布', color: 'success'     },
-];
+  { key: 'not-started', label: '未开始', color: 'default' },
+  { key: 'developing', label: '开发中', color: 'processing' },
+  { key: 'self-testing', label: '自测中', color: 'cyan' },
+  { key: 'pending-test', label: '待提测', color: 'orange' },
+  { key: 'testing', label: '测试中', color: 'purple' },
+  { key: 'pending-release', label: '待发布', color: 'gold' },
+  { key: 'released', label: '已发布', color: 'success' },
+]
 
 // 默认状态 key：任务从未手动标记时视为「未开始」，展示与存储均以此为兜底
-export const DEFAULT_TASK_STATUS = 'not-started';
+export const DEFAULT_TASK_STATUS = 'not-started'
 
 // 状态排序权重：按 TASK_STATUSES 数组下标派生，新增/调整状态时此映射自动同步
-export const STATUS_SORT_ORDER = Object.fromEntries(TASK_STATUSES.map((s, i) => [s.key, i]));
+export const STATUS_SORT_ORDER = Object.fromEntries(
+  TASK_STATUSES.map((s, i) => [s.key, i])
+)
 
 // 状态 key → 状态定义 的索引，便于按 key 取 label/color，避免每次线性查找
-const STATUS_BY_KEY = new Map(TASK_STATUSES.map((s) => [s.key, s]));
+const STATUS_BY_KEY = new Map(TASK_STATUSES.map((s) => [s.key, s]))
 
 // 任务状态映射在 localStorage 中的存储键
-export const TASK_STATUS_STORAGE_KEY = 'vw-task-status';
+export const TASK_STATUS_STORAGE_KEY = 'vw-task-status'
 
 /**
  * 按状态 key 取状态定义（label/color），未设置/未知时回退到默认「未开始」
@@ -66,7 +68,7 @@ export const TASK_STATUS_STORAGE_KEY = 'vw-task-status';
  */
 export function getTaskStatusMeta(statusKey) {
   // 未设置或未知 key 一律回退默认状态「未开始」，保证任务总有可展示的状态
-  return STATUS_BY_KEY.get(statusKey) || STATUS_BY_KEY.get(DEFAULT_TASK_STATUS);
+  return STATUS_BY_KEY.get(statusKey) || STATUS_BY_KEY.get(DEFAULT_TASK_STATUS)
 }
 
 /**
@@ -78,16 +80,20 @@ export function getTaskStatusMeta(statusKey) {
  */
 export function setTaskStatusInMap(map, taskName, statusKey) {
   // next 为入参的浅拷贝，保证不可变更新（便于 React/Zustand 触发重渲染）
-  const next = { ...(map || {}) };
+  const next = { ...(map || {}) }
   // 任务名缺失直接原样返回，避免写入无效键
-  if (!taskName) return next;
+  if (!taskName) return next
   // 目标为空/未知/默认「未开始」时删除该键：未开始即默认态，无需占用存储（缺失即视为未开始）
-  if (!statusKey || !STATUS_BY_KEY.has(statusKey) || statusKey === DEFAULT_TASK_STATUS) {
-    delete next[taskName];
+  if (
+    !statusKey ||
+    !STATUS_BY_KEY.has(statusKey) ||
+    statusKey === DEFAULT_TASK_STATUS
+  ) {
+    delete next[taskName]
   } else {
-    next[taskName] = statusKey;
+    next[taskName] = statusKey
   }
-  return next;
+  return next
 }
 
 /**
@@ -97,14 +103,16 @@ export function setTaskStatusInMap(map, taskName, statusKey) {
 export function loadTaskStatusMap() {
   try {
     // raw 为原始 JSON 字符串，可能为 null（从未写入）
-    const raw = localStorage.getItem(TASK_STATUS_STORAGE_KEY);
-    if (!raw) return {};
+    const raw = localStorage.getItem(TASK_STATUS_STORAGE_KEY)
+    if (!raw) return {}
     // parsed 为解析结果，需校验为普通对象，防止存入了数组/标量导致后续出错
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed
+      : {}
   } catch (e) {
     // localStorage 不可用或 JSON 损坏时回退空映射，避免阻塞面板渲染
-    return {};
+    return {}
   }
 }
 
@@ -114,7 +122,7 @@ export function loadTaskStatusMap() {
  */
 export function saveTaskStatusMap(map) {
   try {
-    localStorage.setItem(TASK_STATUS_STORAGE_KEY, JSON.stringify(map || {}));
+    localStorage.setItem(TASK_STATUS_STORAGE_KEY, JSON.stringify(map || {}))
   } catch (e) {
     // localStorage 不可用时忽略持久化（不影响当前会话内的内存状态）
   }
@@ -127,11 +135,11 @@ export function saveTaskStatusMap(map) {
  */
 function normalizeTaskLinkObject(raw) {
   // name 存储用户给链接填写的展示名称；为空时展示层会回退到 URL。
-  const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
+  const name = typeof raw?.name === 'string' ? raw.name.trim() : ''
   // url 存储用户填写的真实链接地址；持久化和打开浏览器均使用它。
-  const url = typeof raw?.url === 'string' ? raw.url.trim() : '';
-  if (!url) return null;
-  return { name, url };
+  const url = typeof raw?.url === 'string' ? raw.url.trim() : ''
+  if (!url) return null
+  return { name, url }
 }
 
 /**
@@ -141,15 +149,15 @@ function normalizeTaskLinkObject(raw) {
  */
 function parseTaskLinkString(raw) {
   // rawUrls 存储按换行/逗号拆分后的 URL 片段，兼容用户在任意链接框里粘贴多条链接。
-  const rawUrls = raw.split(/[\n,]+/);
+  const rawUrls = raw.split(/[\n,]+/)
   // items 存储解析出的旧版链接条目；旧数据没有名称，因此 name 为空。
-  const items = [];
+  const items = []
   for (const rawUrl of rawUrls) {
     // url 存储清理空白后的单条链接地址。
-    const url = rawUrl.trim();
-    if (url) items.push({ name: '', url });
+    const url = rawUrl.trim()
+    if (url) items.push({ name: '', url })
   }
-  return items;
+  return items
 }
 
 /**
@@ -160,23 +168,24 @@ function parseTaskLinkString(raw) {
  */
 export function normalizeTaskLinkItems(value) {
   // sourceLinks 存储待清洗的原始链接列表；非数组值按单项处理以兼容旧版单字符串。
-  const sourceLinks = Array.isArray(value) ? value : [value];
+  const sourceLinks = Array.isArray(value) ? value : [value]
   // seen 存储已加入结果的 URL，用于保持原顺序的同时按 URL 去重。
-  const seen = new Set();
+  const seen = new Set()
   // items 累积清洗后的链接条目数组。
-  const items = [];
+  const items = []
   for (const raw of sourceLinks) {
     // rawItems 存储当前原始项解析出的候选链接条目；字符串可能一次解析出多条。
-    const rawItems = typeof raw === 'string'
-      ? parseTaskLinkString(raw)
-      : [normalizeTaskLinkObject(raw)].filter(Boolean);
+    const rawItems =
+      typeof raw === 'string'
+        ? parseTaskLinkString(raw)
+        : [normalizeTaskLinkObject(raw)].filter(Boolean)
     for (const item of rawItems) {
-      if (seen.has(item.url)) continue;
-      seen.add(item.url);
-      items.push(item);
+      if (seen.has(item.url)) continue
+      seen.add(item.url)
+      items.push(item)
     }
   }
-  return items;
+  return items
 }
 
 /**
@@ -187,8 +196,8 @@ export function normalizeTaskLinkItems(value) {
  */
 export function normalizeTaskLinks(value) {
   // items 存储规范化后的完整链接条目；这里只取 URL 提供给旧调用。
-  const items = normalizeTaskLinkItems(value);
-  return items.map((item) => item.url);
+  const items = normalizeTaskLinkItems(value)
+  return items.map((item) => item.url)
 }
 
 /**
@@ -199,15 +208,16 @@ export function normalizeTaskLinks(value) {
  */
 export function normalizeTaskLinkMap(map) {
   // next 存储规范化后的新映射，避免修改入参。
-  const next = {};
+  const next = {}
   // source 存储可遍历的原始映射；非普通对象回退为空对象。
-  const source = map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  const source =
+    map && typeof map === 'object' && !Array.isArray(map) ? map : {}
   for (const [taskName, value] of Object.entries(source)) {
     // links 存储该任务清洗后的链接条目列表；空列表不写入，避免残留空键。
-    const links = normalizeTaskLinkItems(value);
-    if (links.length > 0) next[taskName] = links;
+    const links = normalizeTaskLinkItems(value)
+    if (links.length > 0) next[taskName] = links
   }
-  return next;
+  return next
 }
 
 /**
@@ -219,11 +229,11 @@ export function normalizeTaskLinkMap(map) {
  */
 export function setTaskLinksInMap(map, taskName, linksValue) {
   // next 存储基于旧映射规范化后的新对象，保证不可变更新。
-  const next = normalizeTaskLinkMap(map);
-  if (!taskName) return next;
+  const next = normalizeTaskLinkMap(map)
+  if (!taskName) return next
   // links 存储待写入的规范化链接条目数组。
-  const links = normalizeTaskLinkItems(linksValue);
-  if (links.length > 0) next[taskName] = links;
-  else delete next[taskName];
-  return next;
+  const links = normalizeTaskLinkItems(linksValue)
+  if (links.length > 0) next[taskName] = links
+  else delete next[taskName]
+  return next
 }

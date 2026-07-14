@@ -1,5 +1,5 @@
-import React from 'react';
-import { Typography } from 'antd';
+import React from 'react'
+import { Typography } from 'antd'
 
 /**
  * 单行省略文本：内容超出容器宽度时显示省略号，悬停时通过 AntD Tooltip 查看完整内容。
@@ -27,15 +27,18 @@ export default function SingleLineText({
   onClick,
 }) {
   // rawContent 存储最终用于展示的原始内容，children 优先以兼容 JSX 使用方式。
-  const rawContent = children ?? text;
+  const rawContent = children ?? text
   // displayText 存储字符串化后的展示文案，避免 null/undefined 直接渲染。
-  const displayText = rawContent === null || rawContent === undefined ? '' : String(rawContent);
+  const displayText =
+    rawContent === null || rawContent === undefined ? '' : String(rawContent)
   // tooltipTitle 存储悬停浮层内容；空文本不展示空浮层。
-  const tooltipTitle = tooltip === undefined ? displayText : tooltip;
+  const tooltipTitle = tooltip === undefined ? displayText : tooltip
   // classNames 存储基础 class 与调用方 class 的组合，用于测试和统一样式定位。
-  const classNames = ['single-line-tooltip-text', className].filter(Boolean).join(' ');
+  const classNames = ['single-line-tooltip-text', className]
+    .filter(Boolean)
+    .join(' ')
   // displayValue 存储块级/行内块展示模式；行内块可放进 Tag/Checkbox 不破坏行布局。
-  const displayValue = inline ? 'inline-block' : 'block';
+  const displayValue = inline ? 'inline-block' : 'block'
   // mergedStyle 存储单行文本尺寸约束；省略逻辑交给 Ant Design Typography 处理。
   const mergedStyle = {
     display: displayValue,
@@ -43,11 +46,11 @@ export default function SingleLineText({
     minWidth: 0,
     verticalAlign: 'bottom',
     ...style,
-  };
+  }
   // ellipsisConfig 存储 Ant Design Typography 的单行省略配置，保留原有 Tooltip 文案与方位。
   const ellipsisConfig = tooltipTitle
     ? { tooltip: { title: tooltipTitle, placement: tooltipPlacement } }
-    : { tooltip: false };
+    : { tooltip: false }
 
   if (as === 'code') {
     return (
@@ -60,7 +63,7 @@ export default function SingleLineText({
       >
         {displayText}
       </Typography.Text>
-    );
+    )
   }
 
   if (as === Typography.Link) {
@@ -74,7 +77,7 @@ export default function SingleLineText({
       >
         {displayText}
       </Typography.Link>
-    );
+    )
   }
 
   return (
@@ -86,5 +89,5 @@ export default function SingleLineText({
     >
       {displayText}
     </Typography.Text>
-  );
+  )
 }

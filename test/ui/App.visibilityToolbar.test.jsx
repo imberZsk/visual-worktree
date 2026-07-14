@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { App as AntApp } from 'antd';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import { App as AntApp } from 'antd'
 
 // mockApi 模拟 App 启动与显隐工具栏测试所需的 Electron API。
 const mockApi = vi.hoisted(() => ({
@@ -20,9 +26,9 @@ const mockApi = vi.hoisted(() => ({
   saveTaskEnvHealth: vi.fn(),
   onStepOutput: vi.fn(),
   onBatchProgress: vi.fn(),
-}));
+}))
 
-vi.mock('../../src/ui/api.js', () => ({
+vi.mock('../../src/ui/api.ts', () => ({
   api: {
     loadConfig: mockApi.loadConfig,
     scanWorktreesByTask: mockApi.scanWorktreesByTask,
@@ -56,13 +62,13 @@ vi.mock('../../src/ui/api.js', () => ({
     batchAddWorktree: vi.fn(),
     runWorkflowStep: vi.fn(),
   },
-}));
+}))
 
-const { default: App } = await import('../../src/ui/App.jsx');
-const { useStore } = await import('../../src/ui/store/useStore.js');
+const { default: App } = await import('../../src/ui/App.tsx')
+const { useStore } = await import('../../src/ui/store/useStore.ts')
 
 // initialState 保存 Zustand 初始状态，用于每个用例前还原。
-const initialState = useStore.getState();
+const initialState = useStore.getState()
 
 // worktreeTasks 测试用 worktree 任务列表，包含一个可见任务和一个隐藏任务。
 const worktreeTasks = [
@@ -70,23 +76,63 @@ const worktreeTasks = [
     task: 'TASK-A',
     path: '/wt/TASK-A',
     worktrees: [
-      { project: 'projA', projectPath: '/src/projA', path: '/wt/TASK-A/projA', branch: 'feat-a', prunable: false, missing: false, hasUncommittedChanges: false, ahead: 0, behind: 0 },
+      {
+        project: 'projA',
+        projectPath: '/src/projA',
+        path: '/wt/TASK-A/projA',
+        branch: 'feat-a',
+        prunable: false,
+        missing: false,
+        hasUncommittedChanges: false,
+        ahead: 0,
+        behind: 0,
+      },
     ],
   },
   {
     task: 'TASK-HIDDEN',
     path: '/wt/TASK-HIDDEN',
     worktrees: [
-      { project: 'projB', projectPath: '/src/projB', path: '/wt/TASK-HIDDEN/projB', branch: 'feat-hidden', prunable: false, missing: false, hasUncommittedChanges: false, ahead: 0, behind: 0 },
+      {
+        project: 'projB',
+        projectPath: '/src/projB',
+        path: '/wt/TASK-HIDDEN/projB',
+        branch: 'feat-hidden',
+        prunable: false,
+        missing: false,
+        hasUncommittedChanges: false,
+        ahead: 0,
+        behind: 0,
+      },
     ],
   },
-];
+]
 
 // projects 测试用项目列表，包含一个可见项目和一个隐藏项目。
 const projects = [
-  { name: 'alpha', path: '/repo/alpha', isGitRepo: true, isMainBranch: true, hasUncommittedChanges: false, hasUnpushedCommits: false, canPull: false, ahead: 0, behind: 0 },
-  { name: 'beta', path: '/repo/beta', isGitRepo: true, isMainBranch: true, hasUncommittedChanges: false, hasUnpushedCommits: false, canPull: false, ahead: 0, behind: 0 },
-];
+  {
+    name: 'alpha',
+    path: '/repo/alpha',
+    isGitRepo: true,
+    isMainBranch: true,
+    hasUncommittedChanges: false,
+    hasUnpushedCommits: false,
+    canPull: false,
+    ahead: 0,
+    behind: 0,
+  },
+  {
+    name: 'beta',
+    path: '/repo/beta',
+    isGitRepo: true,
+    isMainBranch: true,
+    hasUncommittedChanges: false,
+    hasUnpushedCommits: false,
+    canPull: false,
+    ahead: 0,
+    behind: 0,
+  },
+]
 
 /**
  * 构造 App 测试用配置。
@@ -104,7 +150,7 @@ function makeConfig() {
     workflowSteps: [],
     cicdLinks: {},
     envCheckRoles: [],
-  };
+  }
 }
 
 /**
@@ -112,7 +158,11 @@ function makeConfig() {
  * @returns {ReturnType<typeof render>} 渲染结果
  */
 function renderApp() {
-  return render(<AntApp><App /></AntApp>);
+  return render(
+    <AntApp>
+      <App />
+    </AntApp>
+  )
 }
 
 /**
@@ -120,100 +170,123 @@ function renderApp() {
  * @param {HTMLElement} button - 待检查按钮
  */
 function expectNoEyeIcon(button) {
-  expect(button.querySelector('.anticon-eye')).toBeNull();
-  expect(button.querySelector('.anticon-eye-invisible')).toBeNull();
+  expect(button.querySelector('.anticon-eye')).toBeNull()
+  expect(button.querySelector('.anticon-eye-invisible')).toBeNull()
 }
 
 describe('App 显示隐藏项工具栏', () => {
   beforeEach(() => {
-    localStorage.clear();
-    useStore.setState(initialState, true);
-    mockApi.loadConfig.mockReset().mockResolvedValue(makeConfig());
-    mockApi.scanWorktreesByTask.mockReset().mockResolvedValue(worktreeTasks);
-    mockApi.scanProjects.mockReset().mockResolvedValue(projects);
-    mockApi.loadTaskStatus.mockReset().mockResolvedValue({});
-    mockApi.loadTaskLinks.mockReset().mockResolvedValue({});
-    mockApi.loadTaskVisibility.mockReset().mockResolvedValue({ hidden: ['TASK-HIDDEN'], pinned: [] });
-    mockApi.loadProjectVisibility.mockReset().mockResolvedValue({ hidden: ['/repo/beta'], pinned: [] });
-    mockApi.loadTaskWorkflow.mockReset().mockResolvedValue({});
-    mockApi.loadTaskBlockers.mockReset().mockResolvedValue({});
-    mockApi.loadTaskEnvHealth.mockReset().mockResolvedValue({});
-    mockApi.getClaudeTasksSummary.mockReset().mockResolvedValue({});
-    mockApi.getClaudeSessionsByTask.mockReset().mockResolvedValue([]);
-    mockApi.checkEnvHealth.mockReset().mockResolvedValue({});
-    mockApi.saveTaskEnvHealth.mockReset().mockResolvedValue(true);
-    mockApi.onStepOutput.mockReset().mockReturnValue(() => {});
-    mockApi.onBatchProgress.mockReset().mockReturnValue(() => {});
-  });
+    localStorage.clear()
+    useStore.setState(initialState, true)
+    mockApi.loadConfig.mockReset().mockResolvedValue(makeConfig())
+    mockApi.scanWorktreesByTask.mockReset().mockResolvedValue(worktreeTasks)
+    mockApi.scanProjects.mockReset().mockResolvedValue(projects)
+    mockApi.loadTaskStatus.mockReset().mockResolvedValue({})
+    mockApi.loadTaskLinks.mockReset().mockResolvedValue({})
+    mockApi.loadTaskVisibility
+      .mockReset()
+      .mockResolvedValue({ hidden: ['TASK-HIDDEN'], pinned: [] })
+    mockApi.loadProjectVisibility
+      .mockReset()
+      .mockResolvedValue({ hidden: ['/repo/beta'], pinned: [] })
+    mockApi.loadTaskWorkflow.mockReset().mockResolvedValue({})
+    mockApi.loadTaskBlockers.mockReset().mockResolvedValue({})
+    mockApi.loadTaskEnvHealth.mockReset().mockResolvedValue({})
+    mockApi.getClaudeTasksSummary.mockReset().mockResolvedValue({})
+    mockApi.getClaudeSessionsByTask.mockReset().mockResolvedValue([])
+    mockApi.checkEnvHealth.mockReset().mockResolvedValue({})
+    mockApi.saveTaskEnvHealth.mockReset().mockResolvedValue(true)
+    mockApi.onStepOutput.mockReset().mockReturnValue(() => {})
+    mockApi.onBatchProgress.mockReset().mockReturnValue(() => {})
+  })
 
-  afterEach(() => cleanup());
+  afterEach(() => cleanup())
 
   it('首次进入项目 Tab 会自动 fetch 一次，后续切回不重复自动 fetch', async () => {
-    localStorage.setItem('vw-active-view', 'worktrees');
-    renderApp();
+    localStorage.setItem('vw-active-view', 'worktrees')
+    renderApp()
 
-    await waitFor(() => expect(mockApi.scanWorktreesByTask).toHaveBeenCalledTimes(1));
-    expect(mockApi.scanProjects).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockApi.scanWorktreesByTask).toHaveBeenCalledTimes(1)
+    )
+    expect(mockApi.scanProjects).not.toHaveBeenCalled()
 
     // projectTab 存储顶部视图切换中的项目入口。
-    const projectTab = screen.getByText('项目');
-    fireEvent.click(projectTab);
+    const projectTab = screen.getByText('项目')
+    fireEvent.click(projectTab)
 
-    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true }));
-    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true })
+    )
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
 
     // worktreeTab 存储顶部视图切换中的 Worktree 入口，用于验证再次切回项目不会触发第二次自动 fetch。
-    const worktreeTab = screen.getByText('Worktree');
-    fireEvent.click(worktreeTab);
-    fireEvent.click(projectTab);
+    const worktreeTab = screen.getByText('Worktree')
+    fireEvent.click(worktreeTab)
+    fireEvent.click(projectTab)
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /显示隐藏项目/ })).toBeTruthy());
-    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
-  });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /显示隐藏项目/ })).toBeTruthy()
+    )
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
+  })
 
   it('启动时停留在项目 Tab 只触发一次带 fetch 的项目扫描', async () => {
-    localStorage.setItem('vw-active-view', 'projects');
-    renderApp();
+    localStorage.setItem('vw-active-view', 'projects')
+    renderApp()
 
-    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true }));
-    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1);
-  });
+    await waitFor(() =>
+      expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true })
+    )
+    expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
+  })
 
   it('Worktree 工具栏显隐入口只展示文案，并与排序控件保持清晰间距', async () => {
-    localStorage.setItem('vw-active-view', 'worktrees');
-    renderApp();
+    localStorage.setItem('vw-active-view', 'worktrees')
+    renderApp()
 
     // showButton 存储默认状态的显隐入口；顶部工具栏只保留文案，避免和行级状态眼睛混淆。
-    const showButton = await screen.findByRole('button', { name: /显示隐藏任务/ });
-    await waitFor(() => expect(showButton.disabled).toBe(false));
-    expectNoEyeIcon(showButton);
-    expect(showButton.closest('.ant-space').style.columnGap).toBe('12px');
+    const showButton = await screen.findByRole('button', {
+      name: /显示隐藏任务/,
+    })
+    await waitFor(() => expect(showButton.disabled).toBe(false))
+    expectNoEyeIcon(showButton)
+    expect(showButton.closest('.ant-space').style.columnGap).toBe('12px')
     // statusSortOption 存储排序切换器里的“状态”选项。
-    const statusSortOption = screen.getByText('状态');
+    const statusSortOption = screen.getByText('状态')
     // nameSortOption 存储排序切换器里的“名称”选项。
-    const nameSortOption = screen.getByText('名称');
-    expect(statusSortOption.compareDocumentPosition(nameSortOption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const nameSortOption = screen.getByText('名称')
+    expect(
+      statusSortOption.compareDocumentPosition(nameSortOption) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
 
-    fireEvent.click(showButton);
+    fireEvent.click(showButton)
 
     // hideButton 存储显示隐藏项后的入口；收起状态同样只展示文案。
-    const hideButton = await screen.findByRole('button', { name: /收起隐藏任务/ });
-    expectNoEyeIcon(hideButton);
-  });
+    const hideButton = await screen.findByRole('button', {
+      name: /收起隐藏任务/,
+    })
+    expectNoEyeIcon(hideButton)
+  })
 
   it('项目工具栏显隐入口只展示文案', async () => {
-    localStorage.setItem('vw-active-view', 'projects');
-    renderApp();
+    localStorage.setItem('vw-active-view', 'projects')
+    renderApp()
 
     // showButton 存储默认状态的显隐入口；顶部工具栏只保留文案，避免和行级状态眼睛混淆。
-    const showButton = await screen.findByRole('button', { name: /显示隐藏项目/ });
-    await waitFor(() => expect(showButton.disabled).toBe(false));
-    expectNoEyeIcon(showButton);
+    const showButton = await screen.findByRole('button', {
+      name: /显示隐藏项目/,
+    })
+    await waitFor(() => expect(showButton.disabled).toBe(false))
+    expectNoEyeIcon(showButton)
 
-    fireEvent.click(showButton);
+    fireEvent.click(showButton)
 
     // hideButton 存储显示隐藏项后的入口；收起状态同样只展示文案。
-    const hideButton = await screen.findByRole('button', { name: /收起隐藏项目/ });
-    expectNoEyeIcon(hideButton);
-  });
-});
+    const hideButton = await screen.findByRole('button', {
+      name: /收起隐藏项目/,
+    })
+    expectNoEyeIcon(hideButton)
+  })
+})
