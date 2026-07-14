@@ -1,9 +1,9 @@
 import js from '@eslint/js'
-import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
-export default [
+export default tseslint.config(
   {
     ignores: [
       'build/**',
@@ -14,8 +14,9 @@ export default [
     ],
   },
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ['**/*.{js,cjs,mjs,jsx}'],
+    files: ['**/*.{js,cjs,mjs,jsx,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       globals: {
@@ -30,16 +31,19 @@ export default [
       sourceType: 'module',
     },
     plugins: {
-      react,
       'react-hooks': reactHooks,
     },
     rules: {
       'no-empty': ['error', { allowEmptyCatch: true }],
-      'no-unused-vars': ['error', { caughtErrors: 'none' }],
-      'react/jsx-uses-react': 'error',
-      'react/jsx-uses-vars': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }],
       'react-hooks/exhaustive-deps': 'warn',
       'react-hooks/rules-of-hooks': 'error',
     },
   },
-]
+  {
+    files: ['**/*.{js,cjs,mjs}'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  }
+)

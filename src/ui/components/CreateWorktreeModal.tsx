@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Modal, Form, Input, Select, Alert } from 'antd'
-import { normalizeTaskLinkItems } from '../worktreeLogic.js'
-import TaskLinksEditor from './TaskLinksEditor.jsx'
+import { normalizeTaskLinkItems } from '../worktreeLogic.ts'
+import TaskLinksEditor from './TaskLinksEditor.tsx'
 
 // 按任务批量创建 worktree 弹窗：输入任务名 + 可选多个项目 + 需求链接 + 分支名。
 // 选择项目时在 worktreesRoot/{任务名}/{项目名} 下为每个选中项目各建一个 worktree；
@@ -39,6 +39,21 @@ export default function CreateWorktreeModal({
   const projectPaths = Form.useWatch('projectPaths', form)
   // 上一次自动填充的分支名（用于判断用户是否手动修改过分支）
   const prevAutoFilled = useRef('')
+
+  /**
+   * 任务名输入时同步默认分支，避免提交发生在 effect 刷新前导致必填校验失败。
+   * @param {import('react').ChangeEvent<HTMLInputElement>} event - 任务名输入事件
+   */
+  const handleTaskChange = (event) => {
+    // nextTask 存储用户刚输入的任务名。
+    const nextTask = event.target.value
+    // currentBranch 存储当前分支字段值，用于保护用户手工输入。
+    const currentBranch = form.getFieldValue('branch') || ''
+    if (!currentBranch || currentBranch === prevAutoFilled.current) {
+      form.setFieldValue('branch', nextTask)
+      prevAutoFilled.current = nextTask
+    }
+  }
 
   // 打开时重置表单；若有预填任务名（从任务行入口打开），同步填入任务名和分支名
   useEffect(() => {
@@ -115,7 +130,11 @@ export default function CreateWorktreeModal({
           rules={[{ required: true, message: '请输入任务名' }]}
         >
           {/* defaultTask 时任务名已固定（从任务行入口打开），禁用编辑 */}
-          <Input placeholder="PROJ-1234-需求简述" disabled={!!defaultTask} />
+          <Input
+            placeholder="PROJ-1234-需求简述"
+            disabled={!!defaultTask}
+            onChange={handleTaskChange}
+          />
         </Form.Item>
         <Form.Item
           label="选择项目（可多选，将为每个项目各建一个 worktree）"

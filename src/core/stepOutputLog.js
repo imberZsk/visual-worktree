@@ -1,13 +1,13 @@
 // 工作流步骤「实时输出」的纯逻辑：生成路由 key、追加输出块、判断事件归属。
 // 与 Electron/React 解耦，便于 vitest 直接单测；真正的进程 spawn 副作用在 electron/ipcHandlers.js，
-// React 状态更新在 src/ui/App.jsx。
+// React 状态更新在 src/ui/App.tsx。
 //
 // 业务场景：用户点某任务某步骤的「执行」按钮后，主进程流式回推 stdout/stderr 片段，
 // 渲染进程需要把片段累积到「正在展示该步骤输出的弹窗」里，并据「任务名+步骤key」路由到正确的步骤。
 
 // STEP_KEY_SEP 为拼接 taskName 与 stepKey 的分隔符；用 '::' 这种不易出现在任务名/步骤 key 里的串，
 // 避免不同 (任务,步骤) 组合拼出相同 key 而误判
-const STEP_KEY_SEP = '::';
+const STEP_KEY_SEP = '::'
 
 /**
  * 生成「正在执行步骤」的唯一路由 key：用于在 store 标记 loading、在前端累积输出时区分不同任务/步骤。
@@ -16,7 +16,7 @@ const STEP_KEY_SEP = '::';
  * @returns {string} 组合后的唯一 key
  */
 export function stepRunKey(taskName, stepKey) {
-  return `${String(taskName ?? '')}${STEP_KEY_SEP}${String(stepKey ?? '')}`;
+  return `${String(taskName ?? '')}${STEP_KEY_SEP}${String(stepKey ?? '')}`
 }
 
 /**
@@ -28,8 +28,8 @@ export function stepRunKey(taskName, stepKey) {
  */
 export function isStepEventFor(event, taskName, stepKey) {
   // event 缺失时视为不匹配，避免 undefined 误判
-  if (!event) return false;
-  return event.taskName === taskName && event.stepKey === stepKey;
+  if (!event) return false
+  return event.taskName === taskName && event.stepKey === stepKey
 }
 
 /**
@@ -42,7 +42,7 @@ export function isStepEventFor(event, taskName, stepKey) {
  */
 export function appendStepChunk(buffer, chunk, maxChars = 200000) {
   // next 为拼接后的完整文本
-  const next = `${String(buffer ?? '')}${String(chunk ?? '')}`;
+  const next = `${String(buffer ?? '')}${String(chunk ?? '')}`
   // 超过上限时丢弃头部、只留尾部，保证内存与渲染开销有界
-  return next.length > maxChars ? next.slice(next.length - maxChars) : next;
+  return next.length > maxChars ? next.slice(next.length - maxChars) : next
 }

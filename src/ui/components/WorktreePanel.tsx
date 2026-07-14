@@ -37,22 +37,22 @@ import {
   TASK_STATUSES,
   getTaskStatusMeta,
   normalizeTaskLinkItems,
-} from '../worktreeLogic.js'
-import { isStepDone, computeWorkflowProgress } from '../workflowLogic.js'
+} from '../worktreeLogic.ts'
+import { isStepDone, computeWorkflowProgress } from '../workflowLogic.ts'
 import {
   getRunnableWorkflowSteps,
   getWorkflowStepRunStatus,
   getWorkflowTaskRunSummary,
-} from '../workflowRunLogic.js'
+} from '../workflowRunLogic.ts'
 import {
   hasVisibilityKey,
   normalizeTaskTitleBadges,
-} from '../visibilityLogic.js'
+} from '../visibilityLogic.ts'
 import { stepRunKey } from '../../core/stepOutputLog.js'
-import { VscodeIcon } from '../icons.jsx'
-import ClaudeUsageTag from './ClaudeUsageTag.jsx'
-import TaskLinksEditor from './TaskLinksEditor.jsx'
-import SingleLineText from './SingleLineText.jsx'
+import { VscodeIcon } from '../icons.tsx'
+import ClaudeUsageTag from './ClaudeUsageTag.tsx'
+import TaskLinksEditor from './TaskLinksEditor.tsx'
+import SingleLineText from './SingleLineText.tsx'
 
 // 进度徽标用圆点展示的最大步骤数阈值：步骤数 ≤ 此值时用一排圆点直观展示，
 // 超过则改用紧凑的「✓ N/M」文字，避免圆点过多把任务行撑长。
@@ -887,7 +887,7 @@ export default function WorktreePanel({
 
     // 链接配置气泡内容：输入框 + 操作按钮
     const linkPopoverContent = (
-      <Space direction="vertical" size={4}>
+      <Space orientation="vertical" size={4}>
         <TaskLinksEditor
           value={linkInputVal}
           onChange={setLinkInputVal}
@@ -1172,6 +1172,7 @@ export default function WorktreePanel({
             t.worktrees.map((wt) => (
               <div
                 key={wt.path}
+                className="worktree-project-row"
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
@@ -1183,7 +1184,7 @@ export default function WorktreePanel({
                 }}
               >
                 <Space
-                  direction="vertical"
+                  orientation="vertical"
                   size={0}
                   style={{ minWidth: 0, flex: 1 }}
                 >

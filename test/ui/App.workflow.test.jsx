@@ -39,7 +39,7 @@ const mockApi = vi.hoisted(() => ({
   appendTaskHistory: vi.fn(),
 }))
 
-vi.mock('../../src/ui/api.js', () => ({
+vi.mock('../../src/ui/api.ts', () => ({
   api: {
     loadConfig: mockApi.loadConfig,
     scanWorktreesByTask: mockApi.scanWorktreesByTask,
@@ -72,8 +72,8 @@ vi.mock('../../src/ui/api.js', () => ({
   },
 }))
 
-const { default: App } = await import('../../src/ui/App.jsx')
-const { useStore } = await import('../../src/ui/store/useStore.js')
+const { default: App } = await import('../../src/ui/App.tsx')
+const { useStore } = await import('../../src/ui/store/useStore.ts')
 
 // initialState 保存 Zustand 初始状态，用于每个用例前还原。
 const initialState = useStore.getState()
@@ -279,12 +279,10 @@ describe('App worktree 流程执行', () => {
     mockApi.copyText.mockReset().mockResolvedValue(true)
     mockApi.loadTaskHistory.mockReset().mockResolvedValue([])
     mockApi.removeTaskHistory.mockReset().mockResolvedValue(true)
-    mockApi.archiveTaskDocs
-      .mockReset()
-      .mockResolvedValue({
-        success: true,
-        docsPath: '/tmp/.visualWorktree/task-docs/TASK-A',
-      })
+    mockApi.archiveTaskDocs.mockReset().mockResolvedValue({
+      success: true,
+      docsPath: '/tmp/.visualWorktree/task-docs/TASK-A',
+    })
     mockApi.removeWorktree.mockReset().mockResolvedValue({ success: true })
     mockApi.pruneWorktrees.mockReset().mockResolvedValue({ success: true })
     mockApi.removeTaskFolder.mockReset().mockResolvedValue({ success: true })

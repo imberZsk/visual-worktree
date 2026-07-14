@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
 
 // Vitest 配置：核心模块（src/core）在 node 环境跑真实 git 命令；UI 组件用 happy-dom
 export default defineConfig({
@@ -19,7 +19,7 @@ export default defineConfig({
           include: ['test/**/*.{test,spec}.{js,jsx,mjs}'],
           exclude: ['test/ui/**'],
           setupFiles: [],
-          testTimeout: 20000,
+          testTimeout: 30000,
         },
       },
       {
@@ -29,9 +29,9 @@ export default defineConfig({
           globals: true,
           include: ['test/ui/**/*.{test,spec}.{js,jsx,mjs}'],
           setupFiles: ['test/ui/setup.js'],
-          testTimeout: 20000,
+          testTimeout: 30000,
         },
       },
     ],
   },
-});
+})

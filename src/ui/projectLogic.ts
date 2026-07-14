@@ -6,7 +6,7 @@ export const FILTERS = {
   NON_MAIN: 'non-main',
   HAS_CHANGES: 'has-changes',
   CAN_PULL: 'can-pull',
-};
+}
 
 /**
  * 根据筛选条件与搜索词过滤项目列表
@@ -17,26 +17,26 @@ export const FILTERS = {
  */
 export function filterProjects(projects, filter, keyword = '') {
   // kw 为标准化后的关键词
-  const kw = keyword.trim().toLowerCase();
+  const kw = keyword.trim().toLowerCase()
   return projects.filter((p) => {
     // 关键词不匹配则排除
-    if (kw && !p.name.toLowerCase().includes(kw)) return false;
+    if (kw && !p.name.toLowerCase().includes(kw)) return false
     // 按筛选类型判断
     switch (filter) {
       case FILTERS.NON_MAIN:
         // 仅显示非主分支
-        return p.isGitRepo && !p.isMainBranch;
+        return p.isGitRepo && !p.isMainBranch
       case FILTERS.HAS_CHANGES:
         // 仅显示有未提交变更
-        return p.hasUncommittedChanges;
+        return p.hasUncommittedChanges
       case FILTERS.CAN_PULL:
         // 仅显示可拉取更新
-        return p.canPull;
+        return p.canPull
       case FILTERS.ALL:
       default:
-        return true;
+        return true
     }
-  });
+  })
 }
 
 /**
@@ -54,7 +54,7 @@ export function summarize(projects) {
     hasChanges: projects.filter((p) => p.hasUncommittedChanges).length,
     // 可拉取更新数量
     canPull: projects.filter((p) => p.canPull).length,
-  };
+  }
 }
 
 /**
@@ -64,26 +64,35 @@ export function summarize(projects) {
  */
 export function statusTags(p) {
   // tags 累积该项目的所有状态标签
-  const tags = [];
+  const tags = []
   if (!p.isGitRepo) {
-    tags.push({ text: '非 Git 仓库', color: 'default' });
-    return tags;
+    tags.push({ text: '非 Git 仓库', color: 'default' })
+    return tags
   }
   // 主分支 / 非主分支
   if (p.isMainBranch) {
-    tags.push({ text: '主分支', color: 'green' });
+    tags.push({ text: '主分支', color: 'green' })
   } else {
-    tags.push({ text: '非主分支', color: 'orange' });
+    tags.push({ text: '非主分支', color: 'orange' })
   }
   // 未提交变更
-  if (p.hasTrackedChanges || (p.hasUncommittedChanges && !p.hasUntrackedChanges)) tags.push({ text: '有变更', color: 'red' });
+  if (
+    p.hasTrackedChanges ||
+    (p.hasUncommittedChanges && !p.hasUntrackedChanges)
+  )
+    tags.push({ text: '有变更', color: 'red' })
   // 未跟踪文件单独展示，避免只有新增未纳管目录时被误解为已有文件 diff。
-  if (p.hasUntrackedChanges) tags.push({ text: `未跟踪${p.untrackedFilesCount ? ` ${p.untrackedFilesCount}` : ''}`, color: 'volcano' });
+  if (p.hasUntrackedChanges)
+    tags.push({
+      text: `未跟踪${p.untrackedFilesCount ? ` ${p.untrackedFilesCount}` : ''}`,
+      color: 'volcano',
+    })
   // 领先远程（有未推送提交）
-  if (p.hasUnpushedCommits) tags.push({ text: `领先 ${p.ahead}`, color: 'blue' });
+  if (p.hasUnpushedCommits)
+    tags.push({ text: `领先 ${p.ahead}`, color: 'blue' })
   // 可拉取
-  if (p.canPull) tags.push({ text: `落后 ${p.behind}`, color: 'gold' });
+  if (p.canPull) tags.push({ text: `落后 ${p.behind}`, color: 'gold' })
   // 远程未连接：本次刷新 fetch 失败（离线/超时/鉴权），领先落后数基于本地引用，可能不准，提示用户
-  if (p.fetchFailed) tags.push({ text: '远程未连接', color: 'volcano' });
-  return tags;
+  if (p.fetchFailed) tags.push({ text: '远程未连接', color: 'volcano' })
+  return tags
 }

@@ -35,48 +35,48 @@ import {
   ThunderboltOutlined,
   FolderOpenOutlined,
 } from '@ant-design/icons'
-import { useStore } from './store/useStore.js'
-import { filterProjects, summarize, FILTERS } from './projectLogic.js'
+import { useStore } from './store/useStore.ts'
+import { filterProjects, summarize, FILTERS } from './projectLogic.ts'
 import {
   computeActiveKeysAfterCreate,
   STATUS_SORT_ORDER,
   getTaskStatusMeta,
   normalizeTaskLinkItems,
   quotePathForCopy,
-} from './worktreeLogic.js'
+} from './worktreeLogic.ts'
 import {
   normalizeWorkflowSteps,
   DEFAULT_WORKFLOW_STEPS,
-} from './workflowLogic.js'
-import { getRunnableWorkflowSteps } from './workflowRunLogic.js'
+} from './workflowLogic.ts'
+import { getRunnableWorkflowSteps } from './workflowRunLogic.ts'
 import {
   filterVisibleItems,
   hasVisibilityKey,
   normalizeTaskTitleBadges,
   prepareVisibleItems,
-} from './visibilityLogic.js'
+} from './visibilityLogic.ts'
 import {
   computeHistoryPageSize,
   getHistoryGlobalIndex,
   HISTORY_PAGE_SIZE_FALLBACK,
-} from './historyPaginationLogic.js'
+} from './historyPaginationLogic.ts'
 import {
   isStepEventFor,
   appendStepChunk,
   stepRunKey,
 } from '../core/stepOutputLog.js'
-import { api } from './api.js'
-import { withConfirmDefaults } from './modalDefaults.js'
-import ProjectTable from './components/ProjectTable.jsx'
-import ProjectDetail from './components/ProjectDetail.jsx'
-import SettingsModal from './components/SettingsModal.jsx'
-import WorktreePanel from './components/WorktreePanel.jsx'
-import CreateWorktreeModal from './components/CreateWorktreeModal.jsx'
-import CleanupSuggestionsModal from './components/CleanupSuggestionsModal.jsx'
-import KanbanView from './components/KanbanView.jsx'
-import WorkflowTabView from './components/WorkflowTabView.jsx'
-import { VscodeIcon } from './icons.jsx'
-import SingleLineText from './components/SingleLineText.jsx'
+import { api } from './api.ts'
+import { withConfirmDefaults } from './modalDefaults.ts'
+import ProjectTable from './components/ProjectTable.tsx'
+import ProjectDetail from './components/ProjectDetail.tsx'
+import SettingsModal from './components/SettingsModal.tsx'
+import WorktreePanel from './components/WorktreePanel.tsx'
+import CreateWorktreeModal from './components/CreateWorktreeModal.tsx'
+import CleanupSuggestionsModal from './components/CleanupSuggestionsModal.tsx'
+import KanbanView from './components/KanbanView.tsx'
+import WorkflowTabView from './components/WorkflowTabView.tsx'
+import { VscodeIcon } from './icons.tsx'
+import SingleLineText from './components/SingleLineText.tsx'
 
 const { Header, Content } = Layout
 // 响应式断点 hook：用于根据屏幕宽度调整布局
@@ -626,7 +626,7 @@ function EnvHealthResultContent({ result, token }) {
     // projectListMinHeight 存储分页列表的最小高度，让奇数项目的最后一页仍保持稳定的内容区域。
     const projectListMinHeight = showProjectPagination ? 240 : undefined
     return (
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={12} style={{ width: '100%' }}>
         <div
           style={{
             display: 'flex',
@@ -701,7 +701,11 @@ function EnvHealthResultContent({ result, token }) {
                   </Space>
                 }
               >
-                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={8}
+                  style={{ width: '100%' }}
+                >
                   {reasons.length > 0 && (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       识别依据：{reasons.join('、')}
@@ -763,7 +767,7 @@ function EnvHealthResultContent({ result, token }) {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       {['deps', 'ports', 'services', 'git'].map((key) => {
         // item 为旧结构下该项检查结果；结果异常缺失时兜底，避免 item.status 取值崩溃
         const item = result[key] || {
@@ -774,7 +778,7 @@ function EnvHealthResultContent({ result, token }) {
         if (shouldHideEnvCheckItem(key, item)) return null
         return (
           <Card key={key} size="small" title={ENV_CHECK_LABELS[key]}>
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={8} style={{ width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Tag color={getCheckTagColor(item.status)}>
                   {String(item.status || '').toUpperCase()}
@@ -2940,7 +2944,7 @@ export default function App() {
           {envCheckResult ? (
             <EnvHealthResultContent result={envCheckResult} token={token} />
           ) : envCheckLoading ? (
-            <Space direction="vertical" align="center" size={8}>
+            <Space orientation="vertical" align="center" size={8}>
               <Spin />
               <Typography.Text type="secondary">检查中...</Typography.Text>
             </Space>
@@ -2958,7 +2962,7 @@ export default function App() {
                 zIndex: 1,
               }}
             >
-              <Space direction="vertical" align="center" size={8}>
+              <Space orientation="vertical" align="center" size={8}>
                 <Spin />
                 <Typography.Text type="secondary">检查中...</Typography.Text>
               </Space>

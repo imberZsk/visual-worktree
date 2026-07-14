@@ -1,20 +1,32 @@
-import { create } from 'zustand';
-import { api } from '../api.js';
-import { loadTaskStatusMap, normalizeTaskLinkMap, setTaskLinksInMap, setTaskStatusInMap } from '../worktreeLogic.js';
-import { loadTaskWorkflowMap, setStepDoneInMap } from '../workflowLogic.js';
-import { PROJECT_VISIBILITY_STORAGE_KEY, TASK_VISIBILITY_STORAGE_KEY, hasVisibilityKey, loadVisibilityPrefsFromStorage, normalizeVisibilityPrefs, setVisibilityKey } from '../visibilityLogic.js';
-import { stepRunKey } from '../../core/stepOutputLog.js';
+import { create } from 'zustand'
+import { api } from '../api.ts'
+import {
+  loadTaskStatusMap,
+  normalizeTaskLinkMap,
+  setTaskLinksInMap,
+  setTaskStatusInMap,
+} from '../worktreeLogic.ts'
+import { loadTaskWorkflowMap, setStepDoneInMap } from '../workflowLogic.ts'
+import {
+  PROJECT_VISIBILITY_STORAGE_KEY,
+  TASK_VISIBILITY_STORAGE_KEY,
+  hasVisibilityKey,
+  loadVisibilityPrefsFromStorage,
+  normalizeVisibilityPrefs,
+  setVisibilityKey,
+} from '../visibilityLogic.ts'
+import { stepRunKey } from '../../core/stepOutputLog.js'
 
 // 全局状态管理（Zustand）：项目列表、筛选条件、加载与批量进度状态。
 
 // 从 localStorage 读取主题偏好，默认 dark（暗色模式）
 const savedTheme = (() => {
   try {
-    return localStorage.getItem('vw-theme') || 'dark';
+    return localStorage.getItem('vw-theme') || 'dark'
   } catch (e) {
-    return 'dark';
+    return 'dark'
   }
-})();
+})()
 
 // 应用 store
 export const useStore = create((set, get) => ({
@@ -45,7 +57,9 @@ export const useStore = create((set, get) => ({
   // 任务隐藏/置顶偏好，持久化到 ~/.visualWorktree/task-visibility.json；Electron 文件加载前先用 localStorage 兜底首屏
   taskVisibility: loadVisibilityPrefsFromStorage(TASK_VISIBILITY_STORAGE_KEY),
   // 项目隐藏/置顶偏好，持久化到 ~/.visualWorktree/project-visibility.json；key 使用项目绝对路径
-  projectVisibility: loadVisibilityPrefsFromStorage(PROJECT_VISIBILITY_STORAGE_KEY),
+  projectVisibility: loadVisibilityPrefsFromStorage(
+    PROJECT_VISIBILITY_STORAGE_KEY
+  ),
   // 任务卡点备注映射「任务名 → 卡点文本」（持久化到 ~/.visualWorktree/task-blockers.json）；启动后由 loadTaskBlockers 异步填充
   taskBlockerMap: {},
   // 任务工作流勾选映射「任务名 → 已勾选步骤 key 数组」（需求流程进度，持久化到 ~/.visualWorktree/task-workflow.json）；
@@ -64,8 +78,8 @@ export const useStore = create((set, get) => ({
    */
   startRunningStep: (taskName, stepKey) => {
     // key 为该步骤的唯一路由 key
-    const key = stepRunKey(taskName, stepKey);
-    set({ runningSteps: { ...get().runningSteps, [key]: true } });
+    const key = stepRunKey(taskName, stepKey)
+    set({ runningSteps: { ...get().runningSteps, [key]: true } })
   },
 
   /**
@@ -75,11 +89,11 @@ export const useStore = create((set, get) => ({
    */
   finishRunningStep: (taskName, stepKey) => {
     // key 为该步骤的唯一路由 key
-    const key = stepRunKey(taskName, stepKey);
+    const key = stepRunKey(taskName, stepKey)
     // next 为移除该 key 后的新映射（不可变更新）
-    const next = { ...get().runningSteps };
-    delete next[key];
-    set({ runningSteps: next });
+    const next = { ...get().runningSteps }
+    delete next[key]
+    set({ runningSteps: next })
   },
 
   /**
@@ -89,10 +103,10 @@ export const useStore = create((set, get) => ({
    */
   setTaskStatus: (taskName, statusKey) => {
     // next 为更新后的状态映射（纯函数返回新对象，保证不可变更新）
-    const next = setTaskStatusInMap(get().taskStatusMap, taskName, statusKey);
+    const next = setTaskStatusInMap(get().taskStatusMap, taskName, statusKey)
     // fire-and-forget 持久化到文件（不等待，避免阻塞 UI 更新）
-    api.saveTaskStatus(next);
-    set({ taskStatusMap: next });
+    api.saveTaskStatus(next)
+    set({ taskStatusMap: next })
   },
 
   /**
@@ -100,8 +114,8 @@ export const useStore = create((set, get) => ({
    */
   loadTaskStatus: async () => {
     try {
-      const map = await api.loadTaskStatus();
-      set({ taskStatusMap: map || {} });
+      const map = await api.loadTaskStatus()
+      set({ taskStatusMap: map || {} })
     } catch (e) {
       // 加载失败时保持初始值（localStorage 已预填）
     }
@@ -114,9 +128,9 @@ export const useStore = create((set, get) => ({
    */
   setTaskLink: (taskName, links) => {
     // next 为更新后的链接映射；纯函数内兼容旧版字符串并过滤空白/重复项。
-    const next = setTaskLinksInMap(get().taskLinkMap, taskName, links);
-    api.saveTaskLinks(next);
-    set({ taskLinkMap: next });
+    const next = setTaskLinksInMap(get().taskLinkMap, taskName, links)
+    api.saveTaskLinks(next)
+    set({ taskLinkMap: next })
   },
 
   /**
@@ -124,8 +138,8 @@ export const useStore = create((set, get) => ({
    */
   loadTaskLinks: async () => {
     try {
-      const map = await api.loadTaskLinks();
-      set({ taskLinkMap: normalizeTaskLinkMap(map) });
+      const map = await api.loadTaskLinks()
+      set({ taskLinkMap: normalizeTaskLinkMap(map) })
     } catch (e) {}
   },
 
@@ -135,8 +149,8 @@ export const useStore = create((set, get) => ({
   loadTaskVisibility: async () => {
     try {
       // prefs 存储主进程读取的任务可见性偏好。
-      const prefs = await api.loadTaskVisibility();
-      set({ taskVisibility: normalizeVisibilityPrefs(prefs) });
+      const prefs = await api.loadTaskVisibility()
+      set({ taskVisibility: normalizeVisibilityPrefs(prefs) })
     } catch (e) {}
   },
 
@@ -147,9 +161,14 @@ export const useStore = create((set, get) => ({
    */
   setTaskHidden: (taskName, hidden) => {
     // next 存储更新后的任务可见性偏好。
-    const next = setVisibilityKey(get().taskVisibility, 'hidden', taskName, hidden);
-    api.saveTaskVisibility(next);
-    set({ taskVisibility: next });
+    const next = setVisibilityKey(
+      get().taskVisibility,
+      'hidden',
+      taskName,
+      hidden
+    )
+    api.saveTaskVisibility(next)
+    set({ taskVisibility: next })
   },
 
   /**
@@ -159,9 +178,14 @@ export const useStore = create((set, get) => ({
    */
   setTaskPinned: (taskName, pinned) => {
     // next 存储更新后的任务可见性偏好。
-    const next = setVisibilityKey(get().taskVisibility, 'pinned', taskName, pinned);
-    api.saveTaskVisibility(next);
-    set({ taskVisibility: next });
+    const next = setVisibilityKey(
+      get().taskVisibility,
+      'pinned',
+      taskName,
+      pinned
+    )
+    api.saveTaskVisibility(next)
+    set({ taskVisibility: next })
   },
 
   /**
@@ -170,8 +194,8 @@ export const useStore = create((set, get) => ({
   loadProjectVisibility: async () => {
     try {
       // prefs 存储主进程读取的项目可见性偏好。
-      const prefs = await api.loadProjectVisibility();
-      set({ projectVisibility: normalizeVisibilityPrefs(prefs) });
+      const prefs = await api.loadProjectVisibility()
+      set({ projectVisibility: normalizeVisibilityPrefs(prefs) })
     } catch (e) {}
   },
 
@@ -182,13 +206,18 @@ export const useStore = create((set, get) => ({
    */
   setProjectHidden: (projectPath, hidden) => {
     // next 存储更新后的项目可见性偏好。
-    const next = setVisibilityKey(get().projectVisibility, 'hidden', projectPath, hidden);
+    const next = setVisibilityKey(
+      get().projectVisibility,
+      'hidden',
+      projectPath,
+      hidden
+    )
     // selectedPaths 存储隐藏后仍可保留的勾选路径；被隐藏的项目要从批量选择中剔除。
     const selectedPaths = hidden
       ? get().selectedPaths.filter((path) => path !== projectPath)
-      : get().selectedPaths;
-    api.saveProjectVisibility(next);
-    set({ projectVisibility: next, selectedPaths });
+      : get().selectedPaths
+    api.saveProjectVisibility(next)
+    set({ projectVisibility: next, selectedPaths })
   },
 
   /**
@@ -198,9 +227,14 @@ export const useStore = create((set, get) => ({
    */
   setProjectPinned: (projectPath, pinned) => {
     // next 存储更新后的项目可见性偏好。
-    const next = setVisibilityKey(get().projectVisibility, 'pinned', projectPath, pinned);
-    api.saveProjectVisibility(next);
-    set({ projectVisibility: next });
+    const next = setVisibilityKey(
+      get().projectVisibility,
+      'pinned',
+      projectPath,
+      pinned
+    )
+    api.saveProjectVisibility(next)
+    set({ projectVisibility: next })
   },
 
   /**
@@ -210,13 +244,13 @@ export const useStore = create((set, get) => ({
    */
   setTaskBlocker: (taskName, text) => {
     // next 为更新后的卡点映射
-    const next = { ...get().taskBlockerMap };
+    const next = { ...get().taskBlockerMap }
     // 去首尾空白后非空才存，空则删除该键避免存储残留
-    const trimmed = (text || '').trim();
-    if (trimmed) next[taskName] = trimmed;
-    else delete next[taskName];
-    api.saveTaskBlockers(next);
-    set({ taskBlockerMap: next });
+    const trimmed = (text || '').trim()
+    if (trimmed) next[taskName] = trimmed
+    else delete next[taskName]
+    api.saveTaskBlockers(next)
+    set({ taskBlockerMap: next })
   },
 
   /**
@@ -224,8 +258,8 @@ export const useStore = create((set, get) => ({
    */
   loadTaskBlockers: async () => {
     try {
-      const map = await api.loadTaskBlockers();
-      set({ taskBlockerMap: map || {} });
+      const map = await api.loadTaskBlockers()
+      set({ taskBlockerMap: map || {} })
     } catch (e) {}
   },
 
@@ -237,10 +271,15 @@ export const useStore = create((set, get) => ({
    */
   toggleWorkflowStep: (taskName, stepKey, done) => {
     // next 为更新后的工作流映射（纯函数返回新对象，保证不可变更新）
-    const next = setStepDoneInMap(get().taskWorkflowMap, taskName, stepKey, done);
+    const next = setStepDoneInMap(
+      get().taskWorkflowMap,
+      taskName,
+      stepKey,
+      done
+    )
     // fire-and-forget 持久化到文件（不等待，避免阻塞 UI 更新）
-    api.saveTaskWorkflow(next);
-    set({ taskWorkflowMap: next });
+    api.saveTaskWorkflow(next)
+    set({ taskWorkflowMap: next })
   },
 
   /**
@@ -248,8 +287,8 @@ export const useStore = create((set, get) => ({
    */
   loadTaskWorkflow: async () => {
     try {
-      const map = await api.loadTaskWorkflow();
-      set({ taskWorkflowMap: map || {} });
+      const map = await api.loadTaskWorkflow()
+      set({ taskWorkflowMap: map || {} })
     } catch (e) {
       // 加载失败时保持初始值（localStorage 已预填）
     }
@@ -261,9 +300,10 @@ export const useStore = create((set, get) => ({
    */
   setTaskEnvHealthMap: (map) => {
     // next 为即将写入 store 和磁盘的环境检查缓存映射
-    const next = map && typeof map === 'object' && !Array.isArray(map) ? map : {};
-    api.saveTaskEnvHealth(next);
-    set({ taskEnvHealthMap: next });
+    const next =
+      map && typeof map === 'object' && !Array.isArray(map) ? map : {}
+    api.saveTaskEnvHealth(next)
+    set({ taskEnvHealthMap: next })
   },
 
   /**
@@ -271,8 +311,8 @@ export const useStore = create((set, get) => ({
    */
   loadTaskEnvHealth: async () => {
     try {
-      const map = await api.loadTaskEnvHealth();
-      set({ taskEnvHealthMap: map || {} });
+      const map = await api.loadTaskEnvHealth()
+      set({ taskEnvHealthMap: map || {} })
     } catch (e) {
       // 加载失败时保持空缓存，不影响环境检查实时执行
     }
@@ -283,13 +323,13 @@ export const useStore = create((set, get) => ({
    */
   toggleTheme: () => {
     // next 为切换后的主题
-    const next = get().theme === 'dark' ? 'light' : 'dark';
+    const next = get().theme === 'dark' ? 'light' : 'dark'
     try {
-      localStorage.setItem('vw-theme', next);
+      localStorage.setItem('vw-theme', next)
     } catch (e) {
       // localStorage 不可用时忽略持久化
     }
-    set({ theme: next });
+    set({ theme: next })
   },
 
   /**
@@ -316,19 +356,21 @@ export const useStore = create((set, get) => ({
    * @returns {Promise<{fetchFailedNames:string[]}>} 扫描结果摘要；fetchFailedNames 为本次因连不上远程而未能更新的项目名列表
    */
   scan: async (opts = {}) => {
-    set({ loading: true });
+    set({ loading: true })
     try {
       // projects 为扫描得到的项目状态数组
-      const projects = await api.scanProjects(opts);
-      set({ projects, loading: false });
+      const projects = await api.scanProjects(opts)
+      set({ projects, loading: false })
       // fetchFailedNames 收集本次尝试 fetch 但失败（远程不可达/超时）的项目名，供 UI 友好提示
-      const fetchFailedNames = projects.filter((p) => p.fetchFailed).map((p) => p.name);
-      return { fetchFailedNames };
+      const fetchFailedNames = projects
+        .filter((p) => p.fetchFailed)
+        .map((p) => p.name)
+      return { fetchFailedNames }
     } catch (e) {
-      console.error('扫描失败', e);
-      set({ loading: false });
+      console.error('扫描失败', e)
+      set({ loading: false })
       // 整体扫描异常（如 IPC 失败）时返回空摘要，避免调用方读取 undefined
-      return { fetchFailedNames: [] };
+      return { fetchFailedNames: [] }
     }
   },
 
@@ -337,23 +379,23 @@ export const useStore = create((set, get) => ({
    */
   loadConfig: async () => {
     // config 存储主进程从 ~/.visualWorktree/config.json 读取到的最新应用配置。
-    const config = await api.loadConfig();
-    set({ config });
-    return config;
+    const config = await api.loadConfig()
+    set({ config })
+    return config
   },
 
   /**
    * 扫描按任务分组的 worktree 并更新 store
    */
   scanWorktrees: async () => {
-    set({ worktreeLoading: true });
+    set({ worktreeLoading: true })
     try {
       // tasks 为按任务分组的 worktree 列表
-      const tasks = await api.scanWorktreesByTask({ status: true });
-      set({ worktreeTasks: tasks, worktreeLoading: false });
+      const tasks = await api.scanWorktreesByTask({ status: true })
+      set({ worktreeTasks: tasks, worktreeLoading: false })
     } catch (e) {
-      console.error('扫描 worktree 失败', e);
-      set({ worktreeLoading: false });
+      console.error('扫描 worktree 失败', e)
+      set({ worktreeLoading: false })
     }
   },
 
@@ -365,21 +407,23 @@ export const useStore = create((set, get) => ({
    */
   runBatch: async (operation, args) => {
     // paths 为当前选中的且未隐藏的项目路径；隐藏项目不参与批量操作。
-    const paths = get().selectedPaths.filter((path) => !hasVisibilityKey(get().projectVisibility, 'hidden', path));
-    if (!paths.length) return [];
-    set({ batchProgress: { done: 0, total: paths.length, current: '' } });
+    const paths = get().selectedPaths.filter(
+      (path) => !hasVisibilityKey(get().projectVisibility, 'hidden', path)
+    )
+    if (!paths.length) return []
+    set({ batchProgress: { done: 0, total: paths.length, current: '' } })
     // 订阅主进程推送的进度事件
-    const unsub = api.onBatchProgress((p) => set({ batchProgress: p }));
+    const unsub = api.onBatchProgress((p) => set({ batchProgress: p }))
     try {
-      const results = await api.batchOperate(paths, operation, args);
+      const results = await api.batchOperate(paths, operation, args)
       // 批量拉取完成后清空项目 Tab 勾选，避免下一次误操作同一批项目。
-      if (operation === 'pull') set({ selectedPaths: [] });
-      return results;
+      if (operation === 'pull') set({ selectedPaths: [] })
+      return results
     } finally {
-      unsub?.();
-      set({ batchProgress: null });
+      unsub?.()
+      set({ batchProgress: null })
       // 操作后重新扫描以刷新状态
-      get().scan();
+      get().scan()
     }
   },
-}));
+}))
