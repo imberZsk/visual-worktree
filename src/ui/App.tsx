@@ -853,6 +853,12 @@ function HistorySingleLineText({
 
 // 主应用组件：组合工具栏、统计卡片、项目表格、详情抽屉、设置弹窗与批量操作。
 export default function App() {
+  // updateVersion 存储检测到的新版本号。
+  const [updateVersion, setUpdateVersion] = useState(null)
+  // updateDownloading 标记安装包是否正在下载。
+  const [updateDownloading, setUpdateDownloading] = useState(false)
+  // updateDownloaded 标记安装包是否已完整下载。
+  const [updateDownloaded, setUpdateDownloaded] = useState(false)
   // 从全局 store 取状态与动作
   const {
     projects,
@@ -908,6 +914,43 @@ export default function App() {
   const { message, modal } = AntApp.useApp()
   // 取当前主题 token，用于替换写死的颜色，使 Header 等区域跟随明暗主题
   const { token } = theme.useToken()
+  useEffect(() => {
+    // mounted 标记组件是否仍挂载。
+    let mounted = true
+    // checkUpdate 存储 Electron preload 的更新检查方法；测试替身或旧版 preload 可能尚未提供。
+    const checkUpdate = api.checkAppUpdate
+    if (typeof checkUpdate !== 'function') return undefined
+    checkUpdate()
+      .then((result) => {
+        if (mounted && result.available && result.version) {
+          setUpdateVersion(result.version)
+          setUpdateDownloaded(Boolean(result.downloaded))
+        }
+      })
+      .catch(() => undefined)
+    /** 清理异步检查副作用。 */
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  /** 下载或安装应用更新，下载完成前保持 loading。 */
+  const handleAppUpdate = async () => {
+    if (updateDownloaded) {
+      await api.installAppUpdate()
+      return
+    }
+    setUpdateDownloading(true)
+    try {
+      await api.downloadAppUpdate()
+      setUpdateDownloaded(true)
+      message.success('更新已下载，可以安装')
+    } catch (error) {
+      message.error(error?.message || '更新下载失败')
+    } finally {
+      setUpdateDownloading(false)
+    }
+  }
   // detailProject 当前查看详情的项目
   const [detailProject, setDetailProject] = useState(null)
   // settingsOpen 设置弹窗开关
@@ -2386,6 +2429,18 @@ export default function App() {
           </Space>
         </Space>
         <Space>
+          {updateVersion && (
+            <Tooltip title={`新版本 v${updateVersion}`}>
+              <Button
+                size="small"
+                type="primary"
+                loading={updateDownloading}
+                onClick={() => handleAppUpdate()}
+              >
+                {updateDownloaded ? '安装并重启' : '下载更新'}
+              </Button>
+            </Tooltip>
+          )}
           {/* 创建 worktree：worktree 和看板视图显示 */}
           {(activeView === 'worktrees' || activeView === 'kanban') && (
             <Tooltip title="按任务创建 Worktree">

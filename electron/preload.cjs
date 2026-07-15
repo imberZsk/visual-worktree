@@ -2,7 +2,7 @@
 // 渲染进程通过 window.api.xxx 调用，不直接接触 ipcRenderer，保证安全。
 // 注意：sandbox 默认开启的 preload 中 require('electron') 不暴露 clipboard 等模块，
 // 故剪贴板写入改走主进程 IPC（见 COPY_TEXT），不在此直接 require clipboard。
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron')
 
 // IPC 通道常量（与 ipcChannels.js 保持一致；preload 为 cjs 故内联）
 const IPC = {
@@ -61,36 +61,51 @@ const IPC = {
   SAVE_IDEA_WORKFLOWS: 'save-idea-workflows',
   LOAD_IDEA_RUNS: 'load-idea-runs',
   APPEND_IDEA_RUN: 'append-idea-run',
-};
+}
 
 // 暴露给渲染进程的 API 对象
 contextBridge.exposeInMainWorld('api', {
+  // checkAppUpdate 检查 GitHub Release 新版本。
+  checkAppUpdate: () => ipcRenderer.invoke('app-update:check'),
+  // downloadAppUpdate 下载完整安装包。
+  downloadAppUpdate: () => ipcRenderer.invoke('app-update:download'),
+  // installAppUpdate 安装已下载版本并重启。
+  installAppUpdate: () => ipcRenderer.invoke('app-update:install'),
   // 当前运行平台（'darwin'|'win32'|'linux'）：供 UI 按平台切换终端应用选项等平台相关展示
   platform: process.platform,
   // 扫描所有项目
   scanProjects: (opts) => ipcRenderer.invoke(IPC.SCAN_PROJECTS, opts),
   // 获取单个项目状态
-  getProjectStatus: (path, opts) => ipcRenderer.invoke(IPC.GET_PROJECT_STATUS, path, opts),
+  getProjectStatus: (path, opts) =>
+    ipcRenderer.invoke(IPC.GET_PROJECT_STATUS, path, opts),
   // 切换分支
-  checkoutBranch: (path, branch) => ipcRenderer.invoke(IPC.CHECKOUT_BRANCH, path, branch),
+  checkoutBranch: (path, branch) =>
+    ipcRenderer.invoke(IPC.CHECKOUT_BRANCH, path, branch),
   // 拉取更新
   pullUpdates: (path) => ipcRenderer.invoke(IPC.PULL_UPDATES, path),
   // 提交全部变更并推送当前分支
-  syncUpdates: (path, message) => ipcRenderer.invoke(IPC.SYNC_UPDATES, path, message),
+  syncUpdates: (path, message) =>
+    ipcRenderer.invoke(IPC.SYNC_UPDATES, path, message),
   // 批量操作
-  batchOperate: (paths, op, args) => ipcRenderer.invoke(IPC.BATCH_OPERATE, paths, op, args),
+  batchOperate: (paths, op, args) =>
+    ipcRenderer.invoke(IPC.BATCH_OPERATE, paths, op, args),
   // 获取 worktree 列表
   getWorktrees: (path) => ipcRenderer.invoke(IPC.GET_WORKTREES, path),
   // 按任务分组扫描 worktree
-  scanWorktreesByTask: (opts) => ipcRenderer.invoke(IPC.SCAN_WORKTREES_BY_TASK, opts),
+  scanWorktreesByTask: (opts) =>
+    ipcRenderer.invoke(IPC.SCAN_WORKTREES_BY_TASK, opts),
   // 创建 worktree
-  addWorktree: (projectPath, targetPath, branch, opts) => ipcRenderer.invoke(IPC.ADD_WORKTREE, projectPath, targetPath, branch, opts),
+  addWorktree: (projectPath, targetPath, branch, opts) =>
+    ipcRenderer.invoke(IPC.ADD_WORKTREE, projectPath, targetPath, branch, opts),
   // 删除 worktree
-  removeWorktree: (projectPath, worktreePath, opts) => ipcRenderer.invoke(IPC.REMOVE_WORKTREE, projectPath, worktreePath, opts),
+  removeWorktree: (projectPath, worktreePath, opts) =>
+    ipcRenderer.invoke(IPC.REMOVE_WORKTREE, projectPath, worktreePath, opts),
   // 清理失效 worktree
-  pruneWorktrees: (projectPath) => ipcRenderer.invoke(IPC.PRUNE_WORKTREES, projectPath),
+  pruneWorktrees: (projectPath) =>
+    ipcRenderer.invoke(IPC.PRUNE_WORKTREES, projectPath),
   // 按任务批量创建 worktree
-  batchAddWorktree: (params) => ipcRenderer.invoke(IPC.BATCH_ADD_WORKTREE, params),
+  batchAddWorktree: (params) =>
+    ipcRenderer.invoke(IPC.BATCH_ADD_WORKTREE, params),
   // 读取配置
   loadConfig: () => ipcRenderer.invoke(IPC.LOAD_CONFIG),
   // 保存配置
@@ -106,18 +121,22 @@ contextBridge.exposeInMainWorld('api', {
   // 在终端中打开（优先 Ghostty，否则系统 Terminal）
   openInTerminal: (path) => ipcRenderer.invoke(IPC.OPEN_IN_TERMINAL, path),
   // 打开系统目录选择器：payload={defaultPath?}，返回 {canceled,path?}
-  selectDirectory: (payload) => ipcRenderer.invoke(IPC.SELECT_DIRECTORY, payload),
+  selectDirectory: (payload) =>
+    ipcRenderer.invoke(IPC.SELECT_DIRECTORY, payload),
   // 打开系统文件选择器：payload={defaultPath?}，返回 {canceled,path?}
   selectFile: (payload) => ipcRenderer.invoke(IPC.SELECT_FILE, payload),
   // 执行工作流步骤的 shell 命令：payload={command,cwd,task,branch}，在 cwd 下运行，返回 {success,code,stdout,stderr,error}
-  runWorkflowStep: (payload) => ipcRenderer.invoke(IPC.RUN_WORKFLOW_STEP, payload),
+  runWorkflowStep: (payload) =>
+    ipcRenderer.invoke(IPC.RUN_WORKFLOW_STEP, payload),
   // 复制文本到系统剪贴板：走主进程 clipboard（沙箱 preload 不暴露 clipboard 模块），
   // 返回 Promise<boolean> 表示是否成功
   copyText: (text) => ipcRenderer.invoke(IPC.COPY_TEXT, text),
   // 删除任务文件夹（删除 worktreesRoot 下对应任务目录的整个文件夹）
-  removeTaskFolder: (folderPath) => ipcRenderer.invoke(IPC.REMOVE_TASK_FOLDER, folderPath),
+  removeTaskFolder: (folderPath) =>
+    ipcRenderer.invoke(IPC.REMOVE_TASK_FOLDER, folderPath),
   // 归档任务 docs 工作记录到 ~/.visualWorktree/task-docs/{任务名}
-  archiveTaskDocs: (taskDir, taskName) => ipcRenderer.invoke(IPC.ARCHIVE_TASK_DOCS, taskDir, taskName),
+  archiveTaskDocs: (taskDir, taskName) =>
+    ipcRenderer.invoke(IPC.ARCHIVE_TASK_DOCS, taskDir, taskName),
   // 读取任务状态映射（~/.visualWorktree/task-status.json）
   loadTaskStatus: () => ipcRenderer.invoke(IPC.LOAD_TASK_STATUS),
   // 保存任务状态映射（~/.visualWorktree/task-status.json）
@@ -129,35 +148,44 @@ contextBridge.exposeInMainWorld('api', {
   // 读取任务隐藏/置顶偏好（~/.visualWorktree/task-visibility.json）
   loadTaskVisibility: () => ipcRenderer.invoke(IPC.LOAD_TASK_VISIBILITY),
   // 保存任务隐藏/置顶偏好（~/.visualWorktree/task-visibility.json）
-  saveTaskVisibility: (prefs) => ipcRenderer.invoke(IPC.SAVE_TASK_VISIBILITY, prefs),
+  saveTaskVisibility: (prefs) =>
+    ipcRenderer.invoke(IPC.SAVE_TASK_VISIBILITY, prefs),
   // 读取项目隐藏/置顶偏好（~/.visualWorktree/project-visibility.json）
   loadProjectVisibility: () => ipcRenderer.invoke(IPC.LOAD_PROJECT_VISIBILITY),
   // 保存项目隐藏/置顶偏好（~/.visualWorktree/project-visibility.json）
-  saveProjectVisibility: (prefs) => ipcRenderer.invoke(IPC.SAVE_PROJECT_VISIBILITY, prefs),
+  saveProjectVisibility: (prefs) =>
+    ipcRenderer.invoke(IPC.SAVE_PROJECT_VISIBILITY, prefs),
   // 读取任务工作流勾选映射（~/.visualWorktree/task-workflow.json）
   loadTaskWorkflow: () => ipcRenderer.invoke(IPC.LOAD_TASK_WORKFLOW),
   // 保存任务工作流勾选映射（~/.visualWorktree/task-workflow.json）
   saveTaskWorkflow: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_WORKFLOW, map),
   // 读取任务工作流步骤最近一次执行输出缓存（~/.visualWorktree/task-workflow-output.json）
-  loadTaskWorkflowOutput: () => ipcRenderer.invoke(IPC.LOAD_TASK_WORKFLOW_OUTPUT),
+  loadTaskWorkflowOutput: () =>
+    ipcRenderer.invoke(IPC.LOAD_TASK_WORKFLOW_OUTPUT),
   // 保存任务工作流步骤最近一次执行输出缓存（~/.visualWorktree/task-workflow-output.json）
-  saveTaskWorkflowOutput: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_WORKFLOW_OUTPUT, map),
+  saveTaskWorkflowOutput: (map) =>
+    ipcRenderer.invoke(IPC.SAVE_TASK_WORKFLOW_OUTPUT, map),
   // 在系统默认浏览器中打开 URL
   openExternalUrl: (url) => ipcRenderer.invoke(IPC.OPEN_EXTERNAL_URL, url),
   // 读取已删除任务的历史记录
   loadTaskHistory: () => ipcRenderer.invoke(IPC.LOAD_TASK_HISTORY),
   // 追加一条已删除任务记录（{ task, link }）
-  appendTaskHistory: (entry) => ipcRenderer.invoke(IPC.APPEND_TASK_HISTORY, entry),
+  appendTaskHistory: (entry) =>
+    ipcRenderer.invoke(IPC.APPEND_TASK_HISTORY, entry),
   // 按下标删除一条历史记录
   removeTaskHistory: (idx) => ipcRenderer.invoke(IPC.REMOVE_TASK_HISTORY, idx),
   // 获取任务关联的 Claude Code 会话列表及 token 用量
-  getClaudeSessionsByTask: (taskName) => ipcRenderer.invoke(IPC.GET_CLAUDE_SESSIONS_BY_TASK, taskName),
+  getClaudeSessionsByTask: (taskName) =>
+    ipcRenderer.invoke(IPC.GET_CLAUDE_SESSIONS_BY_TASK, taskName),
   // 获取所有任务的 Claude Code 用量汇总
-  getClaudeTasksSummary: (taskNames) => ipcRenderer.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, taskNames),
+  getClaudeTasksSummary: (taskNames) =>
+    ipcRenderer.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, taskNames),
   // 获取可安全删除的 worktree 列表
-  getSafeToRemoveWorktrees: () => ipcRenderer.invoke(IPC.GET_SAFE_TO_REMOVE_WORKTREES),
+  getSafeToRemoveWorktrees: () =>
+    ipcRenderer.invoke(IPC.GET_SAFE_TO_REMOVE_WORKTREES),
   // 对任务目录执行环境健康检查（依赖/端口/服务/Git）
-  checkEnvHealth: (taskDir) => ipcRenderer.invoke(IPC.CHECK_ENV_HEALTH, taskDir),
+  checkEnvHealth: (taskDir) =>
+    ipcRenderer.invoke(IPC.CHECK_ENV_HEALTH, taskDir),
   // 读取任务环境检查缓存（~/.visualWorktree/task-env-health.json）
   loadTaskEnvHealth: () => ipcRenderer.invoke(IPC.LOAD_TASK_ENV_HEALTH),
   // 保存任务环境检查缓存（~/.visualWorktree/task-env-health.json）
@@ -169,7 +197,8 @@ contextBridge.exposeInMainWorld('api', {
   // 读取想法工作流定义列表（~/.visualWorktree/idea-workflows.json）
   loadIdeaWorkflows: () => ipcRenderer.invoke(IPC.LOAD_IDEA_WORKFLOWS),
   // 保存想法工作流定义列表（~/.visualWorktree/idea-workflows.json）
-  saveIdeaWorkflows: (defs) => ipcRenderer.invoke(IPC.SAVE_IDEA_WORKFLOWS, defs),
+  saveIdeaWorkflows: (defs) =>
+    ipcRenderer.invoke(IPC.SAVE_IDEA_WORKFLOWS, defs),
   // 读取想法工作流运行历史（~/.visualWorktree/idea-runs.json，最近50条）
   loadIdeaRuns: () => ipcRenderer.invoke(IPC.LOAD_IDEA_RUNS),
   // 追加一条想法工作流运行记录（插入头部，超50条截断）
@@ -177,16 +206,16 @@ contextBridge.exposeInMainWorld('api', {
   // 订阅批量进度事件，返回取消订阅函数
   onBatchProgress: (callback) => {
     // listener 包装回调，剥离 event 参数
-    const listener = (_e, payload) => callback(payload);
-    ipcRenderer.on(IPC.BATCH_PROGRESS, listener);
-    return () => ipcRenderer.removeListener(IPC.BATCH_PROGRESS, listener);
+    const listener = (_e, payload) => callback(payload)
+    ipcRenderer.on(IPC.BATCH_PROGRESS, listener)
+    return () => ipcRenderer.removeListener(IPC.BATCH_PROGRESS, listener)
   },
   // 订阅工作流步骤的实时输出事件，返回取消订阅函数。
   // 回调入参 { taskName, stepKey, chunk }：每来一段 stdout/stderr 即触发，供渲染进程累积展示执行过程
   onStepOutput: (callback) => {
     // listener 包装回调，剥离 event 参数
-    const listener = (_e, payload) => callback(payload);
-    ipcRenderer.on(IPC.STEP_OUTPUT, listener);
-    return () => ipcRenderer.removeListener(IPC.STEP_OUTPUT, listener);
+    const listener = (_e, payload) => callback(payload)
+    ipcRenderer.on(IPC.STEP_OUTPUT, listener)
+    return () => ipcRenderer.removeListener(IPC.STEP_OUTPUT, listener)
   },
-});
+})

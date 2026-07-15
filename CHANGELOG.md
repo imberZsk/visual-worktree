@@ -4,7 +4,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.7.0] - 2026-07-15
+
+### 新增
+
+- 自动检查 GitHub Release，并支持先异步下载、下载完成后再安装重启。
 
 ## [1.6.0] - 2026-07-15
 
