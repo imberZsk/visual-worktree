@@ -44,7 +44,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 11.7.0
+          version: 11.13.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -110,6 +110,9 @@ jobs:
           path: |
             release/*.dmg
             release/*.exe
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
           # 至少要有安装包，全为空说明打包异常，直接失败
           if-no-files-found: error
           retention-days: 3
@@ -132,7 +135,7 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p dist-release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} dist-release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.yml' -o -name '*.blockmap' \) -exec cp {} dist-release/ \;
           ls -la dist-release
 
       # 根据本次实际产出的安装包动态生成「下载与安装」说明，写入 release-notes.md。
@@ -187,7 +190,7 @@ jobs:
           release_assets=()
           while IFS= read -r file; do
             release_assets+=("$file")
-          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' \) | sort)
+          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.yml' -o -name '*.blockmap' \) | sort)
           if [ "${#release_assets[@]}" -eq 0 ]; then
             echo "没有找到可发布的安装包"
             exit 1

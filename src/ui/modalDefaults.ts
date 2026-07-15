@@ -7,8 +7,8 @@ export function withConfirmDefaults(options = {}) {
   // confirmOptions 存储最终传给 antd modal.confirm / Modal.confirm 的配置；调用方字段后置，便于显式覆盖默认值。
   const confirmOptions = {
     centered: true,
-    maskClosable: true,
+    mask: { closable: true },
     ...options,
-  };
-  return confirmOptions;
+  }
+  return confirmOptions
 }

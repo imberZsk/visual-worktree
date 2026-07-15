@@ -1,7 +1,7 @@
 // 工作流默认步骤清单（纯数据，零依赖）。
 //
 // WHY 单独放在 core：config.js（主进程，打包后跑在 app.asar 内）需要这份默认清单做兜底配置。
-// 若让 config.js 从 src/ui/workflowLogic.js 取，会形成「core 依赖 ui」的反向分层依赖——
+// 若让 config.js 从 src/ui/workflowLogic.ts 取，会形成「core 依赖 ui」的反向分层依赖——
 // 开发/测试时源码俱全能跑，但打包后 src/ui 被 Vite 编进 dist、不进 asar，主进程 import 会
 // ERR_MODULE_NOT_FOUND 直接崩溃。把数据下沉到 core 后，core 与 ui 都从这里取，core 永不依赖 ui。
 //
@@ -13,12 +13,12 @@
  * command 为可选的执行命令（空串表示该步骤仅可勾选、无执行按钮；用户可在设置里按需补命令）。
  */
 export const DEFAULT_WORKFLOW_STEPS = [
-  { key: 'start',            label: '开始',                command: '' },
-  { key: 'review-plan',      label: '审查需求方案',         command: '' },
-  { key: 'unit-test',        label: '单测',                command: '' },
-  { key: 'upload-feishu',    label: '上传需求方案到飞书文档', command: '' },
-  { key: 'branch-to-jira',   label: '自动提取分支到 Jira',   command: '' },
-  { key: 'jira-comment',     label: 'Jira 评论',           command: '' },
-  { key: 'test-cases',       label: '测试用例',             command: '' },
-  { key: 'jira-budget-time', label: '查看 Jira 预算时间',    command: '' },
-];
+  { key: 'start', label: '开始', command: '' },
+  { key: 'review-plan', label: '审查需求方案', command: '' },
+  { key: 'unit-test', label: '单测', command: '' },
+  { key: 'upload-feishu', label: '上传需求方案到飞书文档', command: '' },
+  { key: 'branch-to-jira', label: '自动提取分支到 Jira', command: '' },
+  { key: 'jira-comment', label: 'Jira 评论', command: '' },
+  { key: 'test-cases', label: '测试用例', command: '' },
+  { key: 'jira-budget-time', label: '查看 Jira 预算时间', command: '' },
+]

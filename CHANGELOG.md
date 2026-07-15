@@ -4,7 +4,19 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.7.0] - 2026-07-15
+
+### 新增
+
+- 自动检查 GitHub Release，并支持先异步下载、下载完成后再安装重启。
+
+## [1.6.0] - 2026-07-15
+
+### 变更
+
+- 统一升级至 React 19、Ant Design 6、Electron 43、Vite 8、TypeScript 6 与 pnpm 11.13；渲染层迁移为 TypeScript，并加入 `tsc` 构建门禁。
+- 适配 Ant Design 6 的表单时序与语义 DOM，统一 macOS arm64 与 Windows x64 双平台构建、测试和打包口径。
+- 统一 MIT 协议、安全策略与行为准则文档。
 
 ## [1.5.0] - 2026-07-14
 

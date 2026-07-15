@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 // Vite 配置：前端渲染进程构建。base 用相对路径以便 Electron file:// 协议加载
 export default defineConfig({
@@ -28,7 +28,7 @@ export default defineConfig({
         // 否则拆散会产生 antd <-> vendor 循环依赖。
         manualChunks(id) {
           // 仅对第三方依赖分包，业务代码保持在主 chunk（业务改动频繁，独立小块利于区分）
-          if (!id.includes('node_modules')) return undefined;
+          if (!id.includes('node_modules')) return undefined
           // antd 生态整体成块：antd 本体、官方图标、rc-* 系列组件、@rc-component、日期库 dayjs。
           // 全部归一处以避免内部互相引用被拆散导致的循环依赖
           if (
@@ -38,14 +38,19 @@ export default defineConfig({
             id.includes('/@rc-component/') ||
             id.includes('/dayjs/')
           ) {
-            return 'antd';
+            return 'antd'
           }
           // react 运行时单独成块
-          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react';
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/scheduler/')
+          )
+            return 'react'
           // 其余第三方依赖归入通用 vendor 块
-          return 'vendor';
+          return 'vendor'
         },
       },
     },
   },
-});
+})
