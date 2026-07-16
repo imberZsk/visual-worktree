@@ -591,25 +591,26 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         <>
           <Form.Item
             label="当前路径组合"
-            name="activePathProfileId"
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 可用于切换工作和个人项目工作路径。
               </Text>
             }
-            rules={[{ required: true, message: '请选择当前路径组合' }]}
           >
             <Space.Compact style={{ width: '100%' }}>
-              <Select
-                data-testid="active-path-profile-select"
-                showSearch
-                optionFilterProp="label"
-                options={pathProfileOptions}
-                placeholder="选择当前生效的路径组合"
-                onChange={(value) =>
-                  form.setFieldValue('activePathProfileId', value)
-                }
-              />
+              <Form.Item
+                name="activePathProfileId"
+                noStyle
+                rules={[{ required: true, message: '请选择当前路径组合' }]}
+              >
+                <Select
+                  data-testid="active-path-profile-select"
+                  showSearch
+                  optionFilterProp="label"
+                  options={pathProfileOptions}
+                  placeholder="选择当前生效的路径组合"
+                />
+              </Form.Item>
               <Button icon={<EditOutlined />} onClick={openPathProfileEditor}>
                 管理路径组合
               </Button>

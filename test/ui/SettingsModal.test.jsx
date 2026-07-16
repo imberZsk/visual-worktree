@@ -490,6 +490,52 @@ describe('SettingsModal 流程配置布局', () => {
     expect(savedConfig.pathProfiles).toHaveLength(2)
   })
 
+  it('再次打开设置页时回显已持久化的当前路径组合', async () => {
+    // config 存储已持久化为个人路径组合的配置，用于模拟应用重开设置页。
+    const config = makeConfig()
+    config.activePathProfileId = 'personal'
+    config.sourceProjectsPath = '/personal/source'
+    config.worktreesPath = '/personal/worktrees'
+    config.pathProfiles = [
+      {
+        id: 'work',
+        name: '工作',
+        sourceProjectsPath: '/work/source',
+        worktreesPath: '/work/worktrees',
+      },
+      {
+        id: 'personal',
+        name: '个人',
+        sourceProjectsPath: '/personal/source',
+        worktreesPath: '/personal/worktrees',
+      },
+    ]
+    // view 存储渲染控制器，用于模拟设置页关闭后再次打开。
+    const view = renderWithApp(
+      <SettingsModal
+        open={false}
+        config={config}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    view.rerender(
+      <SettingsModal
+        open
+        config={config}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    await waitFor(() => {
+      // selector 存储再次打开后的当前路径组合下拉框，应渲染持久化组合名称。
+      const selector = screen.getByTestId('active-path-profile-select')
+      expect(within(selector).getByText('个人')).toBeTruthy()
+    })
+  })
+
   it('路径组合名称支持手动输入并持久化', async () => {
     mockApi.saveConfig.mockImplementationOnce(
       async (savedConfig) => savedConfig
