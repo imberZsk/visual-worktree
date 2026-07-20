@@ -18,6 +18,8 @@ const browserFallback = {
   checkAppUpdate: async () => ({ available: false }),
   downloadAppUpdate: async () => ({ downloaded: false }),
   installAppUpdate: async () => false,
+  // 浏览器降级环境不会收到桌面端更新下载进度。
+  onAppUpdateProgress: () => () => {},
   // 浏览器降级平台标识：无 Node process，用 navigator.platform 粗判 Windows，识别不出默认按 darwin（保持原有 UI 展示）
   platform:
     typeof navigator !== 'undefined' && /win/i.test(navigator.platform || '')

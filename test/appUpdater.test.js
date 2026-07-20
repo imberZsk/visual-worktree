@@ -75,4 +75,55 @@ describe('appUpdater', () => {
     expect(checkHandler).toBeTypeOf('function')
     await expect(checkHandler()).resolves.toEqual({ available: false })
   })
+
+  it('远端版本与当前版本相同时不展示更新', async () => {
+    // updater 存储返回同版本检查结果的更新器替身。
+    const updater = {
+      on: vi.fn(),
+      checkForUpdates: vi.fn().mockResolvedValue({
+        isUpdateAvailable: false,
+        updateInfo: { version: '1.6.1' },
+      }),
+    }
+    // ipcMain 存储 IPC 注册器替身，用于调用更新检查处理函数。
+    const ipcMain = createIpcMain()
+    registerAppUpdater(ipcMain, updater, true)
+
+    // checkHandler 存储应用更新检查处理函数。
+    const checkHandler = ipcMain.handlers.get('app-update:check')
+    await expect(checkHandler()).resolves.toEqual({ available: false })
+  })
+
+  it('转发下载进度并允许下载完成后安装重启', async () => {
+    // progressListeners 存储更新器事件名到监听函数的映射。
+    const progressListeners = new Map()
+    // updater 存储可下载和安装的更新器替身。
+    const updater = {
+      on: vi.fn((eventName, listener) =>
+        progressListeners.set(eventName, listener)
+      ),
+      downloadUpdate: vi.fn().mockImplementation(async () => {
+        progressListeners.get('download-progress')?.({ percent: 42.4 })
+      }),
+      quitAndInstall: vi.fn(),
+    }
+    // ipcMain 存储 IPC 注册器替身，用于调用下载和安装处理函数。
+    const ipcMain = createIpcMain()
+    // sender 存储接收下载进度的渲染进程替身。
+    const sender = { send: vi.fn() }
+    registerAppUpdater(ipcMain, updater, true)
+
+    // downloadHandler 存储应用更新下载处理函数。
+    const downloadHandler = ipcMain.handlers.get('app-update:download')
+    // installHandler 存储应用更新安装处理函数。
+    const installHandler = ipcMain.handlers.get('app-update:install')
+    await expect(downloadHandler({ sender })).resolves.toEqual({
+      downloaded: true,
+    })
+    expect(sender.send).toHaveBeenCalledWith('app-update:progress', {
+      percent: 42.4,
+    })
+    expect(installHandler()).toBe(true)
+    expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
+  })
 })

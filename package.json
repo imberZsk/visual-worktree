@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",

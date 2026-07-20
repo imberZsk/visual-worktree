@@ -71,6 +71,13 @@ contextBridge.exposeInMainWorld('api', {
   downloadAppUpdate: () => ipcRenderer.invoke('app-update:download'),
   // installAppUpdate 安装已下载版本并重启。
   installAppUpdate: () => ipcRenderer.invoke('app-update:install'),
+  // onAppUpdateProgress 订阅安装包下载百分比，返回取消订阅函数。
+  onAppUpdateProgress: (callback) => {
+    // listener 存储剥离 Electron event 参数后的下载进度监听器。
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('app-update:progress', listener)
+    return () => ipcRenderer.removeListener('app-update:progress', listener)
+  },
   // 当前运行平台（'darwin'|'win32'|'linux'）：供 UI 按平台切换终端应用选项等平台相关展示
   platform: process.platform,
   // 扫描所有项目
