@@ -107,11 +107,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
+          # 自动更新只需要 latest.yml/latest-mac.yml；禁止用 *.yml，避免 builder-debug.yml 泄漏到公开 Release。
           path: |
             release/*.dmg
             release/*.exe
             release/*.zip
-            release/*.yml
+            release/latest*.yml
             release/*.blockmap
           # 至少要有安装包，全为空说明打包异常，直接失败
           if-no-files-found: error
@@ -135,7 +136,8 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p dist-release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.yml' -o -name '*.blockmap' \) -exec cp {} dist-release/ \;
+          # WHY 三层都使用显式白名单：artifact 上传配置未来若误放宽，汇总阶段仍不会带入 builder-debug.yml 等内部文件。
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name 'latest*.yml' -o -name '*.blockmap' \) -exec cp {} dist-release/ \;
           ls -la dist-release
 
       # 根据本次实际产出的安装包动态生成「下载与安装」说明，写入 release-notes.md。
@@ -190,7 +192,8 @@ jobs:
           release_assets=()
           while IFS= read -r file; do
             release_assets+=("$file")
-          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name '*.yml' -o -name '*.blockmap' \) | sort)
+          # WHY 发布入口再次收窄 YAML 白名单，确保调试配置不会因上游 artifact 变化而成为公开资产。
+          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name 'latest*.yml' -o -name '*.blockmap' \) | sort)
           if [ "${#release_assets[@]}" -eq 0 ]; then
             echo "没有找到可发布的安装包"
             exit 1

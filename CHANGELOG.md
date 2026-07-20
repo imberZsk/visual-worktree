@@ -4,6 +4,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.6.1] - 2026-07-20
+
+### 修复
+
+- Release workflow 对 YAML 资产改用 `latest*.yml` 显式白名单，并在上传、汇总、发布三层过滤 `builder-debug.yml` 等内部调试文件；保留应用自动更新必需的 ZIP、`latest*.yml` 与 blockmap 资产。
+- 修复打包应用启动时因 `electron-updater` CommonJS 导出未被 ESM 命名导入解析、`autoUpdater` 为 `undefined` 而触发 JavaScript 异常的问题；兼容命名导出与默认导出，并在更新模块不可用时安全降级。
+
 ## [1.6.0] - 2026-07-16
 
 ### 新增
