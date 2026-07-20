@@ -12,7 +12,7 @@ import { dirname, join } from 'path'
 import { execFile } from 'child_process'
 import { registerIpcHandlers } from './ipcHandlers.js'
 import { shouldOpenDevTools } from '../src/core/windowBehavior.js'
-import { registerAppUpdater } from './appUpdater.js'
+import { loadAutoUpdater, registerAppUpdater } from './appUpdater.js'
 
 // Electron 主进程入口：创建窗口、注册 IPC、加载渲染进程。
 // 业务逻辑全在 src/core，主进程只做窗口管理与 IPC 转发。
@@ -99,10 +99,11 @@ registerIpcHandlers(ipcMain, {
   clipboard,
   dialog,
 })
-// appUpdater 存储打包环境的真实更新器；开发和测试不加载 Electron 更新模块。
-const appUpdater = app.isPackaged
-  ? (await import('electron-updater')).autoUpdater
-  : {}
+// appUpdater 存储打包环境动态加载并兼容 CommonJS/ESM 后的更新器；导入或解析失败时安全降级，不阻断启动。
+const appUpdater = await loadAutoUpdater(
+  () => import('electron-updater'),
+  app.isPackaged
+)
 registerAppUpdater(ipcMain, appUpdater, app.isPackaged)
 
 // PM_SMOKE 冒烟模式自检：验证窗口与渲染进程后打印 SMOKE_OK 并退出。
