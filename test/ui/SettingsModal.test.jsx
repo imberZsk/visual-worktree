@@ -369,7 +369,9 @@ describe('SettingsModal 流程配置布局', () => {
     expect(screen.getByText('可用于切换工作和个人项目工作路径。')).toBeTruthy()
     expect(screen.queryByText(/保存后当前组合会用于扫描项目/)).toBeNull()
     expect(screen.getByRole('button', { name: /管理路径组合/ })).toBeTruthy()
-    expect(screen.queryByPlaceholderText('/Users/you/work/projects')).toBeNull()
+    expect(
+      screen.queryByPlaceholderText('/Users/you/Desktop/work/projects')
+    ).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }))
 
@@ -378,7 +380,9 @@ describe('SettingsModal 流程配置布局', () => {
         '管理路径组合'
       )
     )
-    expect(screen.getByPlaceholderText('/Users/you/work/projects')).toBeTruthy()
+    expect(
+      screen.getByPlaceholderText('/Users/you/Desktop/work/projects')
+    ).toBeTruthy()
   })
 
   it('路径输入支持点击选择目录并写回表单', async () => {
@@ -399,7 +403,7 @@ describe('SettingsModal 流程配置布局', () => {
 
     // sourceInput 存储源项目根目录输入框，用于验证选择目录前后的值变化。
     const sourceInput = await screen.findByPlaceholderText(
-      '/Users/you/work/projects'
+      '/Users/you/Desktop/work/projects'
     )
     fireEvent.click(screen.getByRole('button', { name: /选择源项目根目录/ }))
 
@@ -424,7 +428,7 @@ describe('SettingsModal 流程配置布局', () => {
 
     // worktreeInput 存储 Worktree 根目录输入框，取消选择后应保持配置原值。
     const worktreeInput = await screen.findByPlaceholderText(
-      '/Users/you/work/worktrees'
+      '/Users/you/Desktop/work/worktrees'
     )
     fireEvent.click(
       screen.getByRole('button', { name: /选择 Worktree 根目录/ })
@@ -484,6 +488,7 @@ describe('SettingsModal 流程配置布局', () => {
     await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
     // savedConfig 存储提交给主进程的配置，应把当前组合路径同步到顶层字段。
     const savedConfig = mockApi.saveConfig.mock.calls[0][0]
+    expect(savedConfig.onboardingCompleted).toBe(true)
     expect(savedConfig.activePathProfileId).toBe('personal')
     expect(savedConfig.sourceProjectsPath).toBe('/personal/source')
     expect(savedConfig.worktreesPath).toBe('/personal/worktrees')
@@ -573,7 +578,13 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }))
-    fireEvent.click(screen.getByRole('button', { name: /添加路径组合/ }))
+    // addProfileButton 存储统一样式的路径组合新增按钮，用于验证按钮具有舒适的上下内边距。
+    const addProfileButton = screen.getByRole('button', {
+      name: /添加路径组合/,
+    })
+    expect(addProfileButton.style.height).toBe('36px')
+    expect(addProfileButton.style.paddingBlock).toBe('6px')
+    fireEvent.click(addProfileButton)
 
     // newRow 存储新增的第二个路径组合行，用于确认新增内容不会继承上一组路径。
     const newRow = await screen.findByTestId('path-profile-row-1')
@@ -581,10 +592,12 @@ describe('SettingsModal 流程配置布局', () => {
       ''
     )
     expect(
-      within(newRow).getByPlaceholderText('/Users/you/work/projects').value
+      within(newRow).getByPlaceholderText('/Users/you/Desktop/work/projects')
+        .value
     ).toBe('')
     expect(
-      within(newRow).getByPlaceholderText('/Users/you/work/worktrees').value
+      within(newRow).getByPlaceholderText('/Users/you/Desktop/work/worktrees')
+        .value
     ).toBe('')
 
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))

@@ -11,6 +11,8 @@ import { App as AntApp } from 'antd'
 // mockApi 模拟 App 启动与显隐工具栏测试所需的 Electron API。
 const mockApi = vi.hoisted(() => ({
   loadConfig: vi.fn(),
+  saveConfig: vi.fn(),
+  selectDirectory: vi.fn(),
   scanWorktreesByTask: vi.fn(),
   scanProjects: vi.fn(),
   loadTaskStatus: vi.fn(),
@@ -31,6 +33,8 @@ const mockApi = vi.hoisted(() => ({
 vi.mock('../../src/ui/api.ts', () => ({
   api: {
     loadConfig: mockApi.loadConfig,
+    saveConfig: mockApi.saveConfig,
+    selectDirectory: mockApi.selectDirectory,
     scanWorktreesByTask: mockApi.scanWorktreesByTask,
     scanProjects: mockApi.scanProjects,
     loadTaskStatus: mockApi.loadTaskStatus,
@@ -179,6 +183,8 @@ describe('App 显示隐藏项工具栏', () => {
     localStorage.clear()
     useStore.setState(initialState, true)
     mockApi.loadConfig.mockReset().mockResolvedValue(makeConfig())
+    mockApi.saveConfig.mockReset().mockImplementation(async (config) => config)
+    mockApi.selectDirectory.mockReset()
     mockApi.scanWorktreesByTask.mockReset().mockResolvedValue(worktreeTasks)
     mockApi.scanProjects.mockReset().mockResolvedValue(projects)
     mockApi.loadTaskStatus.mockReset().mockResolvedValue({})
@@ -201,6 +207,47 @@ describe('App 显示隐藏项工具栏', () => {
   })
 
   afterEach(() => cleanup())
+
+  it('首次安装在专用弹层保存两条路径后完成初始化', async () => {
+    // initialConfig 存储尚未完成首次配置的新安装配置。
+    const initialConfig = { ...makeConfig(), onboardingCompleted: false }
+    mockApi.loadConfig.mockResolvedValueOnce(initialConfig)
+    mockApi.selectDirectory.mockResolvedValueOnce({
+      canceled: false,
+      path: '/new/source',
+    })
+    renderApp()
+
+    expect(await screen.findByText('配置项目路径')).toBeTruthy()
+    expect(screen.getByText(/请选择本地 Git 仓库所在目录/)).toBeTruthy()
+    // sourceInput 存储首次初始化的源项目根目录输入框。
+    const sourceInput = screen.getByRole('textbox', { name: '源项目根目录' })
+    // worktreeInput 存储首次初始化的 Worktree 根目录输入框。
+    const worktreeInput = screen.getByRole('textbox', {
+      name: 'Worktree 根目录',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '选择源项目根目录' }))
+    await waitFor(() => expect(sourceInput.value).toBe('/new/source'))
+    expect(mockApi.selectDirectory).toHaveBeenCalledWith({
+      defaultPath: '/repo',
+    })
+    fireEvent.change(worktreeInput, { target: { value: '/new/worktrees' } })
+
+    fireEvent.click(screen.getByRole('button', { name: '保存并开始使用' }))
+
+    await waitFor(() => {
+      expect(mockApi.saveConfig).toHaveBeenCalledTimes(1)
+    })
+    // savedConfig 存储首次初始化提交给主进程的配置，验证顶层路径与当前路径组合保持一致。
+    const savedConfig = mockApi.saveConfig.mock.calls[0][0]
+    expect(savedConfig.onboardingCompleted).toBe(true)
+    expect(savedConfig.sourceProjectsPath).toBe('/new/source')
+    expect(savedConfig.worktreesPath).toBe('/new/worktrees')
+    expect(savedConfig.pathProfiles[0]).toMatchObject({
+      sourceProjectsPath: '/new/source',
+      worktreesPath: '/new/worktrees',
+    })
+  })
 
   it('首次进入项目 Tab 会自动 fetch 一次，后续切回不重复自动 fetch', async () => {
     localStorage.setItem('vw-active-view', 'worktrees')

@@ -8,9 +8,9 @@ import { DEFAULT_WORK_DOCUMENT_TEMPLATES } from './taskDocsService.js';
 // 配置存于用户目录下，纯 Node 模块便于测试。
 
 // DEFAULT_SOURCE_PROJECTS_PATH 存储默认源项目根目录。
-const DEFAULT_SOURCE_PROJECTS_PATH = join(homedir(), 'work/projects');
+const DEFAULT_SOURCE_PROJECTS_PATH = join(homedir(), 'Desktop', 'work', 'projects');
 // DEFAULT_WORKTREES_PATH 存储默认 worktree 根目录。
-const DEFAULT_WORKTREES_PATH = join(homedir(), 'work/worktrees');
+const DEFAULT_WORKTREES_PATH = join(homedir(), 'Desktop', 'work', 'worktrees');
 // DEFAULT_PATH_PROFILE_ID 存储内置默认路径组合的稳定 id。
 const DEFAULT_PATH_PROFILE_ID = 'default';
 // DEFAULT_PATH_PROFILE_NAME 存储内置默认路径组合的展示名称。
@@ -18,6 +18,8 @@ const DEFAULT_PATH_PROFILE_NAME = '工作路径';
 
 // 默认配置：基于用户的实际工作目录
 const DEFAULT_CONFIG = {
+  // 首次配置是否已完成；新安装默认未完成，成功保存设置后启用，历史配置自动迁移为已完成。
+  onboardingCompleted: false,
   // 源项目根目录：扫描的主要对象
   sourceProjectsPath: DEFAULT_SOURCE_PROJECTS_PATH,
   // worktree 根目录：实际开发时建立 worktree 的位置
@@ -232,21 +234,37 @@ function migrateLegacyConfig(newFile) {
  * @returns {object} 配置对象
  */
 export function loadConfig(baseDir) {
-  const { file } = getConfigPaths(baseDir);
+  // dir 存储当前配置与历史业务数据所在目录，用于识别已经使用过应用的老用户。
+  // file 存储当前配置文件路径，用于读取已保存的系统设置。
+  const { dir, file } = getConfigPaths(baseDir);
   // 仅默认目录（未注入 baseDir）时尝试从旧目录迁移，避免污染测试用的临时目录
   if (!baseDir) migrateLegacyConfig(file);
-  if (!existsSync(file)) return cloneDefaultConfig();
+  if (!existsSync(file)) {
+    // fallbackConfig 存储缺少配置文件时返回的默认配置。
+    const fallbackConfig = cloneDefaultConfig();
+    // 老版本可能只留下任务状态等数据目录、没有 config.json；目录存在即可证明用户已使用过应用，不应再弹首次配置提示。
+    if (existsSync(dir) || (!baseDir && existsSync(LEGACY_CONFIG_DIR))) {
+      fallbackConfig.onboardingCompleted = true;
+    }
+    return fallbackConfig;
+  }
   try {
     // 合并：用户配置覆盖默认，保证新增字段有默认值
     const parsed = JSON.parse(readFileSync(file, 'utf8'));
     // mergedConfig 存储默认配置与磁盘配置合并后的结果，随后统一规范化路径组合。
     const mergedConfig = { ...cloneDefaultConfig(), ...parsed };
+    // 历史配置在引导标识引入前已经由用户保存过路径，缺少字段时视为已完成，避免升级后重复弹出首次配置提示。
+    if (!Object.prototype.hasOwnProperty.call(parsed, 'onboardingCompleted')) {
+      mergedConfig.onboardingCompleted = true;
+    }
     // hasPathProfiles 标记磁盘配置是否已经使用新路径组合结构；旧配置优先从顶层路径迁移。
     const hasPathProfiles = Array.isArray(parsed?.pathProfiles);
     return normalizePathProfilesInConfig(mergedConfig, { preferTopLevelPaths: !hasPathProfiles });
   } catch (e) {
-    // 配置损坏时回退默认，避免应用启动失败
-    return cloneDefaultConfig();
+    // fallbackConfig 存储配置损坏时的安全默认值；配置文件本身证明用户已使用过应用，因此不重复弹首次提示。
+    const fallbackConfig = cloneDefaultConfig();
+    fallbackConfig.onboardingCompleted = true;
+    return fallbackConfig;
   }
 }
 
@@ -284,6 +302,8 @@ export function resetConfig(baseDir) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   // defaultConfig 存储即将写入磁盘的默认配置副本；恢复默认不合并旧配置，确保旧字段被清掉。
   const defaultConfig = cloneDefaultConfig();
+  // 恢复默认发生在用户已进入设置的场景，不属于新安装，避免重置后再次弹出首次配置提示。
+  defaultConfig.onboardingCompleted = true;
   writeFileSync(file, JSON.stringify(defaultConfig, null, 2), 'utf8');
   return defaultConfig;
 }

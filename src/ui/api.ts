@@ -39,6 +39,7 @@ const browserFallback = {
   pruneWorktrees: async () => ({ success: false, error: '非 Electron 环境' }),
   batchAddWorktree: async () => [],
   loadConfig: async () => ({
+    onboardingCompleted: false,
     sourceProjectsPath: '',
     worktreesPath: '',
     activePathProfileId: 'default',

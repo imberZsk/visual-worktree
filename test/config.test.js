@@ -9,6 +9,7 @@ import {
 } from '../src/core/config.js'
 import { makeTempRoot } from './helpers.js'
 import { join } from 'path'
+import { homedir } from 'os'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 
 // 配置读写测试，使用临时目录避免污染真实用户配置
@@ -24,8 +25,25 @@ describe('config', () => {
 
   it('returns default config when file absent', () => {
     const cfg = loadConfig(join(ctx.root, 'cfgdir'))
+    expect(cfg.onboardingCompleted).toBe(false)
     expect(cfg.mainBranches).toEqual(['master', 'main'])
-    expect(cfg.sourceProjectsPath).toBe(DEFAULT_CONFIG.sourceProjectsPath)
+    expect(cfg.sourceProjectsPath).toBe(
+      join(homedir(), 'Desktop', 'work', 'projects')
+    )
+    expect(cfg.worktreesPath).toBe(
+      join(homedir(), 'Desktop', 'work', 'worktrees')
+    )
+  })
+
+  it('does not show onboarding when an existing user data directory remains', () => {
+    // dir 存储没有 config.json、但已由旧版本留下其他数据的配置目录。
+    const dir = join(ctx.root, 'cfgdir')
+    mkdirSync(dir, { recursive: true })
+
+    // cfg 存储老用户缺少配置文件时加载到的默认配置。
+    const cfg = loadConfig(dir)
+
+    expect(cfg.onboardingCompleted).toBe(true)
   })
 
   it('default config only creates docs as working documents', () => {
@@ -65,6 +83,7 @@ describe('config', () => {
     const cfg = loadConfig(dir)
 
     expect(cfg.sourceProjectsPath).toBe('/legacy/source')
+    expect(cfg.onboardingCompleted).toBe(true)
     expect(cfg.worktreesPath).toBe('/legacy/worktrees')
     expect(cfg.activePathProfileId).toBe('default')
     expect(cfg.pathProfiles).toEqual([
@@ -114,6 +133,7 @@ describe('config', () => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(file, '{not valid json')
     const cfg = loadConfig(dir)
+    expect(cfg.onboardingCompleted).toBe(true)
     expect(cfg.mainBranches).toEqual(['master', 'main'])
   })
 
@@ -121,7 +141,12 @@ describe('config', () => {
     // 默认配置应带需求流程步骤清单，使功能开箱即用
     const cfg = loadConfig(join(ctx.root, 'cfgdir'))
     expect(Array.isArray(cfg.workflowSteps)).toBe(true)
-    expect(cfg.workflowSteps.length).toBeGreaterThan(0)
+    expect(cfg.workflowSteps).toEqual([
+      { key: 'requirements', label: '需求确认', command: '' },
+      { key: 'implementation', label: '开发实现', command: '' },
+      { key: 'verification', label: '测试验证', command: '' },
+      { key: 'delivery', label: '提交交付', command: '' },
+    ])
     // 每个步骤具备 key/label/command 三要素（command 为可选执行命令，默认空串）
     for (const s of cfg.workflowSteps) {
       expect(s).toMatchObject({
@@ -206,9 +231,14 @@ describe('config', () => {
     // diskConfig 存储磁盘上的配置 JSON，验证不是只改了内存返回值。
     const diskConfig = JSON.parse(readFileSync(file, 'utf8'))
 
-    expect(resetConfigResult).toEqual(DEFAULT_CONFIG)
-    expect(diskConfig).toEqual(DEFAULT_CONFIG)
-    expect(loadConfig(dir)).toEqual(DEFAULT_CONFIG)
+    // expectedResetConfig 存储恢复默认后的预期配置；用户已主动操作设置，因此初始化标识保持完成。
+    const expectedResetConfig = {
+      ...DEFAULT_CONFIG,
+      onboardingCompleted: true,
+    }
+    expect(resetConfigResult).toEqual(expectedResetConfig)
+    expect(diskConfig).toEqual(expectedResetConfig)
+    expect(loadConfig(dir)).toEqual(expectedResetConfig)
   })
 
   it('default config dir is unified ~/.visualWorktree (no hyphen)', () => {

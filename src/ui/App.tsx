@@ -84,6 +84,12 @@ const { useBreakpoint } = Grid
 // 步骤执行输出 Modal 的层级：需高于流程弹层和常规浮层，避免被操作界面盖住。
 const STEP_OUTPUT_MODAL_Z_INDEX = 1400
 
+// ONBOARDING_PATH_FIELD 存储首次初始化目录选择动作的字段标识，避免使用无语义字符串判断 loading 状态。
+const ONBOARDING_PATH_FIELD = {
+  SOURCE_PROJECTS: 'source-projects',
+  WORKTREES: 'worktrees',
+}
+
 // HIDE_ANIMATION_MS 存储隐藏项退出动画时长；App 在动画结束后再写入隐藏偏好，让列表优雅消失。
 const HIDE_ANIMATION_MS = 180
 
@@ -955,6 +961,15 @@ export default function App() {
   const [detailProject, setDetailProject] = useState(null)
   // settingsOpen 设置弹窗开关
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // onboardingSourceProjectsPath 存储首次初始化表单中的源项目根目录。
+  const [onboardingSourceProjectsPath, setOnboardingSourceProjectsPath] =
+    useState('')
+  // onboardingWorktreesPath 存储首次初始化表单中的 Worktree 根目录。
+  const [onboardingWorktreesPath, setOnboardingWorktreesPath] = useState('')
+  // onboardingPickingField 存储当前正在调用系统目录选择器的首次初始化字段。
+  const [onboardingPickingField, setOnboardingPickingField] = useState('')
+  // onboardingSaving 标记首次初始化配置是否正在保存，用于防止重复提交。
+  const [onboardingSaving, setOnboardingSaving] = useState(false)
   // activeView 当前主视图：'worktrees'|'projects'|'kanban'|'workflow'，持久化到 localStorage 避免刷新后跳回 worktrees
   const [activeView, setActiveView] = useState(
     () => localStorage.getItem('vw-active-view') || 'worktrees'
@@ -1065,6 +1080,17 @@ export default function App() {
         })),
     [pathProfiles]
   )
+
+  // 新安装配置加载完成后，把默认路径带入首次初始化表单；老用户不会进入该分支。
+  useEffect(() => {
+    if (config?.onboardingCompleted !== false) return
+    setOnboardingSourceProjectsPath(config.sourceProjectsPath || '')
+    setOnboardingWorktreesPath(config.worktreesPath || '')
+  }, [
+    config?.onboardingCompleted,
+    config?.sourceProjectsPath,
+    config?.worktreesPath,
+  ])
 
   // 首次加载：读配置 + 从文件加载任务状态/链接/工作流进度。
   // 只扫当前视图（默认 worktrees）的数据，另一视图等切过去时由下方 useEffect 按需补扫，
@@ -2349,6 +2375,89 @@ export default function App() {
   }
 
   /**
+   * 为首次初始化字段打开系统目录选择器并写回选择结果。
+   * @param {string} field - ONBOARDING_PATH_FIELD 中的目标字段标识
+   */
+  const handlePickOnboardingDirectory = async (field) => {
+    // currentPath 存储对应输入框当前路径，用作系统选择器默认打开目录。
+    const currentPath =
+      field === ONBOARDING_PATH_FIELD.SOURCE_PROJECTS
+        ? onboardingSourceProjectsPath
+        : onboardingWorktreesPath
+    setOnboardingPickingField(field)
+    try {
+      // result 存储主进程目录选择结果；取消时保留当前输入内容。
+      const result = await api.selectDirectory({ defaultPath: currentPath })
+      if (result?.canceled) return
+      if (!result?.path) {
+        message.error(result?.error || '选择目录失败')
+        return
+      }
+      if (field === ONBOARDING_PATH_FIELD.SOURCE_PROJECTS) {
+        setOnboardingSourceProjectsPath(result.path)
+        return
+      }
+      setOnboardingWorktreesPath(result.path)
+    } catch (e) {
+      message.error(`选择目录失败：${e?.message || '未知错误'}`)
+    } finally {
+      setOnboardingPickingField('')
+    }
+  }
+
+  /**
+   * 保存首次初始化的两条路径，同步当前路径组合并进入应用。
+   */
+  const handleCompleteOnboarding = async () => {
+    // sourceProjectsPath 存储去除首尾空白后的源项目根目录。
+    const sourceProjectsPath = onboardingSourceProjectsPath.trim()
+    // worktreesPath 存储去除首尾空白后的 Worktree 根目录。
+    const worktreesPath = onboardingWorktreesPath.trim()
+    if (!config || !sourceProjectsPath || !worktreesPath || onboardingSaving)
+      return
+    // activeProfileId 存储当前路径组合 id；配置异常缺失时回退第一组。
+    const activeProfileId =
+      config.activePathProfileId || config.pathProfiles?.[0]?.id || 'default'
+    // existingProfiles 存储配置中的路径组合，异常结构按空数组处理。
+    const existingProfiles = Array.isArray(config.pathProfiles)
+      ? config.pathProfiles
+      : []
+    // updatedProfiles 存储同步首次初始化路径后的路径组合，保证路径配置只有一个真实数据源。
+    const updatedProfiles = existingProfiles.length
+      ? existingProfiles.map((profile) =>
+          profile?.id === activeProfileId
+            ? { ...profile, sourceProjectsPath, worktreesPath }
+            : profile
+        )
+      : [
+          {
+            id: activeProfileId,
+            name: '工作路径',
+            sourceProjectsPath,
+            worktreesPath,
+          },
+        ]
+    setOnboardingSaving(true)
+    try {
+      // savedConfig 存储主进程规范化并持久化后的完整配置。
+      const savedConfig = await api.saveConfig({
+        ...config,
+        onboardingCompleted: true,
+        sourceProjectsPath,
+        worktreesPath,
+        activePathProfileId: activeProfileId,
+        pathProfiles: updatedProfiles,
+      })
+      applySavedConfig(savedConfig)
+      message.success('初始化完成')
+    } catch (e) {
+      message.error(`保存初始化配置失败：${e?.message || '未知错误'}`)
+    } finally {
+      setOnboardingSaving(false)
+    }
+  }
+
+  /**
    * 顶部快速切换路径组合，并保存为当前配置。
    * @param {string} profileId - 用户选择的路径组合 id
    */
@@ -2928,6 +3037,90 @@ export default function App() {
         pinnedTaskKeys={taskVisibility.pinned}
         showHiddenTasks={showHiddenTasks}
       />
+
+      {/* 首次安装只展示两条必要路径，避免用户进入完整设置后找不到路径组合管理入口。 */}
+      <Modal
+        open={config?.onboardingCompleted === false}
+        title="配置项目路径"
+        closable={false}
+        mask={{ closable: false }}
+        keyboard={false}
+        footer={
+          <Button
+            type="primary"
+            loading={onboardingSaving}
+            disabled={
+              !onboardingSourceProjectsPath.trim() ||
+              !onboardingWorktreesPath.trim()
+            }
+            onClick={handleCompleteOnboarding}
+          >
+            保存并开始使用
+          </Button>
+        }
+      >
+        <Typography.Paragraph>
+          请选择本地 Git 仓库所在目录，以及用于创建任务 Worktree
+          的目录。完成后即可扫描项目和管理 Worktree。
+        </Typography.Paragraph>
+        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+          <div>
+            <Typography.Text strong>源项目根目录</Typography.Text>
+            <Space.Compact style={{ width: '100%', marginTop: 6 }}>
+              <Input
+                aria-label="源项目根目录"
+                value={onboardingSourceProjectsPath}
+                placeholder="例如：/Users/you/Desktop/work/projects"
+                onChange={(event) =>
+                  setOnboardingSourceProjectsPath(event.target.value)
+                }
+              />
+              <Tooltip title="选择源项目根目录">
+                <Button
+                  aria-label="选择源项目根目录"
+                  icon={<FolderOpenOutlined />}
+                  loading={
+                    onboardingPickingField ===
+                    ONBOARDING_PATH_FIELD.SOURCE_PROJECTS
+                  }
+                  onClick={() =>
+                    handlePickOnboardingDirectory(
+                      ONBOARDING_PATH_FIELD.SOURCE_PROJECTS
+                    )
+                  }
+                />
+              </Tooltip>
+            </Space.Compact>
+          </div>
+          <div>
+            <Typography.Text strong>Worktree 根目录</Typography.Text>
+            <Space.Compact style={{ width: '100%', marginTop: 6 }}>
+              <Input
+                aria-label="Worktree 根目录"
+                value={onboardingWorktreesPath}
+                placeholder="例如：/Users/you/Desktop/work/worktrees"
+                onChange={(event) =>
+                  setOnboardingWorktreesPath(event.target.value)
+                }
+              />
+              <Tooltip title="选择 Worktree 根目录">
+                <Button
+                  aria-label="选择 Worktree 根目录"
+                  icon={<FolderOpenOutlined />}
+                  loading={
+                    onboardingPickingField === ONBOARDING_PATH_FIELD.WORKTREES
+                  }
+                  onClick={() =>
+                    handlePickOnboardingDirectory(
+                      ONBOARDING_PATH_FIELD.WORKTREES
+                    )
+                  }
+                />
+              </Tooltip>
+            </Space.Compact>
+          </div>
+        </Space>
+      </Modal>
 
       {/* 设置弹窗 */}
       <SettingsModal
