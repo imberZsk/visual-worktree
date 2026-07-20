@@ -283,9 +283,11 @@ describe('registerIpcHandlers', () => {
 
     // result 存储 IPC 恢复默认设置后的返回配置。
     const result = await mock.invoke(IPC.RESET_CONFIG);
+    // expectedConfig 存储恢复默认后的配置；用户已进入设置，初始化标识应保持完成。
+    const expectedConfig = { ...DEFAULT_CONFIG, onboardingCompleted: true };
 
-    expect(result).toEqual(DEFAULT_CONFIG);
-    expect(loadConfig(dataDir)).toEqual(DEFAULT_CONFIG);
+    expect(result).toEqual(expectedConfig);
+    expect(loadConfig(dataDir)).toEqual(expectedConfig);
   });
 
   it('SAVE_TASK_ENV_HEALTH 写入后 LOAD_TASK_ENV_HEALTH 能读回环境检查状态', async () => {

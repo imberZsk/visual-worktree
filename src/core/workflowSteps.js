@@ -13,12 +13,8 @@
  * command 为可选的执行命令（空串表示该步骤仅可勾选、无执行按钮；用户可在设置里按需补命令）。
  */
 export const DEFAULT_WORKFLOW_STEPS = [
-  { key: 'start', label: '开始', command: '' },
-  { key: 'review-plan', label: '审查需求方案', command: '' },
-  { key: 'unit-test', label: '单测', command: '' },
-  { key: 'upload-feishu', label: '上传需求方案到飞书文档', command: '' },
-  { key: 'branch-to-jira', label: '自动提取分支到 Jira', command: '' },
-  { key: 'jira-comment', label: 'Jira 评论', command: '' },
-  { key: 'test-cases', label: '测试用例', command: '' },
-  { key: 'jira-budget-time', label: '查看 Jira 预算时间', command: '' },
+  { key: 'requirements', label: '需求确认', command: '' },
+  { key: 'implementation', label: '开发实现', command: '' },
+  { key: 'verification', label: '测试验证', command: '' },
+  { key: 'delivery', label: '提交交付', command: '' },
 ]

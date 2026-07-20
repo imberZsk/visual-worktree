@@ -88,6 +88,34 @@ const TERMINAL_OPTIONS_DARWIN = [
 ]
 // PATH_PROFILE_ID_PREFIX 存储设置页新建路径组合时使用的 id 前缀。
 const PATH_PROFILE_ID_PREFIX = 'path-profile'
+// ADD_LIST_BUTTON_HEIGHT 存储设置页全宽新增按钮的统一高度，给按钮文字保留更舒适的上下空间。
+const ADD_LIST_BUTTON_HEIGHT = 36
+// ADD_LIST_BUTTON_PADDING_BLOCK 存储设置页全宽新增按钮的统一上下内边距。
+const ADD_LIST_BUTTON_PADDING_BLOCK = 6
+
+/**
+ * 渲染设置页列表底部的全宽新增按钮，统一工作文档、流程和路径组合的交互样式。
+ * @param {object} props - 组件属性
+ * @param {React.ReactNode} props.children - 按钮展示文案
+ * @param {()=>void} props.onClick - 点击新增时执行的回调
+ * @returns {JSX.Element} 全宽虚线新增按钮
+ */
+function AddListButton({ children, onClick }) {
+  return (
+    <Button
+      block
+      type="dashed"
+      icon={<PlusOutlined />}
+      style={{
+        height: ADD_LIST_BUTTON_HEIGHT,
+        paddingBlock: ADD_LIST_BUTTON_PADDING_BLOCK,
+      }}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  )
+}
 // DEFAULT_PATH_PROFILE_NAME 存储旧配置迁移到路径组合时使用的默认名称。
 const DEFAULT_PATH_PROFILE_NAME = '工作路径'
 
@@ -387,6 +415,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         : []
       const saved = await api.saveConfig({
         ...rest,
+        onboardingCompleted: true,
         sourceProjectsPath: activePathProfile.sourceProjectsPath,
         worktreesPath: activePathProfile.worktreesPath,
         activePathProfileId,
@@ -591,25 +620,26 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         <>
           <Form.Item
             label="当前路径组合"
-            name="activePathProfileId"
             extra={
               <Text type="secondary" style={{ fontSize: 12 }}>
                 可用于切换工作和个人项目工作路径。
               </Text>
             }
-            rules={[{ required: true, message: '请选择当前路径组合' }]}
           >
             <Space.Compact style={{ width: '100%' }}>
-              <Select
-                data-testid="active-path-profile-select"
-                showSearch
-                optionFilterProp="label"
-                options={pathProfileOptions}
-                placeholder="选择当前生效的路径组合"
-                onChange={(value) =>
-                  form.setFieldValue('activePathProfileId', value)
-                }
-              />
+              <Form.Item
+                name="activePathProfileId"
+                noStyle
+                rules={[{ required: true, message: '请选择当前路径组合' }]}
+              >
+                <Select
+                  data-testid="active-path-profile-select"
+                  showSearch
+                  optionFilterProp="label"
+                  options={pathProfileOptions}
+                  placeholder="选择当前生效的路径组合"
+                />
+              </Form.Item>
               <Button icon={<EditOutlined />} onClick={openPathProfileEditor}>
                 管理路径组合
               </Button>
@@ -884,20 +914,16 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     </Form.Item>
                   )}
                 </Modal>
-                <Button
-                  block
-                  type="dashed"
+                <AddListButton
                   onClick={() => {
                     // nextIndex 为新增模板在列表中的下标；添加后立即打开详情弹层，减少用户再次点击。
                     const nextIndex = fields.length
                     add({ type: 'directory', path: '', content: '' })
                     openWorkDocumentEditor(nextIndex)
                   }}
-                  icon={<PlusOutlined />}
-                  size="small"
                 >
                   添加工作文档
-                </Button>
+                </AddListButton>
               </Space>
             )}
           </Form.List>
@@ -1077,7 +1103,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         label="步骤名称"
                         name={[workflowEditorIndex, 'label']}
                       >
-                        <Input placeholder="步骤名称，如：审查需求方案" />
+                        <Input placeholder="步骤名称，如：需求确认" />
                       </Form.Item>
                       {/* command 执行命令：多行编辑，WHY：命令通常包含脚本路径与占位符，单行输入会显示不全。
                           下方额外提供「选择文件」按钮：可用系统文件选择器把某个脚本/文件路径追加到命令末尾，
@@ -1138,9 +1164,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                   )}
                 </Modal>
                 {/* 新增步骤：默认命令为空（仅可勾选、不触发副作用），key 留空由保存时自动生成 */}
-                <Button
-                  block
-                  type="dashed"
+                <AddListButton
                   onClick={() => {
                     // nextIndex 为新增步骤在列表中的下标；添加后立即打开详情弹层，减少用户再次点击。
                     const nextIndex = fields.length
@@ -1151,11 +1175,9 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     })
                     openWorkflowStepEditor(nextIndex)
                   }}
-                  icon={<PlusOutlined />}
-                  size="small"
                 >
                   添加流程步骤
-                </Button>
+                </AddListButton>
               </Space>
             )}
           </Form.List>
@@ -1435,7 +1457,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         >
                           <Input
                             style={{ flex: 1, minWidth: 0 }}
-                            placeholder="/Users/you/work/projects"
+                            placeholder="/Users/you/Desktop/work/projects"
                           />
                         </Form.Item>
                         <Button
@@ -1478,7 +1500,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         >
                           <Input
                             style={{ flex: 1, minWidth: 0 }}
-                            placeholder="/Users/you/work/worktrees"
+                            placeholder="/Users/you/Desktop/work/worktrees"
                           />
                         </Form.Item>
                         <Button
@@ -1505,15 +1527,11 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     </Form.Item>
                   </div>
                 ))}
-                <Button
-                  block
-                  type="dashed"
-                  icon={<PlusOutlined />}
-                  size="small"
+                <AddListButton
                   onClick={() => handleAddPathProfile(add, fields.length)}
                 >
                   添加路径组合
-                </Button>
+                </AddListButton>
               </Space>
             )}
           </Form.List>
