@@ -224,8 +224,9 @@ export function buildWorktreeAddArgs(
     args.push('--force')
   }
   if (useNewBranch) {
-    // 新建分支：显式指定起点引用，避免默认基于源仓库当前 HEAD（可能停在 test 等非主分支）
-    args.push('-b', branch, targetPath)
+    // 修复新分支基于 origin/<main> 创建时被 Git 自动设置为跟踪主分支的问题：
+    // 保留远程主分支作为提交起点，但禁止继承其 upstream，首次推送时再跟踪远程同名功能分支。
+    args.push('--no-track', '-b', branch, targetPath)
     if (startPoint) args.push(startPoint)
   } else {
     args.push(targetPath, branch)
