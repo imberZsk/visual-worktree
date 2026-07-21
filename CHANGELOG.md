@@ -9,6 +9,7 @@
 ### 修复
 
 - 修复基于 `origin/master` 或 `origin/main` 创建功能分支时错误跟踪远程主分支的问题；新分支仍以最新远程主分支为提交起点，首次同步时再正确跟踪远程同名功能分支。
+- 为 CI 与正式发布的 Electron 打包增加同一 runner 内有限重试，复用已下载缓存，降低 Windows Electron/NSIS 临时下载失败导致的构建中断；同时将公开 Release 资产严格限制并校验为 macOS DMG、Windows Setup 与 Windows portable 3 个安装包。
 - 修复当前应用版本与 GitHub 最新 Release 相同时仍错误展示更新入口的问题，改用 `electron-updater` 的版本比较结果判断是否存在更新。
 - 将更新入口改为 Ant Design 下载图标，点击后原位展示实时下载进度，下载完成后自动重启并安装更新。
 

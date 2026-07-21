@@ -8,18 +8,29 @@ const RELEASE_WORKFLOW_FILE = new URL(
 )
 
 describe('release workflow 资产白名单', () => {
-  it('三层筛选只允许 latest YAML，不允许所有 YAML', () => {
-    // workflow 存储正式发布 workflow 文本，用于防止 glob 被再次放宽。
+  // 验证公开 Release 的三层资产筛选只允许 3 个普通用户安装包。
+  it('只允许 DMG、Setup EXE 与 portable EXE', () => {
+    // workflow 存储正式发布 workflow 文本，用于防止资产白名单被再次放宽。
     const workflow = readFileSync(RELEASE_WORKFLOW_FILE, 'utf8')
-    // uploadAllowlistMatches 存储 artifact 上传层的 latest YAML 白名单出现次数。
-    const uploadAllowlistMatches =
-      workflow.match(/release\/latest\*\.yml/g) || []
-    // findAllowlistMatches 存储汇总与发布层的 latest YAML 白名单出现次数。
-    const findAllowlistMatches = workflow.match(/-name 'latest\*\.yml'/g) || []
+    // forbiddenAssetPatterns 存储不得进入公开 Release 链路的技术产物匹配规则。
+    const forbiddenAssetPatterns = [
+      /release\/\*\.zip/,
+      /release\/latest\*\.yml/,
+      /release\/\*\.blockmap/,
+      /-name ['"][^'"]*\.zip['"]/,
+      /-name ['"][^'"]*\.yml['"]/,
+      /-name ['"][^'"]*\.blockmap['"]/,
+    ]
 
-    expect(workflow).not.toContain('release/*.yml')
-    expect(workflow).not.toMatch(/-name ['"]\*\.yml['"]/)
-    expect(uploadAllowlistMatches).toHaveLength(1)
-    expect(findAllowlistMatches).toHaveLength(2)
+    // forbiddenAssetPattern 存储当前检查的禁用资产匹配规则。
+    for (const forbiddenAssetPattern of forbiddenAssetPatterns) {
+      expect(workflow).not.toMatch(forbiddenAssetPattern)
+    }
+    expect(workflow).toContain('release/*.dmg')
+    expect(workflow).toContain('release/*.exe')
+    expect(workflow).toContain(
+      'release_assets=(dist-release/*.dmg dist-release/*Setup*.exe dist-release/*portable*.exe)'
+    )
+    expect(workflow).toContain('[ "${#all_files[@]}" -ne 3 ]')
   })
 })

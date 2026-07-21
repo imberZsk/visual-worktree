@@ -95,9 +95,28 @@ jobs:
         run: pnpm run build:ui
 
       # 只打包不发布（--publish never）：产物落到 release/ 目录，由 publish job 统一发布。
-      # package.json 保留 build.publish 配置，使 electron-builder 仍生成 latest*.yml 自动更新元数据。
+      # 在同一 runner 内重试，使下载成功的 Electron/NSIS 等工具可被后续尝试直接复用。
       - name: Package
-        run: npx electron-builder ${{ matrix.build_args }} --publish never
+        shell: bash
+        run: |
+          # max_attempts 存储单个平台正式打包允许的最大尝试次数。
+          max_attempts=3
+          # retry_delay_seconds 存储首次重试前的等待秒数，后续按次数递增。
+          retry_delay_seconds=15
+          # retry_delay_increment_seconds 存储每次失败后增加的等待秒数。
+          retry_delay_increment_seconds=15
+          # attempt 存储当前正式打包尝试次数。
+          attempt=1
+          until npx electron-builder ${{ matrix.build_args }} --publish never; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "打包连续失败 ${max_attempts} 次，停止重试" >&2
+              exit 1
+            fi
+            echo "第 ${attempt} 次打包失败，等待 ${retry_delay_seconds} 秒后在同一 runner 重试"
+            sleep "$retry_delay_seconds"
+            attempt=$((attempt + 1))
+            retry_delay_seconds=$((retry_delay_seconds + retry_delay_increment_seconds))
+          done
         env:
           # 无签名证书时关闭自动发现，避免联网拖慢；产物未签名（mac 需右键打开 / win 点「仍要运行」）
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -107,13 +126,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
-          # 自动更新只需要 latest.yml/latest-mac.yml；禁止用 *.yml，避免 builder-debug.yml 泄漏到公开 Release。
+          # artifact 只传递最终公开的 3 类用户安装包，技术产物不得进入发布汇总链路。
           path: |
             release/*.dmg
             release/*.exe
-            release/*.zip
-            release/latest*.yml
-            release/*.blockmap
           # 至少要有安装包，全为空说明打包异常，直接失败
           if-no-files-found: error
           retention-days: 3
@@ -136,9 +152,28 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p dist-release
-          # WHY 三层都使用显式白名单：artifact 上传配置未来若误放宽，汇总阶段仍不会带入 builder-debug.yml 等内部文件。
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name 'latest*.yml' -o -name '*.blockmap' \) -exec cp {} dist-release/ \;
+          # WHY 三层都使用显式白名单：artifact 上传配置未来若误放宽，汇总阶段仍只接收普通用户安装包。
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} dist-release/ \;
           ls -la dist-release
+
+      # 发布前精确验证资产集合：1 个 macOS DMG、1 个 Windows Setup、1 个 Windows portable。
+      - name: Validate release assets
+        shell: bash
+        run: |
+          shopt -s nullglob
+          # dmg_files 存储待发布的 macOS DMG 安装包。
+          dmg_files=(dist-release/*.dmg)
+          # setup_files 存储待发布的 Windows Setup 安装包。
+          setup_files=(dist-release/*Setup*.exe)
+          # portable_files 存储待发布的 Windows portable 安装包。
+          portable_files=(dist-release/*portable*.exe)
+          # all_files 存储汇总目录中的全部文件，用于阻止额外后缀或重复产物发布。
+          all_files=(dist-release/*)
+          if [ "${#dmg_files[@]}" -ne 1 ] || [ "${#setup_files[@]}" -ne 1 ] || [ "${#portable_files[@]}" -ne 1 ] || [ "${#all_files[@]}" -ne 3 ]; then
+            echo "Release 资产必须精确为 1 个 DMG、1 个 Setup EXE、1 个 portable EXE" >&2
+            printf '%s\n' "${all_files[@]}" >&2
+            exit 1
+          fi
 
       # 根据本次实际产出的安装包动态生成「下载与安装」说明，写入 release-notes.md。
       # WHY 动态生成而非写死：产物文件名含版本号、且不同版本可能平台组合不同（如未来新增 win arm64），
@@ -188,16 +223,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # release_assets 存储最终展示在 GitHub Release Assets 中、面向用户下载的文件。
-          release_assets=()
-          while IFS= read -r file; do
-            release_assets+=("$file")
-          # WHY 发布入口再次收窄 YAML 白名单，确保调试配置不会因上游 artifact 变化而成为公开资产。
-          done < <(find dist-release -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' -o -name 'latest*.yml' -o -name '*.blockmap' \) | sort)
-          if [ "${#release_assets[@]}" -eq 0 ]; then
-            echo "没有找到可发布的安装包"
-            exit 1
-          fi
+          # release_assets 存储已经过精确集合校验的 3 个普通用户安装包。
+          release_assets=(dist-release/*.dmg dist-release/*Setup*.exe dist-release/*portable*.exe)
           gh release create "${GITHUB_REF_NAME}" "${release_assets[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
