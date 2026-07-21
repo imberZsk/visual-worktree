@@ -46,6 +46,28 @@ describe('addWorktree', () => {
     expect(wts.some((w) => w.branch === 'feat/new')).toBe(true)
   })
 
+  // 验证基于远程主分支创建功能分支时只继承提交起点，不继承主分支 upstream。
+  it('creates a branch from origin/master without tracking origin/master', async () => {
+    // local 存储带 origin/master 远程跟踪引用的被测克隆仓库。
+    const { local } = makeRemoteAndClone(join(ctx.root, 'remote-case'))
+    // target 存储新功能分支 worktree 的目标路径。
+    const target = join(ctx.root, 'worktrees', 'TASK-NO-TRACK', 'project')
+    // branch 存储用于验证 upstream 配置的功能分支名。
+    const branch = 'feat/no-track'
+    // result 存储创建 worktree 的执行结果。
+    const result = await addWorktree(local, target, branch, {
+      newBranch: true,
+      linkNodeModules: false,
+    })
+
+    expect(result.success).toBe(true)
+    expect(git(target, 'rev-parse HEAD').trim()).toBe(
+      git(local, 'rev-parse origin/master').trim()
+    )
+    expect(() => git(local, `config --get branch.${branch}.remote`)).toThrow()
+    expect(() => git(local, `config --get branch.${branch}.merge`)).toThrow()
+  })
+
   it('creates a worktree from an existing branch', async () => {
     const repo = initRepo(join(ctx.root, 'projB'), 'master')
     git(repo, 'branch existing')
@@ -665,6 +687,7 @@ describe('buildWorktreeAddArgs（跳过 hooks 的空设备按平台切换）', (
       'origin/main',
       'win32'
     )
+    expect(args).toContain('--no-track')
     expect(args).toContain('-b')
     expect(args).toContain('feat/x')
     expect(args).toContain('origin/main')

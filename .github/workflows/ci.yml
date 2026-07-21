@@ -22,7 +22,7 @@ jobs:
         include:
           - label: macOS
             os: macos-latest
-            package_command: pnpm run dist
+            package_script: dist
             artifact_name: macos-package
             artifact_path: release/*.dmg
             electron_cache_path: |
@@ -30,7 +30,7 @@ jobs:
               ~/Library/Caches/electron-builder
           - label: Windows
             os: windows-latest
-            package_command: pnpm run dist:win
+            package_script: dist:win
             artifact_name: windows-package
             artifact_path: release/*.exe
             electron_cache_path: |
@@ -70,9 +70,29 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      # dist/dist:win 内部只执行一次 build:ui，然后调用对应平台 electron-builder。
+      # 在同一 runner 内重试可复用前一次已下载的 Electron/electron-builder 缓存，
+      # 避免临时网络错误导致换 runner 后从零下载仍反复失败。
       - name: Build package
-        run: ${{ matrix.package_command }}
+        shell: bash
+        run: |
+          # max_attempts 存储单次 CI job 允许的最大打包次数。
+          max_attempts=3
+          # retry_delay_seconds 存储首次重试前的等待秒数，后续按次数递增。
+          retry_delay_seconds=15
+          # retry_delay_increment_seconds 存储每次失败后增加的等待秒数。
+          retry_delay_increment_seconds=15
+          # attempt 存储当前打包尝试次数。
+          attempt=1
+          until pnpm run "${{ matrix.package_script }}"; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "打包连续失败 ${max_attempts} 次，停止重试" >&2
+              exit 1
+            fi
+            echo "第 ${attempt} 次打包失败，等待 ${retry_delay_seconds} 秒后在同一 runner 重试"
+            sleep "$retry_delay_seconds"
+            attempt=$((attempt + 1))
+            retry_delay_seconds=$((retry_delay_seconds + retry_delay_increment_seconds))
+          done
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
