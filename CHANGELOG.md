@@ -4,6 +4,13 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.6.2] - 2026-07-21
+
+### 修复
+
+- 修复当前应用版本与 GitHub 最新 Release 相同时仍错误展示更新入口的问题，改用 `electron-updater` 的版本比较结果判断是否存在更新。
+- 将更新入口改为 Ant Design 下载图标，点击后原位展示实时下载进度，下载完成后自动重启并安装更新。
+
 ## [1.6.1] - 2026-07-20
 
 ### 修复

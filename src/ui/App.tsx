@@ -34,6 +34,7 @@ import {
   DeleteOutlined,
   ThunderboltOutlined,
   FolderOpenOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import { useStore } from './store/useStore.ts'
 import { filterProjects, summarize, FILTERS } from './projectLogic.ts'
@@ -863,6 +864,8 @@ export default function App() {
   const [updateVersion, setUpdateVersion] = useState(null)
   // updateDownloading 标记安装包是否正在下载。
   const [updateDownloading, setUpdateDownloading] = useState(false)
+  // updateDownloadPercent 存储安装包当前下载百分比。
+  const [updateDownloadPercent, setUpdateDownloadPercent] = useState(0)
   // updateDownloaded 标记安装包是否已完整下载。
   const [updateDownloaded, setUpdateDownloaded] = useState(false)
   // 从全局 store 取状态与动作
@@ -940,17 +943,30 @@ export default function App() {
     }
   }, [])
 
-  /** 下载或安装应用更新，下载完成前保持 loading。 */
+  useEffect(() => {
+    // subscribeProgress 存储 Electron preload 的更新下载进度订阅方法，兼容旧版 preload 和测试替身。
+    const subscribeProgress = api.onAppUpdateProgress
+    if (typeof subscribeProgress !== 'function') return undefined
+    // unsubscribeProgress 存储卸载组件时移除 IPC 监听器的方法。
+    const unsubscribeProgress = subscribeProgress((progress) => {
+      setUpdateDownloadPercent(Number(progress?.percent) || 0)
+    })
+    return unsubscribeProgress
+  }, [])
+
+  /** 下载应用更新并在下载完成后立即安装重启。 */
   const handleAppUpdate = async () => {
     if (updateDownloaded) {
       await api.installAppUpdate()
       return
     }
     setUpdateDownloading(true)
+    setUpdateDownloadPercent(0)
     try {
       await api.downloadAppUpdate()
       setUpdateDownloaded(true)
-      message.success('更新已下载，可以安装')
+      setUpdateDownloadPercent(100)
+      await api.installAppUpdate()
     } catch (error) {
       message.error(error?.message || '更新下载失败')
     } finally {
@@ -2540,14 +2556,21 @@ export default function App() {
         <Space>
           {updateVersion && (
             <Tooltip title={`新版本 v${updateVersion}`}>
-              <Button
-                size="small"
-                type="primary"
-                loading={updateDownloading}
-                onClick={() => handleAppUpdate()}
-              >
-                {updateDownloaded ? '安装并重启' : '下载更新'}
-              </Button>
+              {updateDownloading ? (
+                <Progress
+                  percent={Math.round(updateDownloadPercent)}
+                  size="small"
+                  style={{ width: 96, margin: 0 }}
+                />
+              ) : (
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<DownloadOutlined />}
+                  aria-label="下载更新"
+                  onClick={() => handleAppUpdate()}
+                />
+              )}
             </Tooltip>
           )}
           {/* 创建 worktree：worktree 和看板视图显示 */}
