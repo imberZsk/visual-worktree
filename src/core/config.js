@@ -15,6 +15,17 @@ const DEFAULT_WORKTREES_PATH = join(homedir(), 'Desktop', 'work', 'worktrees');
 const DEFAULT_PATH_PROFILE_ID = 'default';
 // DEFAULT_PATH_PROFILE_NAME 存储内置默认路径组合的展示名称。
 const DEFAULT_PATH_PROFILE_NAME = '工作路径';
+// DEFAULT_TOKEN_PRICING 存储用户未启用自定义计价时的配置；单价单位为美元/百万 Token。
+const DEFAULT_TOKEN_PRICING = {
+  enabled: false,
+  input: 3,
+  output: 15,
+  cacheWrite: 3.75,
+  cacheRead: 0.3,
+  usdToCny: 7.2,
+};
+// DEFAULT_AI_USAGE_TOOL 存储默认参与 Token 统计的本地 AI 工具。
+const DEFAULT_AI_USAGE_TOOL = 'claude-code';
 
 // 默认配置：基于用户的实际工作目录
 const DEFAULT_CONFIG = {
@@ -69,7 +80,37 @@ const DEFAULT_CONFIG = {
     envHealth: true,
     claudeUsage: true,
   },
+  // Token 费用自定义规则：启用后所有模型统一按这里的四类单价和汇率计算。
+  tokenPricing: { ...DEFAULT_TOKEN_PRICING },
+  // AI Token 统计工具：支持 Claude Code 与 Codex，本字段随其他设置写入配置文件。
+  aiUsageTool: DEFAULT_AI_USAGE_TOOL,
 };
+
+/**
+ * 规范化 Token 费用配置，避免损坏配置或负数价格进入费用计算。
+ * @param {object} pricing - 待规范化的 Token 费用配置
+ * @returns {{enabled:boolean,input:number,output:number,cacheWrite:number,cacheRead:number,usdToCny:number}} 有效计价配置
+ */
+function normalizeTokenPricing(pricing) {
+  // normalizedPricing 存储合并默认值后的计价配置。
+  const normalizedPricing = { ...DEFAULT_TOKEN_PRICING, ...(pricing || {}) };
+  // numericKeys 存储必须为非负有限数的单价字段。
+  const numericKeys = ['input', 'output', 'cacheWrite', 'cacheRead'];
+  for (const key of numericKeys) {
+    // numericValue 存储当前字段转换后的数值。
+    const numericValue = Number(normalizedPricing[key]);
+    normalizedPricing[key] = Number.isFinite(numericValue) && numericValue >= 0
+      ? numericValue
+      : DEFAULT_TOKEN_PRICING[key];
+  }
+  // exchangeRate 存储美元兑人民币汇率，必须为正数才能用于换算。
+  const exchangeRate = Number(normalizedPricing.usdToCny);
+  normalizedPricing.usdToCny = Number.isFinite(exchangeRate) && exchangeRate > 0
+    ? exchangeRate
+    : DEFAULT_TOKEN_PRICING.usdToCny;
+  normalizedPricing.enabled = normalizedPricing.enabled === true;
+  return normalizedPricing;
+}
 
 // 旧配置目录（带连字符）：历史版本把 config.json 存这里，与 task-status 等所在的 .visualWorktree 目录不一致。
 // 现统一到 .visualWorktree，loadConfig 时一次性迁移旧文件过来。仅用于默认目录的迁移，不影响测试注入的 baseDir。
@@ -259,7 +300,13 @@ export function loadConfig(baseDir) {
     }
     // hasPathProfiles 标记磁盘配置是否已经使用新路径组合结构；旧配置优先从顶层路径迁移。
     const hasPathProfiles = Array.isArray(parsed?.pathProfiles);
-    return normalizePathProfilesInConfig(mergedConfig, { preferTopLevelPaths: !hasPathProfiles });
+    // normalizedConfig 存储完成路径迁移后的配置，再补齐嵌套的 Token 计价默认值。
+    const normalizedConfig = normalizePathProfilesInConfig(mergedConfig, { preferTopLevelPaths: !hasPathProfiles });
+    normalizedConfig.tokenPricing = normalizeTokenPricing(parsed?.tokenPricing);
+    normalizedConfig.aiUsageTool = parsed?.aiUsageTool === 'codex'
+      ? 'codex'
+      : DEFAULT_AI_USAGE_TOOL;
+    return normalizedConfig;
   } catch (e) {
     // fallbackConfig 存储配置损坏时的安全默认值；配置文件本身证明用户已使用过应用，因此不重复弹首次提示。
     const fallbackConfig = cloneDefaultConfig();
@@ -288,6 +335,10 @@ export function saveConfig(config, baseDir) {
     || Object.prototype.hasOwnProperty.call(config || {}, 'worktreesPath');
   // normalized 存储写盘前的完整配置；旧版路径保存要同步覆盖当前路径组合。
   const normalized = normalizePathProfilesInConfig(merged, { preferTopLevelPaths: !hasIncomingProfiles && hasIncomingTopLevelPaths });
+  normalized.tokenPricing = normalizeTokenPricing(merged.tokenPricing);
+  normalized.aiUsageTool = merged.aiUsageTool === 'codex'
+    ? 'codex'
+    : DEFAULT_AI_USAGE_TOOL;
   writeFileSync(file, JSON.stringify(normalized, null, 2), 'utf8');
   return normalized;
 }
@@ -308,4 +359,4 @@ export function resetConfig(baseDir) {
   return defaultConfig;
 }
 
-export { DEFAULT_CONFIG };
+export { DEFAULT_CONFIG, DEFAULT_TOKEN_PRICING, DEFAULT_AI_USAGE_TOOL };

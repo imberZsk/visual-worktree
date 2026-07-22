@@ -175,12 +175,14 @@ contextBridge.exposeInMainWorld('api', {
   // 在系统默认浏览器中打开 URL
   openExternalUrl: (url) => ipcRenderer.invoke(IPC.OPEN_EXTERNAL_URL, url),
   // 读取已删除任务的历史记录
-  loadTaskHistory: () => ipcRenderer.invoke(IPC.LOAD_TASK_HISTORY),
-  // 追加一条已删除任务记录（{ task, link }）
-  appendTaskHistory: (entry) =>
-    ipcRenderer.invoke(IPC.APPEND_TASK_HISTORY, entry),
-  // 按下标删除一条历史记录
-  removeTaskHistory: (idx) => ipcRenderer.invoke(IPC.REMOVE_TASK_HISTORY, idx),
+  loadTaskHistory: (workspaceId) =>
+    ipcRenderer.invoke(IPC.LOAD_TASK_HISTORY, workspaceId),
+  // 追加一条已删除任务记录（{ task, link }），workspaceId 用于隔离路径组合。
+  appendTaskHistory: (entry, workspaceId) =>
+    ipcRenderer.invoke(IPC.APPEND_TASK_HISTORY, entry, workspaceId),
+  // 按当前工作区历史列表下标删除一条记录。
+  removeTaskHistory: (idx, workspaceId) =>
+    ipcRenderer.invoke(IPC.REMOVE_TASK_HISTORY, idx, workspaceId),
   // 获取任务关联的 Claude Code 会话列表及 token 用量
   getClaudeSessionsByTask: (taskName) =>
     ipcRenderer.invoke(IPC.GET_CLAUDE_SESSIONS_BY_TASK, taskName),

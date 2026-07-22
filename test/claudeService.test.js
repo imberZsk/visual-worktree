@@ -262,6 +262,14 @@ describe('claudeService', () => {
       const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
       expect(calculateCost(usage, 'claude-sonnet-5')).toBe(0);
     });
+
+    it('启用自定义规则后覆盖模型单价', () => {
+      // usage 存储四种 Token 各一百万的用量，便于直接核对单价相加结果。
+      const usage = { input: 1_000_000, output: 1_000_000, cacheWrite: 1_000_000, cacheRead: 1_000_000 };
+      // customPricing 存储本用例的统一计价规则。
+      const customPricing = { enabled: true, input: 1, output: 2, cacheWrite: 3, cacheRead: 4 };
+      expect(calculateCost(usage, 'claude-opus-4-8', customPricing)).toBe(10);
+    });
   });
 
   describe('usdToCny', () => {
@@ -269,6 +277,10 @@ describe('claudeService', () => {
       expect(usdToCny(1)).toBe(7.2);
       expect(usdToCny(0.5)).toBe(3.6);
       expect(usdToCny(0)).toBe(0);
+    });
+
+    it('支持自定义美元兑人民币汇率', () => {
+      expect(usdToCny(10, 8)).toBe(80);
     });
   });
 

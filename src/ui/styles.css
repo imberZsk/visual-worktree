@@ -122,34 +122,126 @@ html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-item-selected {
   line-height: 20px;
 }
 
-/* Worktree 任务标题列允许收缩，避免标题徽标过多时把右侧操作按钮挤出可视区 */
-.worktree-task-collapse .ant-collapse-header-text {
+/* Ant Design 6 使用 ant-collapse-title 承载标题；允许该 flex 项占据剩余宽度并收缩，避免徽标把右侧操作区推出可视范围。 */
+.worktree-task-collapse.ant-collapse
+  > .ant-collapse-item
+  > .ant-collapse-header
+  > .ant-collapse-title {
+  flex: 1 1 0;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
 }
 
-/* Worktree 任务标题横向滚动：长任务名和多个标题标签保持单行，用户可左右滑动查看 */
-.worktree-task-title-scroll {
+/* 小屏下折叠头允许标题区缩小，右侧操作区保留可用空间，标题内部继续横向滑动。 */
+.worktree-task-collapse .ant-collapse-header {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 任务标题填满 AntD 标题 flex 项；右侧操作区已从该项宽度中扣除，内部只让徽标区收缩。 */
+.worktree-task-title {
   align-items: center;
   display: flex;
   gap: 6px;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
+  overflow: hidden;
+  width: 100%;
   white-space: nowrap;
 }
 
-/* 标题内的标签与文本固定自身宽度，由外层滚动容器承接溢出 */
-.worktree-task-title-scroll > * {
+/* 任务名保持自身自然宽度，空间不足时优先收缩后面的徽标组。 */
+.worktree-task-name {
   flex: 0 0 auto;
 }
 
-/* 右侧任务操作按钮固定在可视区，标题过长时只滚动标题区域 */
+/* 徽标组占用任务名之后的真实剩余空间；仅当内部内容超出该空间时出现横向滚动。 */
+.worktree-task-badges-scroll {
+  align-items: center;
+  display: flex;
+  flex: 1 1 0;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+/* Electron Chromium 隐藏徽标区原生滚动条，但保留滚轮、触控板和横向滚动能力。 */
+.worktree-task-badges-scroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+/* 徽标固定自身宽度，由徽标组承接全部横向溢出。 */
+.worktree-task-badges-scroll > * {
+  flex: 0 0 auto;
+}
+
+/* 右侧任务操作按钮固定在可视区，不参与左侧徽标滚动。 */
 .worktree-task-collapse .ant-collapse-extra {
   flex: 0 0 auto;
+}
+
+/* Token 费用页使用统一紧凑节奏，避免 AntD 默认 Form.Item 间距与自定义布局叠加。 */
+[data-testid='token-pricing-settings-panel'] .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* 工具选择与计价规则之间保留一个标准中等间距。 */
+.token-pricing-tool-field {
+  margin-bottom: 16px !important;
+}
+
+/* 计价标题、说明和开关在同一行组织，信息与操作保持清晰对应。 */
+.token-pricing-rule-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+}
+
+/* 标题说明区域允许收缩，长文案在抽屉窄屏下自然换行。 */
+.token-pricing-rule-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 说明文字使用 AntD 次级文字色与紧凑行高。 */
+.token-pricing-rule-description {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 四类 Token 单价采用两列紧凑网格；窄屏自动回落为单列。 */
+.token-pricing-fields-grid {
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 汇率占满网格整行，避免最后一项悬空。 */
+.token-pricing-exchange-field {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .token-pricing-fields-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-pricing-exchange-field {
+    grid-column: auto;
+  }
 }
 
 /* Claude 用量标签字号略小但高度与其他任务标题徽标保持一致 */

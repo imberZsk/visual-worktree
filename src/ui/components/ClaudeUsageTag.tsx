@@ -11,9 +11,12 @@ import { api } from '../api.ts'
  * @param {object} props - 组件属性
  * @param {string} props.taskName - 任务名
  * @param {object} [props.summary] - 用量汇总数据（预加载时传入，避免重复请求）
+ * @param {'claude-code'|'codex'} [props.usageTool] - 当前统计工具
  * @returns {JSX.Element|null} 用量标签（无数据时返回 null）
  */
-export default function ClaudeUsageTag({ taskName, summary }) {
+export default function ClaudeUsageTag({ taskName, summary, usageTool = 'claude-code' }) {
+  // usageToolName 存储当前统计工具的用户可见名称。
+  const usageToolName = usageTool === 'codex' ? 'Codex' : 'Claude Code'
   // loading 标记是否正在加载用量数据
   const [loading, setLoading] = useState(!summary)
   // usage 存储该任务的用量汇总：{ sessionCount, usage, cost }
@@ -123,7 +126,7 @@ export default function ClaudeUsageTag({ taskName, summary }) {
   const tooltipContent = (
     <div style={{ fontSize: 12, minWidth: 180, lineHeight: 1.8 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>
-        Claude Code 用量统计
+        {usageToolName} 用量统计
       </div>
       {row('会话数', usage.sessionCount)}
       {row('Input tokens', formatTokens(usage.usage?.input || 0))}

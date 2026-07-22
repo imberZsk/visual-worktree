@@ -252,4 +252,21 @@ describe('config', () => {
     // 不再使用带连字符的旧目录名
     expect(dir.includes('.visual-worktree')).toBe(false)
   })
+
+  it('saves and reloads custom token pricing', () => {
+    // dir 存储本用例的独立配置目录。
+    const dir = join(ctx.root, 'token-pricing-config')
+    // tokenPricing 存储用户配置的统一 Token 计价规则。
+    const tokenPricing = {
+      enabled: true,
+      input: 1.25,
+      output: 6.5,
+      cacheWrite: 2,
+      cacheRead: 0.2,
+      usdToCny: 7.35,
+    }
+    saveConfig({ tokenPricing, aiUsageTool: 'codex' }, dir)
+    expect(loadConfig(dir).tokenPricing).toEqual(tokenPricing)
+    expect(loadConfig(dir).aiUsageTool).toBe('codex')
+  })
 })

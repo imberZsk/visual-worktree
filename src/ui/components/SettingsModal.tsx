@@ -14,6 +14,7 @@ import {
   theme,
   Tag,
   Modal,
+  InputNumber,
 } from 'antd'
 import {
   PlusOutlined,
@@ -39,7 +40,7 @@ import { withConfirmDefaults } from '../modalDefaults.ts'
 const DEFAULT_WORK_DOCUMENT_TEMPLATES = [
   { type: 'directory', path: 'docs', content: '' },
 ]
-// 设置抽屉：拆分为「路径」「工具」「工作文档」「流程」「CI/CD」五个 Tab 分别配置。
+// 设置抽屉：按业务分类配置路径、工具、工作文档、流程、Token 费用、展示与 CI/CD。
 // Text 用于设置项内的辅助说明文字。
 const { Text } = Typography
 // 流程步骤详情弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
@@ -1182,6 +1183,89 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
             )}
           </Form.List>
         </Form.Item>
+      ),
+    },
+    {
+      key: 'token-pricing',
+      label: 'Token 费用',
+      children: (
+        <div data-testid="token-pricing-settings-panel">
+          <Form.Item
+            className="token-pricing-tool-field"
+            label="统计工具"
+            name="aiUsageTool"
+            rules={[{ required: true, message: '请选择 Token 统计工具' }]}
+          >
+            <Select
+              options={[
+                { label: 'Claude Code', value: 'claude-code' },
+                { label: 'Codex', value: 'codex' },
+              ]}
+            />
+          </Form.Item>
+          <div className="token-pricing-rule-header">
+            <div className="token-pricing-rule-copy">
+              <Text strong>自定义计价</Text>
+              <Text type="secondary" className="token-pricing-rule-description">
+                所选工具的全部模型统一使用下列美元单价；关闭时未知模型使用默认回退价。单价单位为每百万 Token。
+              </Text>
+            </div>
+            <Form.Item
+              noStyle
+              name={['tokenPricing', 'enabled']}
+              valuePropName="checked"
+            >
+              <Switch aria-label="启用自定义计价" />
+            </Form.Item>
+          </div>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              // pricingEnabled 存储自定义计价开关状态，用于控制价格输入是否可编辑。
+              const pricingEnabled = getFieldValue(['tokenPricing', 'enabled']) === true
+              // pricingFields 存储四种 Token 类型对应的字段名和界面文案。
+              const pricingFields = [
+                { key: 'input', label: 'Input 单价' },
+                { key: 'output', label: 'Output 单价' },
+                { key: 'cacheWrite', label: 'Cache write 单价' },
+                { key: 'cacheRead', label: 'Cache read 单价' },
+              ]
+              return (
+                <div className="token-pricing-fields-grid">
+                  {pricingFields.map((pricingField) => (
+                    <Form.Item
+                      className="token-pricing-field"
+                      key={pricingField.key}
+                      label={pricingField.label}
+                      name={['tokenPricing', pricingField.key]}
+                      rules={[{ required: true, message: `请输入${pricingField.label}` }]}
+                    >
+                      <InputNumber
+                        min={0}
+                        precision={6}
+                        disabled={!pricingEnabled}
+                        prefix="$"
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  ))}
+                  <Form.Item
+                    className="token-pricing-field token-pricing-exchange-field"
+                    label="美元兑人民币汇率"
+                    name={['tokenPricing', 'usdToCny']}
+                    rules={[{ required: true, message: '请输入美元兑人民币汇率' }]}
+                  >
+                    <InputNumber
+                      min={0.000001}
+                      precision={6}
+                      disabled={!pricingEnabled}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                </div>
+              )
+            }}
+          </Form.Item>
+        </div>
       ),
     },
     {

@@ -12,6 +12,10 @@ import {
   getSessionsByTask,
   getTasksSummary,
 } from '../src/core/claudeService.js'
+import {
+  getCodexSessionsByTask,
+  getCodexTasksSummary,
+} from '../src/core/codexService.js'
 import { checkEnvHealth } from '../src/core/envHealthService.js'
 import {
   loadTaskEnvHealth,
@@ -803,12 +807,41 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   // 历史记录文件路径：~/.visualWorktree/task-history.json，存储已删除任务列表
   const HISTORY_FILE = join(VW_DIR, 'task-history.json')
 
-  // 读取已删除任务的历史记录（损坏或不存在时回退空数组）
-  ipcMain.handle(IPC.LOAD_TASK_HISTORY, () => readJsonArray(HISTORY_FILE))
+  /**
+   * 规范化历史记录工作区标识，空值表示兼容旧版的全量操作。
+   * @param {string} workspaceId - 路径组合稳定标识
+   * @returns {string} 清理后的工作区标识
+   */
+  const normalizeHistoryWorkspaceId = (workspaceId) =>
+    String(workspaceId || '').trim()
+
+  // 读取当前工作区已删除任务历史；首次读取时把无法追溯来源的旧记录归入当前工作区。
+  ipcMain.handle(IPC.LOAD_TASK_HISTORY, async (_e, workspaceId) => {
+    // normalizedWorkspaceId 存储当前调用方传入的路径组合标识。
+    const normalizedWorkspaceId = normalizeHistoryWorkspaceId(workspaceId)
+    // list 存储磁盘中的完整历史记录列表。
+    const list = await readJsonArray(HISTORY_FILE)
+    if (!normalizedWorkspaceId) return list
+    // hasLegacyEntries 标记是否存在升级前未记录工作区的历史数据。
+    const hasLegacyEntries = list.some((item) => !item?.workspaceId)
+    // migratedList 存储完成旧数据归属迁移后的完整列表。
+    const migratedList = list.map((item) =>
+      item?.workspaceId
+        ? item
+        : { ...item, workspaceId: normalizedWorkspaceId }
+    )
+    if (hasLegacyEntries) {
+      await mkdir(VW_DIR, { recursive: true })
+      await writeFile(HISTORY_FILE, JSON.stringify(migratedList, null, 2))
+    }
+    return migratedList.filter(
+      (item) => item?.workspaceId === normalizedWorkspaceId
+    )
+  })
 
   // 追加一条已删除任务记录到历史文件头部（最新的排最前）
   // entry: { task: string, link: string|string[]|Array<{name:string,url:string}>, status?: string, docsPath?: string }
-  ipcMain.handle(IPC.APPEND_TASK_HISTORY, async (_e, entry) => {
+  ipcMain.handle(IPC.APPEND_TASK_HISTORY, async (_e, entry, workspaceId) => {
     try {
       await mkdir(VW_DIR, { recursive: true })
       // list 现有历史列表，文件不存在或损坏时回退空数组
@@ -828,6 +861,7 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
         link,
         status: entry.status || '',
         docsPath: entry.docsPath || '',
+        workspaceId: normalizeHistoryWorkspaceId(workspaceId),
         deletedAt: new Date().toISOString(),
       })
       await writeFile(HISTORY_FILE, JSON.stringify(list, null, 2))
@@ -838,14 +872,25 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   })
 
   // 按下标删除一条历史记录（idx 为数组下标），写回文件
-  ipcMain.handle(IPC.REMOVE_TASK_HISTORY, async (_e, idx) => {
+  ipcMain.handle(IPC.REMOVE_TASK_HISTORY, async (_e, idx, workspaceId) => {
     try {
       if (!existsSync(HISTORY_FILE)) return true
       const raw = await readFile(HISTORY_FILE, 'utf8')
       const parsed = JSON.parse(raw)
       // list 现有历史列表，非数组时回退空数组
       const list = Array.isArray(parsed) ? parsed : []
-      list.splice(idx, 1)
+      // normalizedWorkspaceId 存储待删除记录所属的路径组合标识。
+      const normalizedWorkspaceId = normalizeHistoryWorkspaceId(workspaceId)
+      // matchingIndexes 存储当前工作区记录在完整列表中的实际下标。
+      const matchingIndexes = normalizedWorkspaceId
+        ? list.reduce((indexes, item, itemIndex) => {
+            if (item?.workspaceId === normalizedWorkspaceId) indexes.push(itemIndex)
+            return indexes
+          }, [])
+        : []
+      // targetIndex 存储最终要从完整列表移除的下标；无工作区参数时保持旧版全量下标语义。
+      const targetIndex = normalizedWorkspaceId ? matchingIndexes[idx] : idx
+      if (Number.isInteger(targetIndex)) list.splice(targetIndex, 1)
       await writeFile(HISTORY_FILE, JSON.stringify(list, null, 2))
       return true
     } catch {
@@ -876,16 +921,22 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     }
   })
 
-  // 获取任务关联的 Claude Code 会话列表及 token 用量
+  // 获取任务关联的当前 AI 工具会话列表及 Token 用量。
   ipcMain.handle(IPC.GET_CLAUDE_SESSIONS_BY_TASK, async (_e, taskName) => {
     const cfg = loadConfig(configBaseDir)
-    return getSessionsByTask(taskName, cfg.worktreesPath)
+    if (cfg.aiUsageTool === 'codex') {
+      return getCodexSessionsByTask(taskName, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+    }
+    return getSessionsByTask(taskName, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
   })
 
-  // 获取所有任务的 Claude Code 用量汇总
+  // 获取当前 AI 工具的全部任务 Token 用量汇总。
   ipcMain.handle(IPC.GET_CLAUDE_TASKS_SUMMARY, async (_e, taskNames) => {
     const cfg = loadConfig(configBaseDir)
-    return getTasksSummary(taskNames, cfg.worktreesPath)
+    if (cfg.aiUsageTool === 'codex') {
+      return getCodexTasksSummary(taskNames, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+    }
+    return getTasksSummary(taskNames, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
   })
 
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）

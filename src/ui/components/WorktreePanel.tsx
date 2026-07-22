@@ -711,6 +711,7 @@ function wtStatusTags(wt) {
  * @param {Record<string,object>} props.envHealthMap - 任务名 → 环境检查状态 的映射
  * @param {Record<string,string>} props.cicdLinks - 项目名 → CI/CD 流水线 URL 的映射（从全局配置读取）
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
+ * @param {'claude-code'|'codex'} props.aiUsageTool - 当前参与 Token 统计的 AI 工具
  * @param {Array<{key:string,label:string,type:string}>} props.workflowSteps - 工作流（需求流程）步骤清单（从全局配置读取）
  * @param {Record<string,string[]>} props.workflowMap - 任务名 → 已勾选步骤 key 数组 的映射
  * @param {(taskName:string, stepKey:string, done:boolean)=>void} props.onToggleStep - 切换某任务某 checkbox 步骤的勾选态
@@ -747,6 +748,7 @@ export default function WorktreePanel({
   envHealthMap = {},
   cicdLinks = {},
   claudeUsageMap = {},
+  aiUsageTool = 'claude-code',
   workflowSteps = [],
   workflowMap = {},
   onToggleStep,
@@ -773,6 +775,23 @@ export default function WorktreePanel({
   const [linkPopoverTask, setLinkPopoverTask] = useState(null)
   // linkInputVal 链接配置气泡内的输入框草稿数组（多条 Jira/飞书需求/工单链接，含展示名称和 URL）
   const [linkInputVal, setLinkInputVal] = useState([{ name: '', url: '' }])
+
+  /**
+   * 徽标溢出时把普通鼠标纵向滚轮转换为横向滚动；未溢出或触控板已提供横向增量时保持原生行为。
+   * @param {React.WheelEvent<HTMLDivElement>} event - 徽标滚动区域的滚轮事件
+   */
+  const handleBadgeWheel = (event) => {
+    // scrollContainer 存储当前任务的徽标横向滚动节点。
+    const scrollContainer = event.currentTarget
+    // hasHorizontalOverflow 标记徽标内容是否超出当前动态分配到的宽度。
+    const hasHorizontalOverflow = scrollContainer.scrollWidth > scrollContainer.clientWidth
+    // usesVerticalWheel 标记本次主要来自普通鼠标纵向滚轮，而非触控板横向手势。
+    const usesVerticalWheel = Math.abs(event.deltaY) > Math.abs(event.deltaX)
+    if (!hasHorizontalOverflow || !usesVerticalWheel) return
+    scrollContainer.scrollLeft += event.deltaY
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   /**
    * 保存链接并关闭气泡
@@ -927,59 +946,44 @@ export default function WorktreePanel({
       key: t.task,
       className: taskHiding ? 'worktree-task-hiding' : undefined,
       label: (
-        <div className="worktree-task-title-scroll">
+        <div className="worktree-task-title">
           <SingleLineText
             text={t.task}
             inline
+            className="worktree-task-name"
             style={{ maxWidth: 360, fontWeight: 600 }}
           />
-          {taskPinned && (
-            <Tag color="blue" style={{ marginInlineEnd: 0 }}>
-              置顶
-            </Tag>
-          )}
-          {taskHidden && (
-            <Tag color="default" style={{ marginInlineEnd: 0 }}>
-              已隐藏
-            </Tag>
-          )}
-          {/* 项目数量徽标：信息优先级最高，先表达任务覆盖范围，再展示处理状态/链接/环境/用量。 */}
-          {titleBadges.projectCount && projectCountTag}
-          {/* 人工状态标签：紧跟项目数，折叠时也可见，点击切换/清除。 */}
-          {titleBadges.taskStatus && (
-            <TaskStatusControl
-              taskName={t.task}
-              statusKey={taskStatusMap[t.task]}
-              onChange={onTaskStatusChange}
-            />
-          )}
-          {/* 任务链接标签：排在状态后，保存了几条就逐条展示，点击直接打开对应需求/文档/工单。 */}
-          {titleBadges.taskLinks && hasTaskLinks && taskLinkTags}
-          {/* 环境检查状态：创建 worktree 后自动进入 loading，完成后直接红/绿展示；点击打开详情 */}
-          {titleBadges.envHealth && onEnvCheck && (
-            <EnvHealthStatusTag
-              task={t}
-              entry={envHealthMap[t.task]}
-              onClick={onEnvCheck}
-            />
-          )}
-          {/* Claude Code 用量标签：显示该任务关联会话的 token 量和费用，预加载数据从 claudeUsageMap 取 */}
-          {titleBadges.claudeUsage && (
-            <span
-              onClick={(e) => e.stopPropagation()}
-              style={{ display: 'inline-flex' }}
-            >
-              <ClaudeUsageTag
-                taskName={t.task}
-                summary={claudeUsageMap[t.task]}
-              />
-            </span>
-          )}
-          {hasPrunable && (
-            <Tooltip title="包含失效 worktree，可清理">
-              <WarningOutlined style={{ color: '#faad14' }} />
-            </Tooltip>
-          )}
+          <div className="worktree-task-badges-scroll" onWheel={handleBadgeWheel}>
+            {taskPinned && (
+              <Tag color="blue" style={{ marginInlineEnd: 0 }}>置顶</Tag>
+            )}
+            {taskHidden && (
+              <Tag color="default" style={{ marginInlineEnd: 0 }}>已隐藏</Tag>
+            )}
+            {/* 徽标组独立横向滚动，任务名和右侧操作始终保持在固定区域。 */}
+            {titleBadges.projectCount && projectCountTag}
+            {titleBadges.taskStatus && (
+              <TaskStatusControl taskName={t.task} statusKey={taskStatusMap[t.task]} onChange={onTaskStatusChange} />
+            )}
+            {titleBadges.taskLinks && hasTaskLinks && taskLinkTags}
+            {titleBadges.envHealth && onEnvCheck && (
+              <EnvHealthStatusTag task={t} entry={envHealthMap[t.task]} onClick={onEnvCheck} />
+            )}
+            {titleBadges.claudeUsage && (
+              <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+                <ClaudeUsageTag
+                  taskName={t.task}
+                  summary={claudeUsageMap[t.task]}
+                  usageTool={aiUsageTool}
+                />
+              </span>
+            )}
+            {hasPrunable && (
+              <Tooltip title="包含失效 worktree，可清理">
+                <WarningOutlined style={{ color: '#faad14' }} />
+              </Tooltip>
+            )}
+          </div>
         </div>
       ),
       extra: (

@@ -171,15 +171,23 @@ const browserFallback = {
       return { success: false }
     }
   },
-  loadTaskHistory: async () => {
+  loadTaskHistory: async (workspaceId) => {
     try {
       const r = localStorage.getItem('vw-task-history')
-      return r ? JSON.parse(r) : []
+      // list 存储浏览器降级环境中的完整历史记录列表。
+      const list = r ? JSON.parse(r) : []
+      if (!workspaceId || !Array.isArray(list)) return Array.isArray(list) ? list : []
+      // migratedList 存储把旧版无工作区记录归入当前工作区后的列表。
+      const migratedList = list.map((item) =>
+        item?.workspaceId ? item : { ...item, workspaceId }
+      )
+      localStorage.setItem('vw-task-history', JSON.stringify(migratedList))
+      return migratedList.filter((item) => item?.workspaceId === workspaceId)
     } catch {
       return []
     }
   },
-  appendTaskHistory: async (entry) => {
+  appendTaskHistory: async (entry, workspaceId) => {
     try {
       // list 现有历史列表；新记录插入头部
       const r = localStorage.getItem('vw-task-history')
@@ -192,6 +200,7 @@ const browserFallback = {
         link,
         status: entry.status || '',
         docsPath: entry.docsPath || '',
+        workspaceId: workspaceId || '',
         deletedAt: new Date().toISOString(),
       })
       localStorage.setItem('vw-task-history', JSON.stringify(list))
@@ -200,11 +209,18 @@ const browserFallback = {
       return false
     }
   },
-  removeTaskHistory: async (idx) => {
+  removeTaskHistory: async (idx, workspaceId) => {
     try {
       const r = localStorage.getItem('vw-task-history')
       const list = r ? JSON.parse(r) : []
-      list.splice(idx, 1)
+      // targetIndex 存储当前工作区下标在完整历史列表中的实际下标。
+      const targetIndex = workspaceId
+        ? list.reduce((matchingIndexes, item, itemIndex) => {
+            if (item?.workspaceId === workspaceId) matchingIndexes.push(itemIndex)
+            return matchingIndexes
+          }, [])[idx]
+        : idx
+      if (Number.isInteger(targetIndex)) list.splice(targetIndex, 1)
       localStorage.setItem('vw-task-history', JSON.stringify(list))
       return true
     } catch {

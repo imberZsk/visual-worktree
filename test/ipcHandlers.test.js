@@ -361,4 +361,29 @@ describe('registerIpcHandlers', () => {
     const list = await mock.invoke(IPC.LOAD_TASK_HISTORY);
     expect(list[0].link).toBe('');
   });
+
+  it('历史任务按路径组合隔离，删除只影响当前工作区', async () => {
+    await mock.invoke(IPC.APPEND_TASK_HISTORY, { task: 'WORK-1', link: '' }, 'work');
+    await mock.invoke(IPC.APPEND_TASK_HISTORY, { task: 'PERSONAL-1', link: '' }, 'personal');
+    await mock.invoke(IPC.APPEND_TASK_HISTORY, { task: 'WORK-2', link: '' }, 'work');
+
+    // workHistory 存储工作路径组合可见的两条历史记录。
+    const workHistory = await mock.invoke(IPC.LOAD_TASK_HISTORY, 'work');
+    // personalHistory 存储个人路径组合可见的历史记录。
+    const personalHistory = await mock.invoke(IPC.LOAD_TASK_HISTORY, 'personal');
+    expect(workHistory.map((item) => item.task)).toEqual(['WORK-2', 'WORK-1']);
+    expect(personalHistory.map((item) => item.task)).toEqual(['PERSONAL-1']);
+
+    await mock.invoke(IPC.REMOVE_TASK_HISTORY, 0, 'work');
+    expect((await mock.invoke(IPC.LOAD_TASK_HISTORY, 'work')).map((item) => item.task)).toEqual(['WORK-1']);
+    expect((await mock.invoke(IPC.LOAD_TASK_HISTORY, 'personal')).map((item) => item.task)).toEqual(['PERSONAL-1']);
+  });
+
+  it('首次按工作区读取时将旧历史记录归入当前路径组合', async () => {
+    await mock.invoke(IPC.APPEND_TASK_HISTORY, { task: 'LEGACY-1', link: '' });
+    // migratedHistory 存储完成旧数据迁移后当前工作区可见的记录。
+    const migratedHistory = await mock.invoke(IPC.LOAD_TASK_HISTORY, 'work');
+    expect(migratedHistory[0].workspaceId).toBe('work');
+    expect((await mock.invoke(IPC.LOAD_TASK_HISTORY, 'personal'))).toEqual([]);
+  });
 });
