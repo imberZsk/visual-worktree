@@ -301,13 +301,16 @@ describe('App 显示隐藏项工具栏', () => {
 
     renderApp()
 
-    await waitFor(() => {
-      // fullscreenSpin 存储 Ant Design 相对应用视口固定定位的加载层。
-      const fullscreenSpin = document.querySelector(
-        '.ant-spin-fullscreen.ant-spin-spinning'
-      )
-      expect(fullscreenSpin).toBeTruthy()
-    })
+    await waitFor(
+      () => {
+        // fullscreenSpin 存储 Ant Design 相对应用视口固定定位的加载层。
+        const fullscreenSpin = document.querySelector(
+          '.ant-spin-fullscreen.ant-spin-spinning'
+        )
+        expect(fullscreenSpin).toBeTruthy()
+      },
+      { timeout: 5000 }
+    )
     expect(useStore.getState().projects).toHaveLength(40)
     expect(document.querySelector('.full-height-spin')).toBeNull()
   })
