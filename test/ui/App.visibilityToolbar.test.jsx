@@ -288,6 +288,30 @@ describe('App 显示隐藏项工具栏', () => {
     expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
   })
 
+  it('项目较多且刷新未完成时使用相对应用视口居中的全屏 loading', async () => {
+    // manyProjects 存储长项目列表，复现原嵌套 Spin 按列表总高度计算中心点的问题。
+    const manyProjects = Array.from({ length: 40 }, (_, index) => ({
+      ...projects[0],
+      name: `project-${index + 1}`,
+      path: `/repo/project-${index + 1}`,
+    }))
+    localStorage.setItem('vw-active-view', 'projects')
+    useStore.setState({ projects: manyProjects })
+    mockApi.scanProjects.mockReturnValue(new Promise(() => {}))
+
+    renderApp()
+
+    await waitFor(() => {
+      // fullscreenSpin 存储 Ant Design 相对应用视口固定定位的加载层。
+      const fullscreenSpin = document.querySelector(
+        '.ant-spin-fullscreen.ant-spin-spinning'
+      )
+      expect(fullscreenSpin).toBeTruthy()
+    })
+    expect(useStore.getState().projects).toHaveLength(40)
+    expect(document.querySelector('.full-height-spin')).toBeNull()
+  })
+
   it('Worktree 工具栏显隐入口只展示文案，并与排序控件保持清晰间距', async () => {
     localStorage.setItem('vw-active-view', 'worktrees')
     renderApp()

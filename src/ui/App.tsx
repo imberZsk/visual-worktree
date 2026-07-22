@@ -2633,302 +2633,298 @@ export default function App() {
         </Space>
       </Header>
       <Content style={{ padding: 16, overflow: 'auto' }}>
-        {/* 视图切换：用 Spin 遮罩当前视图的加载态，并用 key 触发淡入，避免切换生硬 */}
-        {/* wrapperClassName 撑满高度，让加载转圈在整个内容区垂直居中，而非贴在顶部 */}
-        <Spin
-          spinning={viewLoading}
-          wrapperClassName={viewLoading ? 'full-height-spin' : ''}
-        >
-          <div key={activeView} className="view-fade">
-            {/* worktree 视图：排序栏 + 按任务分组面板 */}
-            {activeView === 'worktrees' ? (
-              <>
-                {/* 工具栏：左侧历史任务按钮 + Claude 总用量，右侧排序选择器 */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}
-                >
-                  <Space size={8}>
-                    <Button
-                      size="small"
-                      icon={<HistoryOutlined />}
-                      onClick={handleOpenHistory}
-                    >
-                      历史任务
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      onClick={() => setCleanupOpen(true)}
-                    >
-                      清理建议
-                    </Button>
-                    {/* Claude 总用量概览：所有任务的累计 token 量与费用，无数据时不显示 */}
-                    {claudeTotal.tokens > 0 && (
-                      <Tooltip
-                        title={
-                          // 多行结构化展示：标题独占一行，下方每个指标一行（Token / 美元 / 人民币），
-                          // 标签与数值左右对齐，避免原先全挤在一行不易阅读
-                          <div style={{ minWidth: 180, lineHeight: 1.8 }}>
-                            <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                              所有任务累计
-                            </div>
-                            {/* Token 总量：用千分位完整展示，便于核对精确值 */}
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 16,
-                              }}
-                            >
-                              <span>Token</span>
-                              <span>{claudeTotal.tokens.toLocaleString()}</span>
-                            </div>
-                            {/* 美元费用：保留 3 位小数 */}
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 16,
-                              }}
-                            >
-                              <span>美元</span>
-                              <span>${claudeTotal.usd.toFixed(3)}</span>
-                            </div>
-                            {/* 人民币费用：保留 2 位小数 */}
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 16,
-                              }}
-                            >
-                              <span>人民币</span>
-                              <span>¥{claudeTotal.cny.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        }
-                      >
-                        <Tag
-                          icon={<ThunderboltOutlined />}
-                          color="purple"
-                          style={{ cursor: 'help', margin: 0 }}
-                        >
-                          总计{' '}
-                          {claudeTotal.tokens >= 1000
-                            ? `${(claudeTotal.tokens / 1000).toFixed(1)}K`
-                            : claudeTotal.tokens}{' '}
-                          · ${claudeTotal.usd.toFixed(3)}
-                        </Tag>
-                      </Tooltip>
-                    )}
-                  </Space>
-                  <Space size={12}>
-                    <Button
-                      size="small"
-                      disabled={!hasHiddenTasks && !showHiddenTasks}
-                      onClick={() => setShowHiddenTasks((value) => !value)}
-                    >
-                      {showHiddenTasks ? '收起隐藏任务' : '显示隐藏任务'}
-                    </Button>
-                    <Space size={4}>
-                      <span
-                        style={{
-                          color: token.colorTextSecondary,
-                          fontSize: 12,
-                        }}
-                      >
-                        排序：
-                      </span>
-                      <Segmented
-                        className="worktree-sort-segmented"
-                        size="small"
-                        value={wtSortOrder}
-                        onChange={setWtSortOrder}
-                        options={[
-                          { label: '状态', value: 'status' },
-                          { label: '名称', value: 'name' },
-                        ]}
-                      />
-                    </Space>
-                  </Space>
-                </div>
-                <WorktreePanel
-                  tasks={sortedTasks}
-                  loading={worktreeLoading}
-                  activeKeys={worktreeActiveKeys}
-                  onActiveKeysChange={setWorktreeActiveKeys}
-                  onOpenFinder={handleOpenFinder}
-                  onOpenVscode={handleOpenVscode}
-                  onOpenTerminal={handleOpenTerminal}
-                  onCopyPath={handleCopyPath}
-                  onRemove={handleRemoveWorktree}
-                  onRemoveTask={handleRemoveTask}
-                  onPrune={handlePruneWorktree}
-                  taskStatusMap={taskStatusMap}
-                  onTaskStatusChange={setTaskStatus}
-                  taskLinkMap={taskLinkMap}
-                  onTaskLinkChange={setTaskLink}
-                  onOpenUrl={handleOpenUrl}
-                  onAddWorktree={handleAddWorktreeToTask}
-                  onEnvCheck={handleEnvCheck}
-                  envHealthMap={envHealthMap}
-                  cicdLinks={config?.cicdLinks ?? {}}
-                  claudeUsageMap={claudeUsageMap}
-                  aiUsageTool={config?.aiUsageTool || 'claude-code'}
-                  workflowSteps={workflowSteps}
-                  workflowMap={taskWorkflowMap}
-                  hiddenTaskKeys={taskVisibility.hidden}
-                  pinnedTaskKeys={taskVisibility.pinned}
-                  hidingTaskKeys={hidingTaskKeys}
-                  showHiddenTasks={showHiddenTasks}
-                  onTaskHiddenChange={handleTaskHiddenChange}
-                  onTaskPinnedChange={setTaskPinned}
-                  taskTitleBadges={taskTitleBadges}
-                  onToggleStep={toggleWorkflowStep}
-                  onRunStepAction={handleRunStepAction}
-                  onRunWorkflowSteps={handleRunWorkflowSteps}
-                  runningSteps={runningSteps}
-                  lastStepOutputs={lastStepOutputs.current}
-                  lastOutputVersion={lastOutputVersion}
-                  onViewLastOutput={handleViewLastOutput}
-                  onViewCurrentOutput={handleViewCurrentOutput}
-                />
-              </>
-            ) : activeView === 'kanban' ? (
-              <KanbanView
-                tasks={visibleWorktreeTasks}
-                workflowSteps={workflowSteps}
-                taskWorkflowMap={taskWorkflowMap}
-                taskStatusMap={taskStatusMap}
-                taskBlockerMap={taskBlockerMap}
-                onBlockerChange={setTaskBlocker}
-                onTaskClick={(taskName) => {
-                  setActiveView('worktrees')
-                  localStorage.setItem('vw-active-view', 'worktrees')
-                  setWorktreeActiveKeys([taskName])
+        {/* 全屏 Spin 固定相对应用视口居中，避免长项目列表把加载图标推到当前可视区之外。 */}
+        <Spin fullscreen spinning={viewLoading} />
+        {/* 视图内容用 key 触发淡入，避免切换生硬。 */}
+        <div key={activeView} className="view-fade">
+          {/* worktree 视图：排序栏 + 按任务分组面板 */}
+          {activeView === 'worktrees' ? (
+            <>
+              {/* 工具栏：左侧历史任务按钮 + Claude 总用量，右侧排序选择器 */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 8,
                 }}
-              />
-            ) : activeView === 'workflow' ? (
-              <WorkflowTabView />
-            ) : (
-              <>
-                {/* 概览统计卡片：响应式 —— 大屏一行 4 个，中屏 2x2，超窄屏单列 */}
-                <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-                  <Col xs={12} sm={12} md={6}>
-                    <Card size="small">
-                      <Statistic title="项目总数" value={stats.total} />
-                    </Card>
-                  </Col>
-                  <Col xs={12} sm={12} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="非主分支"
-                        value={stats.nonMain}
-                        valueStyle={{ color: '#fa8c16' }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={12} sm={12} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="有未提交变更"
-                        value={stats.hasChanges}
-                        valueStyle={{ color: '#cf1322' }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={12} sm={12} md={6}>
-                    <Card size="small">
-                      <Statistic
-                        title="可拉取更新"
-                        value={stats.canPull}
-                        valueStyle={{ color: '#d48806' }}
-                      />
-                    </Card>
-                  </Col>
-                </Row>
-
-                {/* 工具栏：筛选 + 搜索 + 批量操作。用 flex-wrap 让窄屏自动换行 */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                    marginBottom: 12,
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Space size={10} wrap>
+              >
+                <Space size={8}>
+                  <Button
+                    size="small"
+                    icon={<HistoryOutlined />}
+                    onClick={handleOpenHistory}
+                  >
+                    历史任务
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<DeleteOutlined />}
+                    onClick={() => setCleanupOpen(true)}
+                  >
+                    清理建议
+                  </Button>
+                  {/* Claude 总用量概览：所有任务的累计 token 量与费用，无数据时不显示 */}
+                  {claudeTotal.tokens > 0 && (
+                    <Tooltip
+                      title={
+                        // 多行结构化展示：标题独占一行，下方每个指标一行（Token / 美元 / 人民币），
+                        // 标签与数值左右对齐，避免原先全挤在一行不易阅读
+                        <div style={{ minWidth: 180, lineHeight: 1.8 }}>
+                          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                            所有任务累计
+                          </div>
+                          {/* Token 总量：用千分位完整展示，便于核对精确值 */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 16,
+                            }}
+                          >
+                            <span>Token</span>
+                            <span>{claudeTotal.tokens.toLocaleString()}</span>
+                          </div>
+                          {/* 美元费用：保留 3 位小数 */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 16,
+                            }}
+                          >
+                            <span>美元</span>
+                            <span>${claudeTotal.usd.toFixed(3)}</span>
+                          </div>
+                          {/* 人民币费用：保留 2 位小数 */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 16,
+                            }}
+                          >
+                            <span>人民币</span>
+                            <span>¥{claudeTotal.cny.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      }
+                    >
+                      <Tag
+                        icon={<ThunderboltOutlined />}
+                        color="purple"
+                        style={{ cursor: 'help', margin: 0 }}
+                      >
+                        总计{' '}
+                        {claudeTotal.tokens >= 1000
+                          ? `${(claudeTotal.tokens / 1000).toFixed(1)}K`
+                          : claudeTotal.tokens}{' '}
+                        · ${claudeTotal.usd.toFixed(3)}
+                      </Tag>
+                    </Tooltip>
+                  )}
+                </Space>
+                <Space size={12}>
+                  <Button
+                    size="small"
+                    disabled={!hasHiddenTasks && !showHiddenTasks}
+                    onClick={() => setShowHiddenTasks((value) => !value)}
+                  >
+                    {showHiddenTasks ? '收起隐藏任务' : '显示隐藏任务'}
+                  </Button>
+                  <Space size={4}>
+                    <span
+                      style={{
+                        color: token.colorTextSecondary,
+                        fontSize: 12,
+                      }}
+                    >
+                      排序：
+                    </span>
                     <Segmented
-                      value={filter}
-                      onChange={setFilter}
+                      className="worktree-sort-segmented"
+                      size="small"
+                      value={wtSortOrder}
+                      onChange={setWtSortOrder}
                       options={[
-                        { label: '全部', value: FILTERS.ALL },
-                        { label: '非主分支', value: FILTERS.NON_MAIN },
-                        { label: '有变更', value: FILTERS.HAS_CHANGES },
-                        { label: '可拉取', value: FILTERS.CAN_PULL },
+                        { label: '状态', value: 'status' },
+                        { label: '名称', value: 'name' },
                       ]}
                     />
-                    <Input.Search
-                      placeholder="搜索项目名"
-                      allowClear
-                      // 受控绑定 keyword：保证输入框文案与过滤状态始终一致（如切换视图清空关键词时输入框同步清空）
-                      value={keyword}
-                      // 窄屏下搜索框收窄，避免溢出
-                      style={{ width: isNarrow ? 150 : 200 }}
-                      onChange={(e) => setKeyword(e.target.value)}
-                    />
-                    <Button
-                      size="small"
-                      disabled={!hasHiddenProjects && !showHiddenProjects}
-                      onClick={() => setShowHiddenProjects((value) => !value)}
-                    >
-                      {showHiddenProjects ? '收起隐藏项目' : '显示隐藏项目'}
-                    </Button>
                   </Space>
-                  <Dropdown
-                    menu={{ items: batchMenuItems, onClick: onBatchMenuClick }}
-                    disabled={!visibleSelectedPaths.length}
-                  >
-                    <Button type="primary">
-                      批量操作（{visibleSelectedPaths.length}） <DownOutlined />
-                    </Button>
-                  </Dropdown>
-                </div>
+                </Space>
+              </div>
+              <WorktreePanel
+                tasks={sortedTasks}
+                loading={worktreeLoading}
+                activeKeys={worktreeActiveKeys}
+                onActiveKeysChange={setWorktreeActiveKeys}
+                onOpenFinder={handleOpenFinder}
+                onOpenVscode={handleOpenVscode}
+                onOpenTerminal={handleOpenTerminal}
+                onCopyPath={handleCopyPath}
+                onRemove={handleRemoveWorktree}
+                onRemoveTask={handleRemoveTask}
+                onPrune={handlePruneWorktree}
+                taskStatusMap={taskStatusMap}
+                onTaskStatusChange={setTaskStatus}
+                taskLinkMap={taskLinkMap}
+                onTaskLinkChange={setTaskLink}
+                onOpenUrl={handleOpenUrl}
+                onAddWorktree={handleAddWorktreeToTask}
+                onEnvCheck={handleEnvCheck}
+                envHealthMap={envHealthMap}
+                cicdLinks={config?.cicdLinks ?? {}}
+                claudeUsageMap={claudeUsageMap}
+                aiUsageTool={config?.aiUsageTool || 'claude-code'}
+                workflowSteps={workflowSteps}
+                workflowMap={taskWorkflowMap}
+                hiddenTaskKeys={taskVisibility.hidden}
+                pinnedTaskKeys={taskVisibility.pinned}
+                hidingTaskKeys={hidingTaskKeys}
+                showHiddenTasks={showHiddenTasks}
+                onTaskHiddenChange={handleTaskHiddenChange}
+                onTaskPinnedChange={setTaskPinned}
+                taskTitleBadges={taskTitleBadges}
+                onToggleStep={toggleWorkflowStep}
+                onRunStepAction={handleRunStepAction}
+                onRunWorkflowSteps={handleRunWorkflowSteps}
+                runningSteps={runningSteps}
+                lastStepOutputs={lastStepOutputs.current}
+                lastOutputVersion={lastOutputVersion}
+                onViewLastOutput={handleViewLastOutput}
+                onViewCurrentOutput={handleViewCurrentOutput}
+              />
+            </>
+          ) : activeView === 'kanban' ? (
+            <KanbanView
+              tasks={visibleWorktreeTasks}
+              workflowSteps={workflowSteps}
+              taskWorkflowMap={taskWorkflowMap}
+              taskStatusMap={taskStatusMap}
+              taskBlockerMap={taskBlockerMap}
+              onBlockerChange={setTaskBlocker}
+              onTaskClick={(taskName) => {
+                setActiveView('worktrees')
+                localStorage.setItem('vw-active-view', 'worktrees')
+                setWorktreeActiveKeys([taskName])
+              }}
+            />
+          ) : activeView === 'workflow' ? (
+            <WorkflowTabView />
+          ) : (
+            <>
+              {/* 概览统计卡片：响应式 —— 大屏一行 4 个，中屏 2x2，超窄屏单列 */}
+              <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+                <Col xs={12} sm={12} md={6}>
+                  <Card size="small">
+                    <Statistic title="项目总数" value={stats.total} />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="非主分支"
+                      value={stats.nonMain}
+                      valueStyle={{ color: '#fa8c16' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="有未提交变更"
+                      value={stats.hasChanges}
+                      valueStyle={{ color: '#cf1322' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card size="small">
+                    <Statistic
+                      title="可拉取更新"
+                      value={stats.canPull}
+                      valueStyle={{ color: '#d48806' }}
+                    />
+                  </Card>
+                </Col>
+              </Row>
 
-                {/* 项目表格：loading 交给外层居中的 Spin 遮罩，这里不再用 Table 自带 loading（避免双转圈） */}
-                <ProjectTable
-                  data={filtered}
-                  loading={false}
-                  selectedPaths={visibleSelectedPaths}
-                  onSelectChange={setSelectedPaths}
-                  onDetail={setDetailProject}
-                  onCheckoutMain={handleCheckoutMain}
-                  onPull={handlePull}
-                  onSyncUpdates={handleSyncUpdates}
-                  onOpenFinder={handleOpenFinder}
-                  onOpenVscode={handleOpenVscode}
-                  onOpenUrl={handleOpenUrl}
-                  onOpenTerminal={handleOpenTerminal}
-                  onCopyPath={handleCopyPath}
-                  hiddenProjectKeys={projectVisibility.hidden}
-                  pinnedProjectKeys={projectVisibility.pinned}
-                  hidingProjectKeys={hidingProjectKeys}
-                  loadingPaths={projectLoadingPaths}
-                  showHiddenProjects={showHiddenProjects}
-                  onProjectHiddenChange={handleProjectHiddenChange}
-                  onProjectPinnedChange={setProjectPinned}
-                />
-              </>
-            )}
-          </div>
-        </Spin>
+              {/* 工具栏：筛选 + 搜索 + 批量操作。用 flex-wrap 让窄屏自动换行 */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginBottom: 12,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Space size={10} wrap>
+                  <Segmented
+                    value={filter}
+                    onChange={setFilter}
+                    options={[
+                      { label: '全部', value: FILTERS.ALL },
+                      { label: '非主分支', value: FILTERS.NON_MAIN },
+                      { label: '有变更', value: FILTERS.HAS_CHANGES },
+                      { label: '可拉取', value: FILTERS.CAN_PULL },
+                    ]}
+                  />
+                  <Input.Search
+                    placeholder="搜索项目名"
+                    allowClear
+                    // 受控绑定 keyword：保证输入框文案与过滤状态始终一致（如切换视图清空关键词时输入框同步清空）
+                    value={keyword}
+                    // 窄屏下搜索框收窄，避免溢出
+                    style={{ width: isNarrow ? 150 : 200 }}
+                    onChange={(e) => setKeyword(e.target.value)}
+                  />
+                  <Button
+                    size="small"
+                    disabled={!hasHiddenProjects && !showHiddenProjects}
+                    onClick={() => setShowHiddenProjects((value) => !value)}
+                  >
+                    {showHiddenProjects ? '收起隐藏项目' : '显示隐藏项目'}
+                  </Button>
+                </Space>
+                <Dropdown
+                  menu={{ items: batchMenuItems, onClick: onBatchMenuClick }}
+                  disabled={!visibleSelectedPaths.length}
+                >
+                  <Button type="primary">
+                    批量操作（{visibleSelectedPaths.length}） <DownOutlined />
+                  </Button>
+                </Dropdown>
+              </div>
+
+              {/* 项目表格：loading 交给外层居中的 Spin 遮罩，这里不再用 Table 自带 loading（避免双转圈） */}
+              <ProjectTable
+                data={filtered}
+                loading={false}
+                selectedPaths={visibleSelectedPaths}
+                onSelectChange={setSelectedPaths}
+                onDetail={setDetailProject}
+                onCheckoutMain={handleCheckoutMain}
+                onPull={handlePull}
+                onSyncUpdates={handleSyncUpdates}
+                onOpenFinder={handleOpenFinder}
+                onOpenVscode={handleOpenVscode}
+                onOpenUrl={handleOpenUrl}
+                onOpenTerminal={handleOpenTerminal}
+                onCopyPath={handleCopyPath}
+                hiddenProjectKeys={projectVisibility.hidden}
+                pinnedProjectKeys={projectVisibility.pinned}
+                hidingProjectKeys={hidingProjectKeys}
+                loadingPaths={projectLoadingPaths}
+                showHiddenProjects={showHiddenProjects}
+                onProjectHiddenChange={handleProjectHiddenChange}
+                onProjectPinnedChange={setProjectPinned}
+              />
+            </>
+          )}
+        </div>
       </Content>
 
       {/* 批量进度弹窗 */}
