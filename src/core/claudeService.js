@@ -69,7 +69,16 @@ const HEAD_LINES = 400;
  * @param {string} model - 模型名（如 claude-sonnet-5）
  * @returns {{input:number,output:number,cacheWrite:number,cacheRead:number}} 单价（美元/百万 token）
  */
-function priceFor(model) {
+function priceFor(model, customPricing) {
+  // 自定义规则启用时统一覆盖模型价格；直接调用的异常字段按零处理，避免产生 NaN 费用。
+  if (customPricing?.enabled) {
+    return {
+      input: Number(customPricing.input) || 0,
+      output: Number(customPricing.output) || 0,
+      cacheWrite: Number(customPricing.cacheWrite) || 0,
+      cacheRead: Number(customPricing.cacheRead) || 0,
+    };
+  }
   // 无模型名时用默认价
   if (!model) return DEFAULT_PRICING;
   // 精确命中
@@ -402,11 +411,12 @@ export function parseTokenUsage(jsonlPath, deps = {}) {
  * 计算费用（美元）。按传入模型取单价；不传模型时用默认（Sonnet）价。
  * @param {object} usage - token 用量：{ input, output, cacheWrite, cacheRead }
  * @param {string} [model] - 模型名，用于选取单价
+ * @param {object} [customPricing] - 可选的用户自定义统一计价规则
  * @returns {number} 费用（美元），保留 6 位小数
  */
-export function calculateCost(usage, model) {
-  // p 为该模型单价
-  const p = priceFor(model);
+export function calculateCost(usage, model, customPricing) {
+  // p 存储当前模型最终采用的单价，自定义规则启用时覆盖内置模型价格。
+  const p = priceFor(model, customPricing);
   const cost =
     (usage.input * p.input +
       usage.output * p.output +
@@ -419,10 +429,15 @@ export function calculateCost(usage, model) {
 /**
  * 将美元转换为人民币
  * @param {number} usd - 美元金额
+ * @param {number} [exchangeRate] - 美元兑人民币汇率
  * @returns {number} 人民币金额，保留 2 位小数
  */
-export function usdToCny(usd) {
-  return Math.round(usd * USD_TO_CNY * 100) / 100;
+export function usdToCny(usd, exchangeRate = USD_TO_CNY) {
+  // safeExchangeRate 存储有效汇率，非法调用参数回退内置汇率。
+  const safeExchangeRate = Number.isFinite(Number(exchangeRate)) && Number(exchangeRate) > 0
+    ? Number(exchangeRate)
+    : USD_TO_CNY;
+  return Math.round(usd * safeExchangeRate * 100) / 100;
 }
 
 /**
@@ -466,13 +481,14 @@ function computeSessionUsageAndCost(session, deps = {}) {
     usage.output += u.output;
     usage.cacheWrite += u.cacheWrite;
     usage.cacheRead += u.cacheRead;
-    const c = calculateCost(u, model);
+    // c 存储该模型按当前用户规则计算出的美元费用。
+    const c = calculateCost(u, model, deps.tokenPricing);
     usd += c;
-    byModel[model] = { usage: u, cost: { usd: c, cny: usdToCny(c) } };
+    byModel[model] = { usage: u, cost: { usd: c, cny: usdToCny(c, deps.tokenPricing?.usdToCny) } };
   }
   usd = Math.round(usd * 1_000_000) / 1_000_000;
 
-  return { usage, cost: { usd, cny: usdToCny(usd) }, byModel };
+  return { usage, cost: { usd, cny: usdToCny(usd, deps.tokenPricing?.usdToCny) }, byModel };
 }
 
 /**

@@ -363,12 +363,50 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
     )
   })
 
-  it('任务标题使用可横向滚动容器承载长标签', () => {
+  it('任务标题只让状态徽标区域横向滚动', () => {
     const { container } = render(<WorktreePanel {...baseProps()} />)
-    // titleScroll 存储任务标题滚动容器，长任务名和多个标签超出时由它水平滚动。
-    const titleScroll = container.querySelector('.worktree-task-title-scroll')
-    expect(titleScroll).toBeTruthy()
+    // collapseTitle 存储 Ant Design 6 为标题分配剩余宽度的 flex 项。
+    const collapseTitle = container.querySelector('.ant-collapse-title')
+    // extraArea 存储与标题同级的右侧流程和操作区域。
+    const extraArea = container.querySelector('.ant-collapse-extra')
+    // titleContainer 存储固定任务名和徽标滚动区的标题容器。
+    const titleContainer = container.querySelector('.worktree-task-title')
+    // badgesScroll 存储状态、链接、环境和 Token 徽标的独立横向滚动区。
+    const badgesScroll = container.querySelector('.worktree-task-badges-scroll')
+    expect(collapseTitle).toBeTruthy()
+    expect(extraArea).toBeTruthy()
+    expect(titleContainer).toBeTruthy()
+    expect(badgesScroll).toBeTruthy()
+    expect(collapseTitle.contains(titleContainer)).toBe(true)
+    expect(collapseTitle.parentElement).toBe(extraArea.parentElement)
+    expect(titleContainer.contains(badgesScroll)).toBe(true)
     expect(container.querySelector('.worktree-task-collapse')).toBeTruthy()
+  })
+
+  it('徽标溢出时普通鼠标滚轮转换为横向滚动', () => {
+    const { container } = render(<WorktreePanel {...baseProps()} />)
+    // badgesScroll 存储待验证普通滚轮交互的徽标区域。
+    const badgesScroll = container.querySelector('.worktree-task-badges-scroll')
+    Object.defineProperties(badgesScroll, {
+      clientWidth: { configurable: true, value: 180 },
+      scrollWidth: { configurable: true, value: 480 },
+    })
+    badgesScroll.scrollLeft = 0
+    fireEvent.wheel(badgesScroll, { deltaY: 72, deltaX: 0 })
+    expect(badgesScroll.scrollLeft).toBe(72)
+  })
+
+  it('徽标未溢出时不劫持普通鼠标滚轮', () => {
+    const { container } = render(<WorktreePanel {...baseProps()} />)
+    // badgesScroll 存储内容未溢出的徽标区域。
+    const badgesScroll = container.querySelector('.worktree-task-badges-scroll')
+    Object.defineProperties(badgesScroll, {
+      clientWidth: { configurable: true, value: 480 },
+      scrollWidth: { configurable: true, value: 180 },
+    })
+    badgesScroll.scrollLeft = 0
+    fireEvent.wheel(badgesScroll, { deltaY: 72, deltaX: 0 })
+    expect(badgesScroll.scrollLeft).toBe(0)
   })
 })
 

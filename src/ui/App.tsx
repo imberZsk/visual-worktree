@@ -1310,7 +1310,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [visibleWorktreeTasks])
+  }, [visibleWorktreeTasks, config?.aiUsageTool, config?.tokenPricing])
 
   // workflowSteps 当前生效的工作流（需求流程）步骤清单：来自配置，规范化后兜底默认清单。
   // 用 ?? 而非 || 区分「未配置（undefined → 用默认）」与「显式清空（[] → 尊重为空）」。
@@ -1695,7 +1695,7 @@ export default function App() {
       status: taskStatusMap[task.task] || '',
       docsPath,
     }
-    await api.appendTaskHistory(historyEntry)
+    await api.appendTaskHistory(historyEntry, config?.activePathProfileId || '')
     return true
   }
 
@@ -1935,7 +1935,9 @@ export default function App() {
     setHistoryOpen(true)
     setHistoryPage(1)
     // history 为最新的已删除任务记录数组（时间倒序）
-    const history = await api.loadTaskHistory()
+    // workspaceId 存储当前路径组合标识，历史记录按该工作区隔离。
+    const workspaceId = config?.activePathProfileId || ''
+    const history = await api.loadTaskHistory(workspaceId)
     setTaskHistory(Array.isArray(history) ? history : [])
   }
 
@@ -1944,7 +1946,7 @@ export default function App() {
    * @param {number} idx - 要删除的记录在 taskHistory 中的下标
    */
   const handleDeleteHistory = async (idx) => {
-    await api.removeTaskHistory(idx)
+    await api.removeTaskHistory(idx, config?.activePathProfileId || '')
     setTaskHistory((prev) => prev.filter((_, i) => i !== idx))
   }
 
@@ -2777,6 +2779,7 @@ export default function App() {
                   envHealthMap={envHealthMap}
                   cicdLinks={config?.cicdLinks ?? {}}
                   claudeUsageMap={claudeUsageMap}
+                  aiUsageTool={config?.aiUsageTool || 'claude-code'}
                   workflowSteps={workflowSteps}
                   workflowMap={taskWorkflowMap}
                   hiddenTaskKeys={taskVisibility.hidden}

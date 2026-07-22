@@ -198,6 +198,7 @@ const worktreeTasks = [
  */
 function makeConfig() {
   return {
+    activePathProfileId: 'work',
     sourceProjectsPath: '/src',
     worktreesPath: '/wt',
     mainBranches: ['master', 'main'],
@@ -535,6 +536,7 @@ describe('App worktree 流程执行', () => {
     await waitFor(() =>
       expect(screen.getAllByText('TASK-A').length).toBeGreaterThan(1)
     )
+    expect(mockApi.loadTaskHistory).toHaveBeenCalledWith('work')
     fireEvent.click(screen.getByTitle('在 Finder 显示工作记录'))
     fireEvent.click(screen.getByTitle('用 VSCode 打开工作记录'))
 
@@ -644,7 +646,7 @@ describe('App worktree 流程执行', () => {
       fireEvent.click(confirmButton)
 
       await waitFor(() =>
-        expect(mockApi.removeTaskHistory).toHaveBeenCalledWith(4)
+        expect(mockApi.removeTaskHistory).toHaveBeenCalledWith(4, 'work')
       )
     } finally {
       restoreLayoutMock()
@@ -710,7 +712,8 @@ describe('App worktree 流程执行', () => {
       expect.objectContaining({
         task: 'TASK-A',
         docsPath,
-      })
+      }),
+      'work'
     )
     expect(mockApi.archiveTaskDocs.mock.invocationCallOrder[0]).toBeLessThan(
       mockApi.removeWorktree.mock.invocationCallOrder[0]

@@ -71,6 +71,15 @@ function makeConfig() {
       envHealth: true,
       claudeUsage: true,
     },
+    tokenPricing: {
+      enabled: true,
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      usdToCny: 8,
+    },
+    aiUsageTool: 'codex',
     cicdLinks: {},
     envCheckRoles: [],
   }
@@ -771,5 +780,25 @@ describe('SettingsModal 流程配置布局', () => {
       expect(screen.getAllByText('web-app').length).toBeGreaterThan(0)
       expect(screen.getAllByText('api-service').length).toBeGreaterThan(0)
     })
+  })
+
+  it('保存时持久化自定义 Token 费用规则', async () => {
+    mockApi.saveConfig.mockImplementation(async (savedConfig) => savedConfig)
+    renderWithApp(
+      <SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />
+    )
+    fireEvent.click(screen.getByText('Token 费用'))
+    // pricingPanel 存储 Token 费用设置容器，不应再叠加额外 flex gap。
+    const pricingPanel = screen.getByTestId('token-pricing-settings-panel')
+    expect(pricingPanel.style.gap).toBe('')
+    expect(pricingPanel.querySelector('.token-pricing-fields-grid')).toBeTruthy()
+    expect(pricingPanel.querySelectorAll('.token-pricing-field')).toHaveLength(5)
+    expect(Number(screen.getByLabelText('Input 单价').value)).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
+    // savedConfig 存储设置页提交给主进程的完整配置。
+    const savedConfig = mockApi.saveConfig.mock.calls[0][0]
+    expect(savedConfig.tokenPricing).toEqual(makeConfig().tokenPricing)
+    expect(savedConfig.aiUsageTool).toBe('codex')
   })
 })
