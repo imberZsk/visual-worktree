@@ -1,7 +1,9 @@
 /* 全局样式：视图切换淡入动画 */
 
 /* 防止 Electron webview 出现文档级滚动条；滚动由 Content 内部 overflow:auto 处理 */
-html, body, #root {
+html,
+body,
+#root {
   overflow: hidden;
   height: 100%;
 }
@@ -12,7 +14,7 @@ html, body, #root {
 }
 
 /* 视图切换时的淡入 + 轻微上移，缓和 Tab 切换的生硬感 */
-/* min-height 常驻生效：内容不足一屏时也保持稳定的高度基准，避免加载完成（full-height-spin 被移除）后容器塌陷造成的整屏跳动（CLS） */
+/* min-height 常驻生效：内容不足一屏时也保持稳定的高度基准，避免加载完成后容器塌陷造成的整屏跳动（CLS） */
 .view-fade {
   animation: viewFadeIn 0.22s ease-out;
   min-height: calc(100vh - 96px);
@@ -27,15 +29,6 @@ html, body, #root {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* 让 Spin 包裹容器撑满内容可视高度，使加载转圈在整屏垂直居中（而非贴顶部） */
-/* Content 内边距 16，Header 高 64，故可视高度约为视口减去这些 */
-.full-height-spin {
-  min-height: calc(100vh - 96px);
-}
-.full-height-spin .ant-spin-container {
-  min-height: calc(100vh - 96px);
 }
 
 /* 修复表格固定右列在垂直滚动时出现的层级 bug（sticky 列 z-index 过高遮盖上方内容） */
@@ -78,7 +71,7 @@ html, body, #root {
 .worktree-sort-segmented .ant-segmented-thumb,
 .worktree-sort-segmented .ant-segmented-item-selected {
   border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.10);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
 /* 暗色模式使用更暗的内边界，避免出现白边 */
