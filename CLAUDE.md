@@ -1,1 +1,13 @@
-@AGENTS.md
+@.agents/project-context.md
+@.agents/architecture.md
+@.agents/coding-standards.md
+@.agents/cross-platform.md
+@.agents/definition-of-done.md
+@.agents/git-worktree-rules.md
+@.agents/ipc-standards.md
+@.agents/pitfalls.md
+@.agents/release-checklist.md
+@.agents/security.md
+@.agents/style-standards.md
+@.agents/testing-standards.md
+@.agents/ui-standards.md

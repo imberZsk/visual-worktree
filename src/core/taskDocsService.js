@@ -1,10 +1,18 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
-import { dirname, isAbsolute, join, normalize, relative, resolve } from 'path';
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'fs'
+import { dirname, isAbsolute, join, normalize, relative, resolve } from 'path'
 
 // Claude Code 固定说明文件名：随任务根和项目 worktree 自动生成，但不属于工作文档归档模板。
-const CLAUDE_FILE_NAME = 'CLAUDE.md';
+const CLAUDE_FILE_NAME = 'CLAUDE.md'
 // 通用 Agent 固定说明文件名：随任务根和项目 worktree 自动生成，但不属于工作文档归档模板。
-const AGENTS_FILE_NAME = 'AGENTS.md';
+const AGENTS_FILE_NAME = 'AGENTS.md'
 
 // CLAUDE_TEMPLATE 存储 Claude Code 专用入口内容，引导 Claude 继续读取通用规则。
 const CLAUDE_TEMPLATE = `# CLAUDE.md
@@ -12,7 +20,7 @@ const CLAUDE_TEMPLATE = `# CLAUDE.md
 本文件供 Claude Code 使用。
 
 请先阅读并遵守同目录下的 AGENTS.md。AGENTS.md 是 Codex、Claude Code 等 AI 协作工具共用的项目规则。
-`;
+`
 
 // AGENTS_TEMPLATE 存储通用 AI 协作说明内容，提示工作记录默认落在任务目录工作文档中。
 const AGENTS_TEMPLATE = `# AGENTS.md
@@ -24,47 +32,51 @@ const AGENTS_TEMPLATE = `# AGENTS.md
 - 项目 worktree 根目录只放项目代码相关改动；除非当前目录已经存在工作文档入口，否则不要额外新建 docs/ 或其他记录目录。
 - 不要把临时工作记录散落在项目根目录。
 - 修改代码时优先遵守仓库已有的 AGENTS.md、CLAUDE.md 或项目说明；本文件只补充当前 worktree 的工作记录约定。
-`;
+`
 
 // 默认工作文档模板：开箱只创建并归档 docs 目录；CLAUDE.md / AGENTS.md 由固定说明文件逻辑单独生成。
 export const DEFAULT_WORK_DOCUMENT_TEMPLATES = [
   { type: 'directory', path: 'docs', content: '' },
-];
+]
 
 /**
  * 规范化工作文档模板列表，过滤空路径、绝对路径和路径穿越项。
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 用户配置的工作文档模板列表
  * @returns {Array<{type:'directory'|'file',path:string,content:string}>} 可安全使用的模板列表
  */
-export function normalizeWorkDocumentTemplates(templates = DEFAULT_WORK_DOCUMENT_TEMPLATES) {
+export function normalizeWorkDocumentTemplates(
+  templates = DEFAULT_WORK_DOCUMENT_TEMPLATES
+) {
   // sourceTemplates 存储待规范化的模板列表；非数组配置视为默认模板，避免损坏配置导致功能不可用。
-  const sourceTemplates = Array.isArray(templates) ? templates : DEFAULT_WORK_DOCUMENT_TEMPLATES;
+  const sourceTemplates = Array.isArray(templates)
+    ? templates
+    : DEFAULT_WORK_DOCUMENT_TEMPLATES
   // normalizedTemplates 累积校验通过且已规整路径格式的模板。
-  const normalizedTemplates = [];
+  const normalizedTemplates = []
   // seenPaths 存储已经收录的 type/path 组合，用于避免重复创建或重复归档。
-  const seenPaths = new Set();
+  const seenPaths = new Set()
 
   for (const template of sourceTemplates) {
     // rawPath 存储用户输入的相对路径文本。
-    const rawPath = String(template?.path || '').trim();
+    const rawPath = String(template?.path || '').trim()
     // safePath 存储经过安全校验与格式规整后的相对路径。
-    const safePath = normalizeWorkDocumentPath(rawPath);
-    if (!safePath) continue;
-    if (isFixedInstructionPath(safePath)) continue;
+    const safePath = normalizeWorkDocumentPath(rawPath)
+    if (!safePath) continue
+    if (isFixedInstructionPath(safePath)) continue
 
     // type 存储模板类型；除 file 外统一按 directory 处理，避免未知类型写文件。
-    const type = template?.type === 'file' ? 'file' : 'directory';
+    const type = template?.type === 'file' ? 'file' : 'directory'
     // dedupeKey 存储去重键，同一路径的同类型模板只保留第一条，避免后续内容覆盖语义不清。
-    const dedupeKey = `${type}:${safePath}`;
-    if (seenPaths.has(dedupeKey)) continue;
-    seenPaths.add(dedupeKey);
+    const dedupeKey = `${type}:${safePath}`
+    if (seenPaths.has(dedupeKey)) continue
+    seenPaths.add(dedupeKey)
 
     // content 存储文件模板要写入的默认内容；目录模板不使用内容，统一置空。
-    const content = type === 'file' ? String(template?.content || '') : '';
-    normalizedTemplates.push({ type, path: safePath, content });
+    const content = type === 'file' ? String(template?.content || '') : ''
+    normalizedTemplates.push({ type, path: safePath, content })
   }
 
-  return normalizedTemplates;
+  return normalizedTemplates
 }
 
 /**
@@ -73,44 +85,49 @@ export function normalizeWorkDocumentTemplates(templates = DEFAULT_WORK_DOCUMENT
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 工作文档模板列表
  * @returns {{created:string[],skipped:string[],templates:Array<{type:'directory'|'file',path:string,content:string}>,docsPath:string}} 初始化结果
  */
-export function ensureTaskDocsAssets(worktreePath, templates = DEFAULT_WORK_DOCUMENT_TEMPLATES) {
+export function ensureTaskDocsAssets(
+  worktreePath,
+  templates = DEFAULT_WORK_DOCUMENT_TEMPLATES
+) {
   // normalizedTemplates 存储可安全落盘的工作文档模板。
-  const normalizedTemplates = normalizeWorkDocumentTemplates(templates);
+  const normalizedTemplates = normalizeWorkDocumentTemplates(templates)
   // created 累积本次新创建的目录或文件路径。
-  const created = [];
+  const created = []
   // skipped 累积因已存在而未覆盖的目录或文件路径。
-  const skipped = [];
+  const skipped = []
   // docsTemplate 存储默认 docs 目录模板，用于兼容旧调用方读取 docsPath。
-  const docsTemplate = normalizedTemplates.find((template) => template.path === 'docs');
+  const docsTemplate = normalizedTemplates.find(
+    (template) => template.path === 'docs'
+  )
   // docsPath 存储默认 docs 目录路径；即使用户移除 docs 模板也给出稳定兜底路径供历史兼容。
-  const docsPath = join(worktreePath, docsTemplate?.path || 'docs');
+  const docsPath = join(worktreePath, docsTemplate?.path || 'docs')
 
   if (!existsSync(worktreePath)) {
-    mkdirSync(worktreePath, { recursive: true });
+    mkdirSync(worktreePath, { recursive: true })
   }
 
-  ensureFixedInstructionFiles(worktreePath, created, skipped);
+  ensureFixedInstructionFiles(worktreePath, created, skipped)
 
   for (const template of normalizedTemplates) {
     // targetPath 存储模板在当前 worktree 根目录下对应的安全绝对路径。
-    const targetPath = buildSafeWorkDocumentPath(worktreePath, template.path);
-    if (!targetPath) continue;
+    const targetPath = buildSafeWorkDocumentPath(worktreePath, template.path)
+    if (!targetPath) continue
 
     if (existsSync(targetPath)) {
-      skipped.push(targetPath);
-      continue;
+      skipped.push(targetPath)
+      continue
     }
 
     if (template.type === 'directory') {
-      mkdirSync(targetPath, { recursive: true });
+      mkdirSync(targetPath, { recursive: true })
     } else {
-      mkdirSync(dirname(targetPath), { recursive: true });
-      writeFileSync(targetPath, template.content, 'utf8');
+      mkdirSync(dirname(targetPath), { recursive: true })
+      writeFileSync(targetPath, template.content, 'utf8')
     }
-    created.push(targetPath);
+    created.push(targetPath)
   }
 
-  return { created, skipped, templates: normalizedTemplates, docsPath };
+  return { created, skipped, templates: normalizedTemplates, docsPath }
 }
 
 /**
@@ -125,18 +142,18 @@ function ensureFixedInstructionFiles(worktreePath, created, skipped) {
   const fixedFiles = [
     { name: CLAUDE_FILE_NAME, content: CLAUDE_TEMPLATE },
     { name: AGENTS_FILE_NAME, content: AGENTS_TEMPLATE },
-  ];
+  ]
 
   for (const fixedFile of fixedFiles) {
     // targetPath 存储固定说明文件在当前工作入口下的绝对路径。
-    const targetPath = join(worktreePath, fixedFile.name);
+    const targetPath = join(worktreePath, fixedFile.name)
     if (existsSync(targetPath)) {
-      skipped.push(targetPath);
-      continue;
+      skipped.push(targetPath)
+      continue
     }
 
-    writeFileSync(targetPath, fixedFile.content, 'utf8');
-    created.push(targetPath);
+    writeFileSync(targetPath, fixedFile.content, 'utf8')
+    created.push(targetPath)
   }
 }
 
@@ -148,8 +165,8 @@ function ensureFixedInstructionFiles(worktreePath, created, skipped) {
  */
 export function buildTaskDocsArchivePath(archiveRoot, taskName) {
   // safeTaskName 存储可作为单个目录名使用的任务名，保留可读性并避免斜杠创建多级目录。
-  const safeTaskName = sanitizeTaskName(taskName);
-  return join(archiveRoot, safeTaskName);
+  const safeTaskName = sanitizeTaskName(taskName)
+  return join(archiveRoot, safeTaskName)
 }
 
 /**
@@ -160,23 +177,28 @@ export function buildTaskDocsArchivePath(archiveRoot, taskName) {
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 工作文档模板列表
  * @returns {{success:boolean, docsPath:string, archivedProjects:number, error?:string}} 归档结果；archivedProjects 保留兼容旧调用方，任务级归档固定返回 0
  */
-export function archiveTaskDocs(taskDir, taskName, archiveRoot, templates = DEFAULT_WORK_DOCUMENT_TEMPLATES) {
+export function archiveTaskDocs(
+  taskDir,
+  taskName,
+  archiveRoot,
+  templates = DEFAULT_WORK_DOCUMENT_TEMPLATES
+) {
   // docsPath 存储本任务最终的归档目录。
-  const docsPath = buildTaskDocsArchivePath(archiveRoot, taskName);
+  const docsPath = buildTaskDocsArchivePath(archiveRoot, taskName)
   // normalizedTemplates 存储可安全读取与归档的工作文档模板。
-  const normalizedTemplates = normalizeWorkDocumentTemplates(templates);
+  const normalizedTemplates = normalizeWorkDocumentTemplates(templates)
 
   try {
-    mkdirSync(docsPath, { recursive: true });
+    mkdirSync(docsPath, { recursive: true })
 
-    archiveWorkDocumentsFromBase(taskDir, docsPath, normalizedTemplates);
+    archiveWorkDocumentsFromBase(taskDir, docsPath, normalizedTemplates)
 
     // archivedProjects 存储旧版项目级归档数量；工作文档已收敛到任务根，固定返回 0 兼容字段结构。
-    const archivedProjects = 0;
-    return { success: true, docsPath, archivedProjects };
+    const archivedProjects = 0
+    return { success: true, docsPath, archivedProjects }
   } catch (e) {
     // e 存储归档过程中出现的文件系统错误，返回给调用方展示。
-    return { success: false, docsPath, archivedProjects: 0, error: e.message };
+    return { success: false, docsPath, archivedProjects: 0, error: e.message }
   }
 }
 
@@ -187,8 +209,8 @@ export function archiveTaskDocs(taskDir, taskName, archiveRoot, templates = DEFA
  */
 function sanitizeTaskName(taskName) {
   // rawName 存储规整后的任务名字符串，空值时给一个稳定兜底名。
-  const rawName = String(taskName || 'untitled-task').trim() || 'untitled-task';
-  return rawName.replace(/[\\/]+/g, '__').replace(/[:*?"<>|]/g, '_');
+  const rawName = String(taskName || 'untitled-task').trim() || 'untitled-task'
+  return rawName.replace(/[\\/]+/g, '__').replace(/[:*?"<>|]/g, '_')
 }
 
 /**
@@ -198,10 +220,10 @@ function sanitizeTaskName(taskName) {
  */
 function isDirectory(targetPath) {
   try {
-    return statSync(targetPath).isDirectory();
+    return statSync(targetPath).isDirectory()
   } catch (e) {
     // e 存储 statSync 读取失败原因；路径不存在时按非目录处理。
-    return false;
+    return false
   }
 }
 
@@ -211,35 +233,51 @@ function isDirectory(targetPath) {
  * @param {Array<{type?:string,path?:string,content?:string}>} [templates] - 工作文档模板列表
  * @returns {{updated:boolean, excludePath:string}} 是否写入了新规则及 exclude 文件路径
  */
-export function ensureTaskDocsGitExclude(gitCommonDir, templates = DEFAULT_WORK_DOCUMENT_TEMPLATES) {
+export function ensureTaskDocsGitExclude(
+  gitCommonDir,
+  templates = DEFAULT_WORK_DOCUMENT_TEMPLATES
+) {
   // excludePath 存储仓库本地忽略规则文件路径；info/exclude 不进版本库，只影响本机。
-  const excludePath = join(gitCommonDir, 'info', 'exclude');
+  const excludePath = join(gitCommonDir, 'info', 'exclude')
   // normalizedTemplates 存储可安全加入 exclude 的工作文档模板。
-  const normalizedTemplates = normalizeWorkDocumentTemplates(templates);
+  const normalizedTemplates = normalizeWorkDocumentTemplates(templates)
   // requiredPatterns 存储需要忽略的自动工作文档路径模式。
   const requiredPatterns = [
     CLAUDE_FILE_NAME,
     AGENTS_FILE_NAME,
-    ...normalizedTemplates.map((template) => (
+    ...normalizedTemplates.map((template) =>
       template.type === 'directory' ? `${template.path}/` : template.path
-    )),
-  ];
+    ),
+  ]
   // currentContent 存储当前 exclude 内容，文件不存在时视为空。
-  const currentContent = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
+  const currentContent = existsSync(excludePath)
+    ? readFileSync(excludePath, 'utf8')
+    : ''
   // existingPatterns 存储逐行去空白后的已有规则，用于幂等去重。
-  const existingPatterns = new Set(currentContent.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  const existingPatterns = new Set(
+    currentContent
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+  )
   // missingPatterns 存储尚未写入的规则。
-  const missingPatterns = requiredPatterns.filter((pattern) => !existingPatterns.has(pattern));
+  const missingPatterns = requiredPatterns.filter(
+    (pattern) => !existingPatterns.has(pattern)
+  )
 
   if (missingPatterns.length === 0) {
-    return { updated: false, excludePath };
+    return { updated: false, excludePath }
   }
 
-  mkdirSync(dirname(excludePath), { recursive: true });
+  mkdirSync(dirname(excludePath), { recursive: true })
   // prefix 存储追加前是否需要补换行，避免把规则接到已有最后一行末尾。
-  const prefix = currentContent && !currentContent.endsWith('\n') ? '\n' : '';
-  appendFileSync(excludePath, `${prefix}${missingPatterns.join('\n')}\n`, 'utf8');
-  return { updated: true, excludePath };
+  const prefix = currentContent && !currentContent.endsWith('\n') ? '\n' : ''
+  appendFileSync(
+    excludePath,
+    `${prefix}${missingPatterns.join('\n')}\n`,
+    'utf8'
+  )
+  return { updated: true, excludePath }
 }
 
 /**
@@ -249,15 +287,25 @@ export function ensureTaskDocsGitExclude(gitCommonDir, templates = DEFAULT_WORK_
  */
 function normalizeWorkDocumentPath(rawPath) {
   // slashPath 存储统一为 POSIX 分隔符的路径文本，方便做跨平台段落校验。
-  const slashPath = String(rawPath || '').trim().replace(/\\/g, '/');
-  if (!slashPath || isAbsolute(slashPath)) return '';
+  const slashPath = String(rawPath || '')
+    .trim()
+    .replace(/\\/g, '/')
+  if (!slashPath || isAbsolute(slashPath)) return ''
   // segments 存储路径段；任何 .. 都视为越界风险，即便 normalize 后可抵消也不接受。
-  const segments = slashPath.split('/').filter(Boolean);
-  if (segments.length === 0 || segments.some((segment) => segment === '..')) return '';
+  const segments = slashPath.split('/').filter(Boolean)
+  if (segments.length === 0 || segments.some((segment) => segment === '..'))
+    return ''
   // normalizedPath 存储去掉重复分隔符和末尾斜杠后的相对路径。
-  const normalizedPath = normalize(slashPath).replace(/\\/g, '/').replace(/\/+$/g, '');
-  if (!normalizedPath || normalizedPath === '.' || normalizedPath.startsWith('../')) return '';
-  return normalizedPath;
+  const normalizedPath = normalize(slashPath)
+    .replace(/\\/g, '/')
+    .replace(/\/+$/g, '')
+  if (
+    !normalizedPath ||
+    normalizedPath === '.' ||
+    normalizedPath.startsWith('../')
+  )
+    return ''
+  return normalizedPath
 }
 
 /**
@@ -267,8 +315,11 @@ function normalizeWorkDocumentPath(rawPath) {
  */
 function isFixedInstructionPath(documentPath) {
   // normalizedPath 存储统一大小写后的路径文本，用于匹配根目录固定说明文件。
-  const normalizedPath = String(documentPath || '').toLowerCase();
-  return normalizedPath === CLAUDE_FILE_NAME.toLowerCase() || normalizedPath === AGENTS_FILE_NAME.toLowerCase();
+  const normalizedPath = String(documentPath || '').toLowerCase()
+  return (
+    normalizedPath === CLAUDE_FILE_NAME.toLowerCase() ||
+    normalizedPath === AGENTS_FILE_NAME.toLowerCase()
+  )
 }
 
 /**
@@ -279,13 +330,13 @@ function isFixedInstructionPath(documentPath) {
  */
 function buildSafeWorkDocumentPath(rootPath, documentPath) {
   // resolvedRoot 存储根目录绝对路径，用于与目标路径做相对关系判断。
-  const resolvedRoot = resolve(rootPath);
+  const resolvedRoot = resolve(rootPath)
   // resolvedTarget 存储模板路径解析后的绝对路径。
-  const resolvedTarget = resolve(resolvedRoot, documentPath);
+  const resolvedTarget = resolve(resolvedRoot, documentPath)
   // relativePath 存储目标相对根目录的路径；以 .. 开头或绝对路径代表越界。
-  const relativePath = relative(resolvedRoot, resolvedTarget);
-  if (relativePath.startsWith('..') || isAbsolute(relativePath)) return '';
-  return resolvedTarget;
+  const relativePath = relative(resolvedRoot, resolvedTarget)
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) return ''
+  return resolvedTarget
 }
 
 /**
@@ -295,32 +346,37 @@ function buildSafeWorkDocumentPath(rootPath, documentPath) {
  * @param {Array<{type:'directory'|'file',path:string,content:string}>} templates - 已规范化的工作文档模板
  * @returns {boolean} 是否至少归档了一个文件或目录
  */
-function archiveWorkDocumentsFromBase(sourceBasePath, targetBasePath, templates) {
+function archiveWorkDocumentsFromBase(
+  sourceBasePath,
+  targetBasePath,
+  templates
+) {
   // archived 存储当前根目录是否有任何模板被成功复制。
-  let archived = false;
+  let archived = false
 
   for (const template of templates) {
     // sourcePath 存储当前模板在源根目录下的安全路径。
-    const sourcePath = buildSafeWorkDocumentPath(sourceBasePath, template.path);
+    const sourcePath = buildSafeWorkDocumentPath(sourceBasePath, template.path)
     // targetPath 存储当前模板在归档根目录下的安全路径；默认 docs 目录沿用旧版平铺行为，其他目录保留目录名避免冲突。
-    const targetPath = template.type === 'directory'
-      ? getDirectoryArchiveTargetPath(targetBasePath, template.path)
-      : buildSafeWorkDocumentPath(targetBasePath, template.path);
-    if (!sourcePath || !targetPath || !existsSync(sourcePath)) continue;
+    const targetPath =
+      template.type === 'directory'
+        ? getDirectoryArchiveTargetPath(targetBasePath, template.path)
+        : buildSafeWorkDocumentPath(targetBasePath, template.path)
+    if (!sourcePath || !targetPath || !existsSync(sourcePath)) continue
 
     if (template.type === 'directory') {
-      if (!isDirectory(sourcePath)) continue;
-      mkdirSync(targetPath, { recursive: true });
-      cpSync(sourcePath, targetPath, { recursive: true, force: true });
+      if (!isDirectory(sourcePath)) continue
+      mkdirSync(targetPath, { recursive: true })
+      cpSync(sourcePath, targetPath, { recursive: true, force: true })
     } else {
-      if (!isFile(sourcePath)) continue;
-      mkdirSync(dirname(targetPath), { recursive: true });
-      cpSync(sourcePath, targetPath, { force: true });
+      if (!isFile(sourcePath)) continue
+      mkdirSync(dirname(targetPath), { recursive: true })
+      cpSync(sourcePath, targetPath, { force: true })
     }
-    archived = true;
+    archived = true
   }
 
-  return archived;
+  return archived
 }
 
 /**
@@ -331,8 +387,8 @@ function archiveWorkDocumentsFromBase(sourceBasePath, targetBasePath, templates)
  */
 function getDirectoryArchiveTargetPath(targetBasePath, documentPath) {
   // docs 作为历史默认工作文档目录，保留旧版“复制 docs 内容到归档根”的行为，避免历史入口层级变化。
-  if (documentPath === 'docs') return targetBasePath;
-  return buildSafeWorkDocumentPath(targetBasePath, documentPath);
+  if (documentPath === 'docs') return targetBasePath
+  return buildSafeWorkDocumentPath(targetBasePath, documentPath)
 }
 
 /**
@@ -342,9 +398,9 @@ function getDirectoryArchiveTargetPath(targetBasePath, documentPath) {
  */
 function isFile(targetPath) {
   try {
-    return statSync(targetPath).isFile();
+    return statSync(targetPath).isFile()
   } catch (e) {
     // e 存储 statSync 读取失败原因；路径不存在时按非文件处理。
-    return false;
+    return false
   }
 }

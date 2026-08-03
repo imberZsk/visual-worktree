@@ -1,11 +1,14 @@
 // 终端启动纯逻辑模块：负责「检测可用终端类型」与「构建在指定目录打开终端的 shell 命令」。
 // 抽成不依赖 Electron 的纯 Node 模块，便于 vitest 直接 import 测试，副作用（exec）留给 ipcHandlers。
 
-import { homedir } from 'os';
-import { join } from 'path';
+import { homedir } from 'os'
+import { join } from 'path'
 
 // Ghostty 应用候选安装路径：分别覆盖系统级 /Applications 与用户级 ~/Applications
-const GHOSTTY_APP_PATHS = ['/Applications/Ghostty.app', join(homedir(), 'Applications/Ghostty.app')];
+const GHOSTTY_APP_PATHS = [
+  '/Applications/Ghostty.app',
+  join(homedir(), 'Applications/Ghostty.app'),
+]
 
 /**
  * 检测当前优先可用的终端类型
@@ -15,10 +18,10 @@ const GHOSTTY_APP_PATHS = ['/Applications/Ghostty.app', join(homedir(), 'Applica
  */
 export function detectTerminal(existsSyncFn, platform = process.platform) {
   // Windows 默认用 Windows Terminal(wt)：Win11 自带、Win10 多数已装；未装时由副作用层兜底到 powershell/cmd
-  if (platform === 'win32') return 'wt';
+  if (platform === 'win32') return 'wt'
   // installed 标记是否检测到任一 Ghostty 安装路径存在
-  const installed = GHOSTTY_APP_PATHS.some((p) => existsSyncFn(p));
-  return installed ? 'ghostty' : 'terminal';
+  const installed = GHOSTTY_APP_PATHS.some((p) => existsSyncFn(p))
+  return installed ? 'ghostty' : 'terminal'
 }
 
 /**
@@ -30,7 +33,7 @@ export function detectTerminal(existsSyncFn, platform = process.platform) {
  */
 export function winQuote(s) {
   // Windows 路径不含 " 字符，直接双引号包裹即可防止空格/特殊字符拆词
-  return `"${String(s ?? '')}"`;
+  return `"${String(s ?? '')}"`
 }
 
 /**
@@ -41,7 +44,7 @@ export function winQuote(s) {
  */
 export function shellSingleQuote(s) {
   // 把每个单引号替换为 '\''（闭合单引号→转义单引号→重开单引号），再整体用单引号包裹
-  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+  return `'${String(s).replace(/'/g, `'\\''`)}'`
 }
 
 /**
@@ -51,10 +54,14 @@ export function shellSingleQuote(s) {
  * @param {NodeJS.Platform} [platform] - 平台标识，默认取当前进程平台；注入便于单测 Windows 分支
  * @returns {string} 可交给 child_process.exec 执行的命令字符串
  */
-export function buildTerminalCommand(targetPath, kind, platform = process.platform) {
+export function buildTerminalCommand(
+  targetPath,
+  kind,
+  platform = process.platform
+) {
   // Windows 分支：wt/powershell/cmd 三种终端，命令语法与 macOS 完全不同，单独处理
   if (platform === 'win32') {
-    return buildWindowsTerminalCommand(targetPath, kind);
+    return buildWindowsTerminalCommand(targetPath, kind)
   }
 
   // Ghostty 在 macOS 不支持用 CLI 直接开窗，必须经 open -na 启动并通过配置参数设初始目录。
@@ -62,18 +69,18 @@ export function buildTerminalCommand(targetPath, kind, platform = process.platfo
   // 因此每次从应用打开任务目录时显式关闭窗口目录继承，再传入目标 working-directory。
   if (kind === 'ghostty') {
     // quotedWorkingDirectory 存储传给 Ghostty working-directory 参数的 shell 安全路径。
-    const quotedWorkingDirectory = shellSingleQuote(targetPath);
-    return `open -na Ghostty.app --args --window-inherit-working-directory=false --working-directory=${quotedWorkingDirectory}`;
+    const quotedWorkingDirectory = shellSingleQuote(targetPath)
+    return `open -na Ghostty.app --args --window-inherit-working-directory=false --working-directory=${quotedWorkingDirectory}`
   }
 
   // cdScript 为在终端里执行的命令：cd 到单引号包裹的目标路径（路径先做 POSIX 单引号转义，shell 与 cd 安全）。
   // iTerm2 与 Terminal 都通过 AppleScript 在窗口里执行此命令，规避「open -a 首次冷启动打不到目标目录」的竞态。
-  const cdScript = `cd ${shellSingleQuote(targetPath)}`;
+  const cdScript = `cd ${shellSingleQuote(targetPath)}`
 
   // iTerm2：AppleScript API 与 Terminal 不同——需先 create window with default profile 建窗，再 write text 执行 cd。
   // 同样无论 iTerm2 是否已运行都能可靠落到目标目录。脚本里的双引号转义为 \"，整段用 osascript -e 双引号包裹。
   if (kind === 'iterm2') {
-    return `osascript -e "tell application \\"iTerm\\" to create window with default profile" -e "tell application \\"iTerm\\" to tell current session of current window to write text \\"${cdScript}\\"" -e "tell application \\"iTerm\\" to activate"`;
+    return `osascript -e "tell application \\"iTerm\\" to create window with default profile" -e "tell application \\"iTerm\\" to tell current session of current window to write text \\"${cdScript}\\"" -e "tell application \\"iTerm\\" to activate"`
   }
 
   // 系统 Terminal.app：改用 AppleScript 的 `do script "cd <path>"` 而非 `open -a Terminal <path>`。
@@ -83,7 +90,7 @@ export function buildTerminalCommand(targetPath, kind, platform = process.platfo
   // 两层转义：路径先用 POSIX 单引号包裹（shell 与 cd 安全），再放进 AppleScript 双引号字符串里
   // （单引号在 AppleScript 双引号串内无需转义），最外层 osascript 的 -e 参数用双引号包裹整段脚本。
   // 外层用双引号包裹 AppleScript 源；脚本里的双引号（包裹 do script 的参数）转义为 \"
-  return `osascript -e "tell application \\"Terminal\\" to do script \\"${cdScript}\\"" -e "tell application \\"Terminal\\" to activate"`;
+  return `osascript -e "tell application \\"Terminal\\" to do script \\"${cdScript}\\"" -e "tell application \\"Terminal\\" to activate"`
 }
 
 /**
@@ -95,27 +102,31 @@ export function buildTerminalCommand(targetPath, kind, platform = process.platfo
  * @param {NodeJS.Platform} [platform] - 平台标识，默认当前进程平台
  * @returns {string[]} 终端类型尝试链：从主选到兜底，副作用层按序尝试直到某个成功
  */
-export function resolveTerminalKind(preferred, existsSyncFn, platform = process.platform) {
+export function resolveTerminalKind(
+  preferred,
+  existsSyncFn,
+  platform = process.platform
+) {
   // Windows：三种终端 wt→powershell→cmd 依次兜底；cmd 必然存在，作为最终保底
   if (platform === 'win32') {
     // winChain 存储 Windows 终端兜底链，cmd 恒在末位保证总能打开
-    const winChain = ['wt', 'powershell', 'cmd'];
+    const winChain = ['wt', 'powershell', 'cmd']
     // 用户显式选了合法 Windows 终端时把它提到链首，其余作兜底；旧的 macOS 终端名（Terminal 等）落不到 winChain，走默认顺序
     if (winChain.includes(preferred)) {
-      return [preferred, ...winChain.filter((k) => k !== preferred)];
+      return [preferred, ...winChain.filter((k) => k !== preferred)]
     }
-    return winChain;
+    return winChain
   }
 
   // macOS：用户显式选择优先，Ghostty/iTerm2 失败时兜底系统 Terminal（terminal 恒作最终保底）
   // kind 存储主选终端类型：显式配置优先，否则自动探测 Ghostty
-  let kind;
-  if (preferred === 'Ghostty') kind = 'ghostty';
-  else if (preferred === 'iTerm2') kind = 'iterm2';
-  else if (preferred === 'Terminal') kind = 'terminal';
-  else kind = detectTerminal(existsSyncFn, platform);
+  let kind
+  if (preferred === 'Ghostty') kind = 'ghostty'
+  else if (preferred === 'iTerm2') kind = 'iterm2'
+  else if (preferred === 'Terminal') kind = 'terminal'
+  else kind = detectTerminal(existsSyncFn, platform)
   // 非系统 Terminal（ghostty/iterm2）打开失败时兜底重试系统 terminal；主选已是 terminal 则无需追加
-  return kind === 'terminal' ? ['terminal'] : [kind, 'terminal'];
+  return kind === 'terminal' ? ['terminal'] : [kind, 'terminal']
 }
 
 /**
@@ -132,22 +143,22 @@ export function resolveTerminalKind(preferred, existsSyncFn, platform = process.
  */
 function buildWindowsTerminalCommand(targetPath, kind) {
   // quotedPath 存储双引号包裹的目标路径，兼容空格/中文/& 等特殊字符（Windows 文件名不含 " 故无需转义）
-  const quotedPath = winQuote(targetPath);
+  const quotedPath = winQuote(targetPath)
 
   // PowerShell：无启动目录参数，启动后用 Set-Location 切目录；-LiteralPath 避免路径中 []* 被当通配符
   if (kind === 'powershell') {
     // psCommand 存储 PowerShell 启动后执行的 cd 命令；路径用单引号包裹（PowerShell 字符串），内部单引号转义为两个单引号
-    const psCommand = `Set-Location -LiteralPath '${String(targetPath).replace(/'/g, "''")}'`;
+    const psCommand = `Set-Location -LiteralPath '${String(targetPath).replace(/'/g, "''")}'`
     // -NoExit 保持窗口不退出；start 首参 "" 为窗口标题占位
-    return `start "" powershell -NoExit -Command "${psCommand}"`;
+    return `start "" powershell -NoExit -Command "${psCommand}"`
   }
 
   // cmd：/K 执行命令后保持窗口，cd /d 支持跨盘符切换到目标目录
   if (kind === 'cmd') {
     // start 首参 "" 为窗口标题占位；cmd /K "cd /d <path>" 切目录后保留交互窗口
-    return `start "" cmd /K "cd /d ${quotedPath}"`;
+    return `start "" cmd /K "cd /d ${quotedPath}"`
   }
 
   // 默认 wt(Windows Terminal)：-d <dir> 原生指定新标签/窗口的启动目录，最简洁可靠
-  return `wt -d ${quotedPath}`;
+  return `wt -d ${quotedPath}`
 }

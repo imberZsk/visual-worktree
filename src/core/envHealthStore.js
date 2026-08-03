@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
+import { join } from 'path'
 
 // 环境检查结果持久化：按任务名保存上次检查状态，供应用重启后继续显示红/绿环境状态。
 
@@ -10,9 +10,9 @@ import { join } from 'path';
  * @returns {{dir:string,file:string}} 缓存目录与文件路径
  */
 export function getTaskEnvHealthPaths(baseDir) {
-  // dir 为统一持久化目录，与任务状态/卡点/流程勾选同处 ~/.visualWorktree
-  const dir = baseDir || join(homedir(), '.visualWorktree');
-  return { dir, file: join(dir, 'task-env-health.json') };
+  // dir 为统一持久化目录，与任务状态/备注/流程勾选同处 ~/.visualWorktree
+  const dir = baseDir || join(homedir(), '.visualWorktree')
+  return { dir, file: join(dir, 'task-env-health.json') }
 }
 
 /**
@@ -21,7 +21,7 @@ export function getTaskEnvHealthPaths(baseDir) {
  * @returns {boolean} 是否为对象映射
  */
 function isEnvHealthMap(value) {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 /**
@@ -31,14 +31,14 @@ function isEnvHealthMap(value) {
  */
 export function loadTaskEnvHealth(baseDir) {
   // file 为环境检查缓存 JSON 文件
-  const { file } = getTaskEnvHealthPaths(baseDir);
+  const { file } = getTaskEnvHealthPaths(baseDir)
   try {
-    if (!existsSync(file)) return {};
+    if (!existsSync(file)) return {}
     // parsed 为缓存 JSON 内容，非对象时视为损坏并回退空对象
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    return isEnvHealthMap(parsed) ? parsed : {};
+    const parsed = JSON.parse(readFileSync(file, 'utf8'))
+    return isEnvHealthMap(parsed) ? parsed : {}
   } catch (e) {
-    return {};
+    return {}
   }
 }
 
@@ -50,12 +50,16 @@ export function loadTaskEnvHealth(baseDir) {
  */
 export function saveTaskEnvHealth(map, baseDir) {
   // dir/file 为环境检查缓存目标路径
-  const { dir, file } = getTaskEnvHealthPaths(baseDir);
+  const { dir, file } = getTaskEnvHealthPaths(baseDir)
   try {
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(file, JSON.stringify(isEnvHealthMap(map) ? map : {}, null, 2), 'utf8');
-    return true;
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      file,
+      JSON.stringify(isEnvHealthMap(map) ? map : {}, null, 2),
+      'utf8'
+    )
+    return true
   } catch (e) {
-    return false;
+    return false
   }
 }

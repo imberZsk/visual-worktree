@@ -49,7 +49,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 22.22.2
           cache: pnpm
 
       # 缓存 Electron 运行时与 electron-builder 工具，减少每次正式发布重复下载大文件。
@@ -90,6 +90,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Verify Electron runtime
+        run: pnpm run verify:electron
 
       - name: Build UI
         run: pnpm run build:ui

@@ -1,0 +1,16 @@
+/* 任务状态控件由 Dropdown 外层负责拦截 Collapse 点击，并保持与其他标题徽标一致的行内布局。 */
+.task-status-control {
+  cursor: pointer;
+  display: inline-flex;
+}
+
+/* 状态菜单和当前状态标签清除 Ant Design 默认尾部间距，避免改变菜单项及徽标组宽度。 */
+.task-status-menu-tag,
+.task-status-tag {
+  margin-inline-end: 0;
+}
+
+/* 下拉提示图标保持辅助层级，不参与正文尺寸。 */
+.task-status-chevron {
+  font-size: 10px;
+}

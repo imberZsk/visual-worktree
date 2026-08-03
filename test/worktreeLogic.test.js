@@ -5,6 +5,8 @@ import {
   TASK_STATUS_STORAGE_KEY,
   DEFAULT_TASK_STATUS,
   getTaskStatusMeta,
+  getTaskStatusSortOrder,
+  getTaskStatuses,
   setTaskStatusInMap,
   loadTaskStatusMap,
   saveTaskStatusMap,
@@ -99,6 +101,37 @@ describe('getTaskStatusMeta', () => {
       expect(getTaskStatusMeta(s.key)).toEqual(s)
     }
   })
+
+  it('uses the workspace dynamic status list and preserves its order', () => {
+    // workspaceStatuses 存储用户重命名、重排并新增状态后的工作区配置。
+    const workspaceStatuses = [
+      TASK_STATUSES[0],
+      { ...TASK_STATUSES[1], label: '处理中' },
+      {
+        key: 'integrating',
+        label: '联调中',
+        color: 'magenta',
+        kanbanColumn: 'inProgress',
+      },
+      { ...TASK_STATUSES.at(-1), label: '已上线' },
+    ]
+    // customStatuses 存储规范化后的完整动态状态菜单。
+    const customStatuses = getTaskStatuses(workspaceStatuses)
+
+    expect(getTaskStatusMeta('developing', workspaceStatuses)).toMatchObject({
+      key: 'developing',
+      label: '处理中',
+      color: 'processing',
+    })
+    expect(customStatuses.map((status) => status.key)).toEqual(
+      workspaceStatuses.map((status) => status.key)
+    )
+    expect(customStatuses.at(-1)).toMatchObject({
+      key: 'released',
+      label: '已上线',
+      color: 'success',
+    })
+  })
 })
 
 describe('setTaskStatusInMap', () => {
@@ -117,6 +150,22 @@ describe('setTaskStatusInMap', () => {
       'released'
     )
     expect(next['TASK-1']).toBe('released')
+  })
+
+  it('accepts a custom status that exists in the current workspace list', () => {
+    // customStatuses 存储包含自定义“联调中”的当前工作区状态定义。
+    const customStatuses = [
+      ...TASK_STATUSES,
+      {
+        key: 'integrating',
+        label: '联调中',
+        color: 'magenta',
+        kanbanColumn: 'inProgress',
+      },
+    ]
+    expect(
+      setTaskStatusInMap({}, 'TASK-1', 'integrating', customStatuses)
+    ).toEqual({ 'TASK-1': 'integrating' })
   })
 
   it('clears the status when key is empty, unknown, or the default "未开始"', () => {
@@ -146,6 +195,21 @@ describe('setTaskStatusInMap', () => {
     expect(setTaskStatusInMap(undefined, 'TASK-1', 'released')).toEqual({
       'TASK-1': 'released',
     })
+  })
+})
+
+describe('getTaskStatusSortOrder', () => {
+  it('derives task sort weights from the workspace status order', () => {
+    // reorderedStatuses 存储把“已发布”移动到“开发中”之前的工作区状态顺序。
+    const reorderedStatuses = [
+      TASK_STATUSES[0],
+      TASK_STATUSES.at(-1),
+      TASK_STATUSES[1],
+    ]
+    // sortOrder 存储动态列表派生出的状态排序权重。
+    const sortOrder = getTaskStatusSortOrder(reorderedStatuses)
+
+    expect(sortOrder.released).toBeLessThan(sortOrder.developing)
   })
 })
 

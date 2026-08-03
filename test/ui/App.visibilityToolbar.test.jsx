@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  act,
 } from '@testing-library/react'
 import { App as AntApp } from 'antd'
 
@@ -28,6 +29,7 @@ const mockApi = vi.hoisted(() => ({
   saveTaskEnvHealth: vi.fn(),
   onStepOutput: vi.fn(),
   onBatchProgress: vi.fn(),
+  loadTaskHistory: vi.fn(),
 }))
 
 vi.mock('../../src/ui/api.ts', () => ({
@@ -54,7 +56,7 @@ vi.mock('../../src/ui/api.ts', () => ({
     openInVscode: vi.fn(),
     openInTerminal: vi.fn(),
     copyText: vi.fn(),
-    loadTaskHistory: vi.fn(),
+    loadTaskHistory: mockApi.loadTaskHistory,
     removeTaskHistory: vi.fn(),
     openExternalUrl: vi.fn(),
     removeWorktree: vi.fn(),
@@ -158,6 +160,31 @@ function makeConfig() {
 }
 
 /**
+ * 构造包含工作区与个人区的切换测试配置。
+ * @returns {object} 多工作区配置
+ */
+function makeMultiWorkspaceConfig() {
+  return {
+    ...makeConfig(),
+    activePathProfileId: 'work',
+    pathProfiles: [
+      {
+        id: 'work',
+        name: '工作区',
+        sourceProjectsPath: '/repo',
+        worktreesPath: '/wt',
+      },
+      {
+        id: 'personal',
+        name: '个人区',
+        sourceProjectsPath: '/personal/repo',
+        worktreesPath: '/personal/wt',
+      },
+    ],
+  }
+}
+
+/**
  * 渲染 App 并注入 antd App 上下文。
  * @returns {ReturnType<typeof render>} 渲染结果
  */
@@ -204,6 +231,7 @@ describe('App 显示隐藏项工具栏', () => {
     mockApi.saveTaskEnvHealth.mockReset().mockResolvedValue(true)
     mockApi.onStepOutput.mockReset().mockReturnValue(() => {})
     mockApi.onBatchProgress.mockReset().mockReturnValue(() => {})
+    mockApi.loadTaskHistory.mockReset().mockResolvedValue([])
   })
 
   afterEach(() => cleanup())
@@ -249,7 +277,98 @@ describe('App 显示隐藏项工具栏', () => {
     })
   })
 
-  it('首次进入项目 Tab 会自动 fetch 一次，后续切回不重复自动 fetch', async () => {
+  it('切换工作区时持续展示内容区 loading，直到当前 Worktree 数据加载完成', async () => {
+    // currentConfig 存储包含两个可切换工作区的初始配置。
+    const currentConfig = makeMultiWorkspaceConfig()
+    // resolveWorkspaceScan 延迟目标工作区扫描完成，用于断言切换期间的 loading 状态。
+    let resolveWorkspaceScan
+    mockApi.loadConfig.mockResolvedValueOnce(currentConfig)
+    mockApi.saveConfig.mockResolvedValueOnce({
+      ...currentConfig,
+      activePathProfileId: 'personal',
+      sourceProjectsPath: '/personal/repo',
+      worktreesPath: '/personal/wt',
+    })
+    mockApi.scanWorktreesByTask
+      .mockReset()
+      .mockResolvedValueOnce(worktreeTasks)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveWorkspaceScan = resolve
+        })
+      )
+
+    renderApp()
+
+    expect(await screen.findByText('TASK-A')).toBeTruthy()
+    // workspaceSelect 存储顶部工作区选择器，用于触发切换并检查防重复状态。
+    const workspaceSelect = document.querySelector('.path-profile-select')
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByTitle('个人区'))
+
+    await waitFor(() => {
+      expect(screen.getByText('正在切换工作区...')).toBeTruthy()
+      expect(workspaceSelect.className).toContain('ant-select-disabled')
+    })
+    expect(mockApi.scanWorktreesByTask).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      resolveWorkspaceScan([])
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('正在切换工作区...')).toBeNull()
+      expect(workspaceSelect.className).not.toContain('ant-select-disabled')
+    })
+  })
+
+  it('切换工作区后重新打开历史任务时不闪现旧工作区记录', async () => {
+    // currentConfig 存储包含两个工作区的配置，用于复现历史缓存跨工作区残留。
+    const currentConfig = makeMultiWorkspaceConfig()
+    // resolvePersonalHistory 延迟个人区历史返回，用于检查等待阶段不会显示工作区旧记录。
+    let resolvePersonalHistory
+    mockApi.loadConfig.mockResolvedValueOnce(currentConfig)
+    mockApi.saveConfig.mockResolvedValueOnce({
+      ...currentConfig,
+      activePathProfileId: 'personal',
+      sourceProjectsPath: '/personal/repo',
+      worktreesPath: '/personal/wt',
+    })
+    mockApi.loadTaskHistory
+      .mockReset()
+      .mockResolvedValueOnce([{ task: 'WORK-HISTORY' }])
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePersonalHistory = resolve
+        })
+      )
+
+    renderApp()
+
+    expect(await screen.findByText('TASK-A')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /历史任务/ }))
+    expect(await screen.findByText('WORK-HISTORY')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByTitle('个人区'))
+    await waitFor(() => {
+      expect(screen.queryByText('正在切换工作区...')).toBeNull()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /历史任务/ }))
+    await waitFor(() => {
+      expect(screen.getByText('正在加载历史记录...')).toBeTruthy()
+      expect(screen.queryByText('WORK-HISTORY')).toBeNull()
+    })
+
+    await act(async () => {
+      resolvePersonalHistory([{ task: 'PERSONAL-HISTORY' }])
+    })
+    expect(await screen.findByText('PERSONAL-HISTORY')).toBeTruthy()
+    expect(mockApi.loadTaskHistory).toHaveBeenLastCalledWith('personal')
+  })
+
+  it('首次进入项目 Tab 按配置扫描，切回不重复，手动刷新仍 fetch', async () => {
     localStorage.setItem('vw-active-view', 'worktrees')
     renderApp()
 
@@ -262,12 +381,11 @@ describe('App 显示隐藏项工具栏', () => {
     const projectTab = screen.getByText('项目')
     fireEvent.click(projectTab)
 
-    await waitFor(() =>
-      expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true })
-    )
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledTimes(1))
+    expect(mockApi.scanProjects.mock.calls[0]).toEqual([{}])
     expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
 
-    // worktreeTab 存储顶部视图切换中的 Worktree 入口，用于验证再次切回项目不会触发第二次自动 fetch。
+    // worktreeTab 存储顶部视图切换中的 Worktree 入口，用于验证再次切回项目不会触发第二次自动扫描。
     const worktreeTab = screen.getByText('Worktree')
     fireEvent.click(worktreeTab)
     fireEvent.click(projectTab)
@@ -276,15 +394,18 @@ describe('App 显示隐藏项工具栏', () => {
       expect(screen.getByRole('button', { name: /显示隐藏项目/ })).toBeTruthy()
     )
     expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }))
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledTimes(2))
+    expect(mockApi.scanProjects.mock.calls[1]).toEqual([{ fetch: true }])
   })
 
-  it('启动时停留在项目 Tab 只触发一次带 fetch 的项目扫描', async () => {
+  it('启动时停留在项目 Tab 只触发一次按配置执行的项目扫描', async () => {
     localStorage.setItem('vw-active-view', 'projects')
     renderApp()
 
-    await waitFor(() =>
-      expect(mockApi.scanProjects).toHaveBeenCalledWith({ fetch: true })
-    )
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledTimes(1))
+    expect(mockApi.scanProjects.mock.calls[0]).toEqual([{}])
     expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
   })
 
@@ -342,6 +463,37 @@ describe('App 显示隐藏项工具栏', () => {
       name: /收起隐藏任务/,
     })
     expectNoEyeIcon(hideButton)
+  })
+
+  it('Worktree 搜索支持任务名和项目名模糊匹配，清空后恢复列表', async () => {
+    localStorage.setItem('vw-active-view', 'worktrees')
+    mockApi.loadConfig.mockResolvedValueOnce({
+      ...makeConfig(),
+      taskTitleBadges: { claudeUsage: false },
+    })
+    renderApp()
+
+    expect(await screen.findByText('TASK-A')).toBeTruthy()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /显示隐藏任务/ }).disabled
+      ).toBe(false)
+    })
+    // searchInput 存储 Worktree 工具栏的受控搜索框。
+    const searchInput = screen.getByPlaceholderText('搜索任务或项目')
+
+    fireEvent.change(searchInput, { target: { value: 'task-a' } })
+    expect(screen.getByText('TASK-A')).toBeTruthy()
+
+    fireEvent.change(searchInput, { target: { value: 'PROJA' } })
+    expect(screen.getByText('TASK-A')).toBeTruthy()
+
+    fireEvent.change(searchInput, { target: { value: '不存在' } })
+    expect(screen.queryByText('TASK-A')).toBeNull()
+    expect(screen.getByText('未找到匹配的任务或项目')).toBeTruthy()
+
+    fireEvent.change(searchInput, { target: { value: '' } })
+    expect(screen.getByText('TASK-A')).toBeTruthy()
   })
 
   it('项目工具栏显隐入口只展示文案', async () => {

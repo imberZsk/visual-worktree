@@ -3,14 +3,17 @@ import * as configModule from '../src/core/config.js'
 import {
   loadConfig,
   saveConfig,
+  resetConfig,
   getConfigPaths,
   getWorkflowStepsPaths,
   DEFAULT_CONFIG,
+  SWITCH_WORKSPACE_ONLY_FIELD,
 } from '../src/core/config.js'
 import { makeTempRoot } from './helpers.js'
 import { join } from 'path'
 import { homedir } from 'os'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { DEFAULT_TASK_STATUSES } from '../src/core/taskStatuses.js'
 
 // 配置读写测试，使用临时目录避免污染真实用户配置
 
@@ -54,6 +57,79 @@ describe('config', () => {
     ])
   })
 
+  it('default config includes the existing task status definitions', () => {
+    // cfg 存储没有用户配置时的工作区默认设置。
+    const cfg = loadConfig(join(ctx.root, 'task-status-label-defaults'))
+    expect(cfg.taskStatuses).toEqual(DEFAULT_TASK_STATUSES)
+  })
+
+  it('migrates persisted legacy task status labels into dynamic statuses', () => {
+    // dir 存储旧版状态标签配置迁移测试使用的隔离目录。
+    const dir = join(ctx.root, 'legacy-task-status-labels')
+    // file 存储当前配置文件的完整路径。
+    const { file } = getConfigPaths(dir)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      file,
+      JSON.stringify({
+        activePathProfileId: 'default',
+        pathProfiles: [
+          {
+            id: 'default',
+            name: '工作路径',
+            sourceProjectsPath: '/legacy/source',
+            worktreesPath: '/legacy/worktrees',
+            settings: {
+              taskStatusLabels: { developing: '编码中' },
+            },
+          },
+        ],
+      }),
+      'utf8'
+    )
+
+    // cfg 存储迁移后的运行时配置，应只暴露动态状态字段。
+    const cfg = loadConfig(dir)
+    expect(
+      cfg.taskStatuses.find((status) => status.key === 'developing')?.label
+    ).toBe('编码中')
+    expect(cfg.taskStatusLabels).toBeUndefined()
+  })
+
+  it('persists normalized dynamic task statuses inside the active workspace', () => {
+    // dir 存储动态任务状态持久化测试使用的隔离配置目录。
+    const dir = join(ctx.root, 'task-status-labels')
+    // taskStatuses 存储重命名、删除并新增状态后的用户配置。
+    const taskStatuses = [
+      DEFAULT_TASK_STATUSES[0],
+      { ...DEFAULT_TASK_STATUSES[1], label: '  处理中  ' },
+      {
+        key: 'integrating',
+        label: '联调中',
+        color: 'magenta',
+        kanbanColumn: 'inProgress',
+      },
+      { ...DEFAULT_TASK_STATUSES.at(-1), label: '已上线' },
+    ]
+    saveConfig(
+      {
+        taskStatuses,
+      },
+      dir
+    )
+
+    // savedStatuses 存储重新读取后的完整动态列表，验证顺序、自定义项和标签清洗同时生效。
+    const savedStatuses = loadConfig(dir).taskStatuses
+    expect(savedStatuses.map((status) => status.key)).toEqual([
+      'not-started',
+      'developing',
+      'integrating',
+      'released',
+    ])
+    expect(savedStatuses[1].label).toBe('处理中')
+    expect(savedStatuses.at(-1).label).toBe('已上线')
+  })
+
   it('saves and reloads config', () => {
     const dir = join(ctx.root, 'cfgdir')
     saveConfig({ sourceProjectsPath: '/tmp/x', ignoredProjects: ['a'] }, dir)
@@ -64,7 +140,7 @@ describe('config', () => {
     expect(cfg.mainBranches).toEqual(['master', 'main'])
   })
 
-  it('loads legacy path fields as a default path profile', () => {
+  it('does not migrate the previous flat config structure', () => {
     // dir 存储本用例的临时配置目录。
     const dir = join(ctx.root, 'cfgdir')
     // file 存储配置文件路径，用于手写旧版配置结构。
@@ -79,19 +155,19 @@ describe('config', () => {
       'utf8'
     )
 
-    // cfg 存储读取并自动迁移后的配置。
+    // cfg 存储读取结果；旧扁平结构不参与新工作区配置迁移。
     const cfg = loadConfig(dir)
 
-    expect(cfg.sourceProjectsPath).toBe('/legacy/source')
-    expect(cfg.onboardingCompleted).toBe(true)
-    expect(cfg.worktreesPath).toBe('/legacy/worktrees')
+    expect(cfg.sourceProjectsPath).toBe(DEFAULT_CONFIG.sourceProjectsPath)
+    expect(cfg.onboardingCompleted).toBe(false)
+    expect(cfg.worktreesPath).toBe(DEFAULT_CONFIG.worktreesPath)
     expect(cfg.activePathProfileId).toBe('default')
     expect(cfg.pathProfiles).toEqual([
       {
         id: 'default',
         name: '工作路径',
-        sourceProjectsPath: '/legacy/source',
-        worktreesPath: '/legacy/worktrees',
+        sourceProjectsPath: DEFAULT_CONFIG.sourceProjectsPath,
+        worktreesPath: DEFAULT_CONFIG.worktreesPath,
       },
     ])
   })
@@ -185,7 +261,9 @@ describe('config', () => {
 
     const { file } = getConfigPaths(dir)
     expect(getWorkflowStepsPaths(dir).file).toBe(file)
-    expect(JSON.parse(readFileSync(file, 'utf8')).workflowSteps).toEqual(custom)
+    // diskConfig 存储新的工作区嵌套磁盘结构。
+    const diskConfig = JSON.parse(readFileSync(file, 'utf8'))
+    expect(diskConfig.pathProfiles[0].settings.workflowSteps).toEqual(custom)
     expect(loadConfig(dir).workflowSteps).toEqual(custom)
   })
 
@@ -200,8 +278,29 @@ describe('config', () => {
     saveConfig({ sourceProjectsPath: '/tmp/source-only' }, dir)
 
     const { file } = getConfigPaths(dir)
-    expect(JSON.parse(readFileSync(file, 'utf8')).workflowSteps).toEqual(custom)
+    // diskConfig 存储新的工作区嵌套磁盘结构。
+    const diskConfig = JSON.parse(readFileSync(file, 'utf8'))
+    expect(diskConfig.pathProfiles[0].settings.workflowSteps).toEqual(custom)
     expect(loadConfig(dir).workflowSteps).toEqual(custom)
+  })
+
+  it('persists project private workflows and preserves them on unrelated saves', () => {
+    const dir = join(ctx.root, 'cfgdir')
+    // projectWorkflowSteps 存储按源项目绝对路径隔离的私有流程配置。
+    const projectWorkflowSteps = {
+      '/src/projA': [
+        { key: 'unit-test', label: '项目单测', command: 'pnpm test' },
+      ],
+    }
+    saveConfig({ projectWorkflowSteps }, dir)
+    saveConfig({ autoFetch: true }, dir)
+    const { file } = getConfigPaths(dir)
+    // diskConfig 存储新的工作区嵌套磁盘结构。
+    const diskConfig = JSON.parse(readFileSync(file, 'utf8'))
+    expect(diskConfig.pathProfiles[0].settings.projectWorkflowSteps).toEqual(
+      projectWorkflowSteps
+    )
+    expect(loadConfig(dir).projectWorkflowSteps).toEqual(projectWorkflowSteps)
   })
 
   it('resets saved config back to defaults without preserving previous fields', () => {
@@ -237,8 +336,172 @@ describe('config', () => {
       onboardingCompleted: true,
     }
     expect(resetConfigResult).toEqual(expectedResetConfig)
-    expect(diskConfig).toEqual(expectedResetConfig)
+    expect(diskConfig.activePathProfileId).toBe('default')
+    expect(diskConfig.pathProfiles).toHaveLength(1)
+    expect(diskConfig.pathProfiles[0]).toMatchObject({
+      id: 'default',
+      sourceProjectsPath: DEFAULT_CONFIG.sourceProjectsPath,
+      worktreesPath: DEFAULT_CONFIG.worktreesPath,
+      settings: {
+        onboardingCompleted: true,
+        workflowSteps: DEFAULT_CONFIG.workflowSteps,
+      },
+    })
+    expect(diskConfig.workflowSteps).toBeUndefined()
     expect(loadConfig(dir)).toEqual(expectedResetConfig)
+  })
+
+  it('persists paths and complete settings independently for each workspace', () => {
+    const dir = join(ctx.root, 'workspace-isolation')
+    // pathProfiles 存储两个待隔离的工作区路径元数据。
+    const pathProfiles = [
+      {
+        id: 'work',
+        name: '工作',
+        sourceProjectsPath: '/work/source',
+        worktreesPath: '/work/worktrees',
+      },
+      {
+        id: 'personal',
+        name: '个人',
+        sourceProjectsPath: '/personal/source',
+        worktreesPath: '/personal/worktrees',
+      },
+    ]
+    // workSteps 存储工作区专用流程。
+    const workSteps = [{ key: 'work-review', label: '工作审查', command: '' }]
+    saveConfig(
+      {
+        activePathProfileId: 'work',
+        pathProfiles,
+        sourceProjectsPath: '/work/source',
+        worktreesPath: '/work/worktrees',
+        workflowSteps: workSteps,
+        terminalApp: 'iTerm2',
+        ignoredProjects: ['legacy-work'],
+        taskStatuses: DEFAULT_TASK_STATUSES.map((status) =>
+          status.key === 'developing'
+            ? { ...status, label: '编码中' }
+            : { ...status }
+        ),
+      },
+      dir
+    )
+
+    // personalConfig 存储仅切换后读取到的个人工作区默认设置。
+    const personalConfig = saveConfig(
+      {
+        activePathProfileId: 'personal',
+        pathProfiles,
+        [SWITCH_WORKSPACE_ONLY_FIELD]: true,
+      },
+      dir
+    )
+    expect(personalConfig.workflowSteps).toEqual(DEFAULT_CONFIG.workflowSteps)
+    expect(personalConfig.terminalApp).toBe(DEFAULT_CONFIG.terminalApp)
+    expect(personalConfig.taskStatuses).toEqual(DEFAULT_TASK_STATUSES)
+
+    // personalSteps 存储个人工作区专用流程。
+    const personalSteps = [
+      { key: 'personal-test', label: '个人测试', command: 'pnpm test' },
+    ]
+    saveConfig(
+      {
+        workflowSteps: personalSteps,
+        terminalApp: 'Ghostty',
+        ignoredProjects: ['private-archive'],
+      },
+      dir
+    )
+
+    // workConfig 存储切回工作区后的配置，必须恢复工作区原值。
+    const workConfig = saveConfig(
+      {
+        activePathProfileId: 'work',
+        pathProfiles,
+        [SWITCH_WORKSPACE_ONLY_FIELD]: true,
+      },
+      dir
+    )
+    expect(workConfig.sourceProjectsPath).toBe('/work/source')
+    expect(workConfig.workflowSteps).toEqual(workSteps)
+    expect(workConfig.terminalApp).toBe('iTerm2')
+    expect(workConfig.ignoredProjects).toEqual(['legacy-work'])
+    expect(
+      workConfig.taskStatuses.find((status) => status.key === 'developing')
+        ?.label
+    ).toBe('编码中')
+
+    // diskConfig 存储两个工作区最终独立落盘的 settings。
+    const { file } = getConfigPaths(dir)
+    const diskConfig = JSON.parse(readFileSync(file, 'utf8'))
+    const workProfile = diskConfig.pathProfiles.find(
+      (profile) => profile.id === 'work'
+    )
+    const personalProfile = diskConfig.pathProfiles.find(
+      (profile) => profile.id === 'personal'
+    )
+    expect(workProfile.settings.workflowSteps).toEqual(workSteps)
+    expect(personalProfile.settings.workflowSteps).toEqual(personalSteps)
+    expect(personalProfile.settings.ignoredProjects).toEqual([
+      'private-archive',
+    ])
+  })
+
+  it('resets only the active workspace', () => {
+    const dir = join(ctx.root, 'workspace-reset')
+    // pathProfiles 存储重置隔离测试使用的两个工作区。
+    const pathProfiles = [
+      {
+        id: 'work',
+        name: '工作',
+        sourceProjectsPath: '/work/source',
+        worktreesPath: '/work/worktrees',
+      },
+      {
+        id: 'personal',
+        name: '个人',
+        sourceProjectsPath: '/personal/source',
+        worktreesPath: '/personal/worktrees',
+      },
+    ]
+    saveConfig(
+      {
+        activePathProfileId: 'work',
+        pathProfiles,
+        workflowSteps: [{ key: 'keep', label: '保留', command: '' }],
+      },
+      dir
+    )
+    saveConfig(
+      {
+        activePathProfileId: 'personal',
+        pathProfiles,
+        [SWITCH_WORKSPACE_ONLY_FIELD]: true,
+      },
+      dir
+    )
+    saveConfig(
+      {
+        workflowSteps: [{ key: 'reset', label: '待重置', command: '' }],
+      },
+      dir
+    )
+    resetConfig(dir)
+
+    // workConfig 存储切回工作区后的配置，用于确认另一个工作区未被重置。
+    const workConfig = saveConfig(
+      {
+        activePathProfileId: 'work',
+        pathProfiles,
+        [SWITCH_WORKSPACE_ONLY_FIELD]: true,
+      },
+      dir
+    )
+    expect(workConfig.workflowSteps).toEqual([
+      { key: 'keep', label: '保留', command: '' },
+    ])
+    expect(workConfig.sourceProjectsPath).toBe('/work/source')
   })
 
   it('default config dir is unified ~/.visualWorktree (no hyphen)', () => {

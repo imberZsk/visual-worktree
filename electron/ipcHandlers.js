@@ -1,4 +1,5 @@
 import { IPC } from './ipcChannels.js'
+import { getTitleBarOverlayOptions } from '../src/core/windowBehavior.js'
 import * as gitService from '../src/core/gitService.js'
 import { loadConfig, resetConfig, saveConfig } from '../src/core/config.js'
 import {
@@ -28,6 +29,19 @@ import {
   appendIdeaRun,
 } from '../src/core/ideaWorkflowService.js'
 import { archiveTaskDocs } from '../src/core/taskDocsService.js'
+import {
+  getAiModelSettings,
+  sendAiAssistantMessage,
+  streamAiAssistantMessage,
+  updateAiModelSettings,
+} from '../src/core/aiAssistantService.js'
+import {
+  DEFAULT_AI_MODEL,
+  loadAiModelCredentials,
+  maskAiModelApiKey,
+  normalizeAiModelCredentials,
+  saveAiModelCredentials,
+} from '../src/core/aiModelCredentialStore.js'
 import { exec, spawn } from 'child_process'
 import { dirname, join, resolve } from 'path'
 import { existsSync, rmSync, readdirSync } from 'fs'
@@ -412,9 +426,40 @@ function removeEmptyParentsWithinRoot(folderPath, rootPath) {
  */
 export function registerIpcHandlers(ipcMain, deps = {}) {
   // getWindow 返回当前主窗口，用于向渲染进程推送批量进度；shell 打开 Finder；clipboard 写系统剪贴板
-  const { getWindow, shell, clipboard, dialog, dataDir } = deps
+  const {
+    getWindow,
+    shell,
+    clipboard,
+    dialog,
+    dataDir,
+    safeStorage,
+    loadAiModelCredentials: loadAiModelCredentialsImpl = loadAiModelCredentials,
+    saveAiModelCredentials: saveAiModelCredentialsImpl = saveAiModelCredentials,
+    getAiModelSettings: getAiModelSettingsImpl = getAiModelSettings,
+    updateAiModelSettings: updateAiModelSettingsImpl = updateAiModelSettings,
+    sendAiAssistantMessage: sendAiAssistantMessageImpl = sendAiAssistantMessage,
+    streamAiAssistantMessage:
+      streamAiAssistantMessageImpl = streamAiAssistantMessage,
+    platform = process.platform,
+  } = deps
   // configBaseDir 存储配置文件目录；生产环境为空时使用默认 ~/.visualWorktree，测试时复用 dataDir 隔离真实用户配置。
   const configBaseDir = dataDir
+  // aiCredentialsBaseDir 存储加密模型配置目录；生产环境默认使用 ~/.visualWorktree。
+  const aiCredentialsBaseDir = dataDir || join(homedir(), '.visualWorktree')
+
+  /**
+   * 把本机加密配置同步到 FastAPI，后端重启后的第一次聊天也能恢复配置。
+   * @returns {Promise<{model:string,baseUrl:string,apiKeyConfigured:boolean}>} 后端安全设置状态
+   */
+  const synchronizeAiModelSettings = async () => {
+    // credentials 存储只在 Electron 主进程内解密的完整模型配置。
+    const credentials = loadAiModelCredentialsImpl({
+      dataDir: aiCredentialsBaseDir,
+      safeStorage,
+    })
+    if (!credentials) return getAiModelSettingsImpl()
+    return updateAiModelSettingsImpl(credentials)
+  }
 
   // 扫描项目：读取配置中的源路径与忽略列表
   ipcMain.handle(IPC.SCAN_PROJECTS, async (_e, opts = {}) => {
@@ -592,6 +637,138 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
 
   // 恢复默认配置
   ipcMain.handle(IPC.RESET_CONFIG, async () => resetConfig(configBaseDir))
+
+  // Windows/Linux 的系统窗口按钮覆盖在应用 Header 上，需要跟随应用主题更新背景和图标色。
+  ipcMain.handle(IPC.SET_WINDOW_THEME, (_event, themeMode) => {
+    // win 存储当前主窗口；macOS 使用系统交通灯，不需要标题栏覆盖层。
+    const win = getWindow?.()
+    if (
+      platform === 'darwin' ||
+      !win ||
+      win.isDestroyed?.() ||
+      typeof win.setTitleBarOverlay !== 'function'
+    ) {
+      return false
+    }
+    try {
+      win.setTitleBarOverlay(getTitleBarOverlayOptions(themeMode))
+      return true
+    } catch {
+      // 不支持覆盖层的 Linux 窗口管理器安全保留创建窗口时的默认标题栏配置。
+      return false
+    }
+  })
+
+  // 设置页只读取安全投影；若本机已有加密配置，会顺便恢复到当前后端进程。
+  ipcMain.handle(IPC.LOAD_AI_MODEL_SETTINGS, async () => {
+    try {
+      // credentials 存储本机加密配置，仅用于生成不可逆的 Key 掩码提示。
+      const credentials = loadAiModelCredentialsImpl({
+        dataDir: aiCredentialsBaseDir,
+        safeStorage,
+      })
+      // settings 存储不含 Key 明文的当前模型设置状态。
+      const settings = await synchronizeAiModelSettings()
+      return {
+        success: true,
+        settings: {
+          ...settings,
+          apiKeyHint: maskAiModelApiKey(credentials?.apiKey),
+        },
+      }
+    } catch (error) {
+      return { success: false, error: error?.message || '读取模型配置失败' }
+    }
+  })
+
+  // 保存时空 Key 表示保留已保存凭据，显式 clearApiKey 才清除。
+  ipcMain.handle(IPC.SAVE_AI_MODEL_SETTINGS, async (_event, request = {}) => {
+    try {
+      // currentCredentials 存储更新前的加密配置，空 Key 保存时用于保留原凭据。
+      const currentCredentials = loadAiModelCredentialsImpl({
+        dataDir: aiCredentialsBaseDir,
+        safeStorage,
+      })
+      // submittedCredentials 存储经过格式校验的本次表单字段。
+      const submittedCredentials = normalizeAiModelCredentials({
+        model: request.model || DEFAULT_AI_MODEL,
+        baseUrl: request.baseUrl,
+        apiKey: request.clearApiKey
+          ? ''
+          : request.apiKey || currentCredentials?.apiKey || '',
+        clearApiKey: Boolean(request.clearApiKey),
+      })
+      // credentials 存储实际写入系统加密文件的完整配置。
+      const credentials = saveAiModelCredentialsImpl(submittedCredentials, {
+        dataDir: aiCredentialsBaseDir,
+        safeStorage,
+      })
+      // settings 存储后端同步后返回的不含 Key 的安全投影。
+      const settings = await updateAiModelSettingsImpl({
+        ...credentials,
+      })
+      return {
+        success: true,
+        settings: {
+          ...settings,
+          apiKeyHint: maskAiModelApiKey(credentials.apiKey),
+        },
+      }
+    } catch (error) {
+      return { success: false, error: error?.message || '保存模型配置失败' }
+    }
+  })
+
+  // AI 助手消息由主进程转发到 FastAPI，渲染进程不直接接触后端连接细节。
+  ipcMain.handle(IPC.SEND_AI_ASSISTANT_MESSAGE, async (_e, message) => {
+    try {
+      await synchronizeAiModelSettings()
+      // answer 存储 FastAPI 后端返回的最终智能体回答。
+      const answer = await sendAiAssistantMessageImpl(message)
+      return { success: true, answer }
+    } catch (error) {
+      return {
+        success: false,
+        error: error?.message || 'AI 智能助手请求失败',
+      }
+    }
+  })
+
+  // 流式请求通过 invoke 返回最终状态，文本片段则定向推送给发起请求的渲染进程。
+  ipcMain.handle(IPC.STREAM_AI_ASSISTANT_MESSAGE, async (event, request) => {
+    // 前端第 4 步（建议在下一行打断点）：主进程收到 IPC 请求；查看 request.message 和 request.workspace。
+    // requestId 存储渲染进程生成的请求标识，用于隔离并发事件。
+    const requestId =
+      typeof request?.requestId === 'string' ? request.requestId.trim() : ''
+    // message 存储渲染进程提交的用户消息。
+    const message = typeof request?.message === 'string' ? request.message : ''
+    // workspace 存储渲染进程白名单映射后的工作区快照。
+    const workspace =
+      request?.workspace && typeof request.workspace === 'object'
+        ? request.workspace
+        : undefined
+    if (!requestId) return { success: false, error: 'AI 助手请求标识不能为空' }
+    try {
+      await synchronizeAiModelSettings()
+      // answer 存储后端流完成后拼接出的完整回答。
+      const answer = await streamAiAssistantMessageImpl(message, {
+        workspace,
+        onChunk: (chunk) => {
+          // sender 存储本次 IPC 请求来源，确保文本只推送给对应窗口。
+          const sender = event?.sender
+          if (sender && !sender.isDestroyed?.()) {
+            sender.send(IPC.AI_ASSISTANT_STREAM_CHUNK, { requestId, chunk })
+          }
+        },
+      })
+      return { success: true, answer }
+    } catch (error) {
+      return {
+        success: false,
+        error: error?.message || 'AI 智能助手请求失败',
+      }
+    }
+  })
 
   // 获取提交历史（最近 n 条）
   ipcMain.handle(IPC.GET_COMMITS, async (_e, projectPath, n = 10) => {
@@ -774,14 +951,14 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   // 存储「任务名::步骤 key → 最近一次输出快照」，用于重启后恢复查看/失败态
   const WORKFLOW_OUTPUT_FILE = join(VW_DIR, 'task-workflow-output.json')
 
-  // 任务卡点备注文件路径：~/.visualWorktree/task-blockers.json
-  // 存储「任务名 → 卡点备注文本」，记录每个任务当前的阻塞点/待办说明
+  // 任务备注文件路径：沿用 ~/.visualWorktree/task-blockers.json，兼容已有用户数据。
+  // 存储「任务名 → 备注文本」，记录每个任务当前的补充说明。
   const BLOCKERS_FILE = join(VW_DIR, 'task-blockers.json')
 
-  // 读取任务卡点备注映射（不存在/损坏时回退空对象）
+  // 读取任务备注映射（不存在/损坏时回退空对象）
   ipcMain.handle(IPC.LOAD_TASK_BLOCKERS, () => readJsonFile(BLOCKERS_FILE))
 
-  // 保存任务卡点备注映射（目录不存在时自动创建）
+  // 保存任务备注映射（目录不存在时自动创建）
   ipcMain.handle(IPC.SAVE_TASK_BLOCKERS, (_e, map) =>
     writeJsonFile(BLOCKERS_FILE, map || {})
   )
@@ -826,9 +1003,7 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     const hasLegacyEntries = list.some((item) => !item?.workspaceId)
     // migratedList 存储完成旧数据归属迁移后的完整列表。
     const migratedList = list.map((item) =>
-      item?.workspaceId
-        ? item
-        : { ...item, workspaceId: normalizedWorkspaceId }
+      item?.workspaceId ? item : { ...item, workspaceId: normalizedWorkspaceId }
     )
     if (hasLegacyEntries) {
       await mkdir(VW_DIR, { recursive: true })
@@ -884,7 +1059,8 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
       // matchingIndexes 存储当前工作区记录在完整列表中的实际下标。
       const matchingIndexes = normalizedWorkspaceId
         ? list.reduce((indexes, item, itemIndex) => {
-            if (item?.workspaceId === normalizedWorkspaceId) indexes.push(itemIndex)
+            if (item?.workspaceId === normalizedWorkspaceId)
+              indexes.push(itemIndex)
             return indexes
           }, [])
         : []
@@ -925,18 +1101,26 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   ipcMain.handle(IPC.GET_CLAUDE_SESSIONS_BY_TASK, async (_e, taskName) => {
     const cfg = loadConfig(configBaseDir)
     if (cfg.aiUsageTool === 'codex') {
-      return getCodexSessionsByTask(taskName, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+      return getCodexSessionsByTask(taskName, cfg.worktreesPath, {
+        tokenPricing: cfg.tokenPricing,
+      })
     }
-    return getSessionsByTask(taskName, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+    return getSessionsByTask(taskName, cfg.worktreesPath, {
+      tokenPricing: cfg.tokenPricing,
+    })
   })
 
   // 获取当前 AI 工具的全部任务 Token 用量汇总。
   ipcMain.handle(IPC.GET_CLAUDE_TASKS_SUMMARY, async (_e, taskNames) => {
     const cfg = loadConfig(configBaseDir)
     if (cfg.aiUsageTool === 'codex') {
-      return getCodexTasksSummary(taskNames, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+      return getCodexTasksSummary(taskNames, cfg.worktreesPath, {
+        tokenPricing: cfg.tokenPricing,
+      })
     }
-    return getTasksSummary(taskNames, cfg.worktreesPath, { tokenPricing: cfg.tokenPricing })
+    return getTasksSummary(taskNames, cfg.worktreesPath, {
+      tokenPricing: cfg.tokenPricing,
+    })
   })
 
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）

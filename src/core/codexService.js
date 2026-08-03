@@ -25,7 +25,8 @@ function collectCodexSessionFiles(directory, files, deps) {
     // entryPath 存储当前目录项的完整路径。
     const entryPath = join(directory, entry.name)
     if (entry.isDirectory()) collectCodexSessionFiles(entryPath, files, deps)
-    else if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(entryPath)
+    else if (entry.isFile() && entry.name.endsWith('.jsonl'))
+      files.push(entryPath)
   }
   return files
 }
@@ -53,8 +54,12 @@ function parseCodexSession(filePath, deps) {
       // record 存储当前 JSONL 行解析后的事件对象。
       const record = JSON.parse(line)
       if (record?.type === 'session_meta') sessionMeta = record.payload || null
-      if (record?.type === 'turn_context' && record.payload?.model) model = record.payload.model
-      if (record?.type === 'event_msg' && record.payload?.type === 'token_count') {
+      if (record?.type === 'turn_context' && record.payload?.model)
+        model = record.payload.model
+      if (
+        record?.type === 'event_msg' &&
+        record.payload?.type === 'token_count'
+      ) {
         // nextUsage 存储当前累计 Token 快照；只保留非空快照覆盖旧值。
         const nextUsage = record.payload?.info?.total_token_usage
         if (nextUsage) totalUsage = nextUsage
@@ -70,7 +75,10 @@ function parseCodexSession(filePath, deps) {
   const cacheWrite = Number(totalUsage.cache_write_input_tokens) || 0
   // usage 存储与现有 UI 一致的四类用量；普通输入扣除缓存项以避免重复累计和计费。
   const usage = {
-    input: Math.max(0, (Number(totalUsage.input_tokens) || 0) - cacheRead - cacheWrite),
+    input: Math.max(
+      0,
+      (Number(totalUsage.input_tokens) || 0) - cacheRead - cacheWrite
+    ),
     output: Number(totalUsage.output_tokens) || 0,
     cacheWrite,
     cacheRead,
@@ -138,8 +146,12 @@ function isCodexSessionForTask(session, taskName, worktreesRoot) {
  */
 export function getCodexSessionsByTask(taskName, worktreesRoot, deps = {}) {
   return scanCodexSessions(deps)
-    .filter((session) => isCodexSessionForTask(session, taskName, worktreesRoot))
-    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+    .filter((session) =>
+      isCodexSessionForTask(session, taskName, worktreesRoot)
+    )
+    .sort((left, right) =>
+      String(right.createdAt).localeCompare(String(left.createdAt))
+    )
 }
 
 /**
@@ -170,7 +182,13 @@ export function getCodexTasksSummary(taskNames, worktreesRoot, deps = {}) {
       { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
     )
     // usd 存储当前任务所有会话美元费用之和。
-    const usd = Math.round(matchedSessions.reduce((total, session) => total + session.cost.usd, 0) * 1_000_000) / 1_000_000
+    const usd =
+      Math.round(
+        matchedSessions.reduce(
+          (total, session) => total + session.cost.usd,
+          0
+        ) * 1_000_000
+      ) / 1_000_000
     summary[taskName] = {
       sessionCount: matchedSessions.length,
       usage,

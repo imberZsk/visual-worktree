@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import {
   Drawer,
   Tabs,
-  List,
   Tag,
   Descriptions,
   Button,
@@ -16,6 +15,37 @@ import { statusTags } from '../projectLogic.ts'
 import { hasVisibilityKey } from '../visibilityLogic.ts'
 
 // 项目详情抽屉：展示提交历史、变更文件、worktree 列表。
+
+/**
+ * 渲染项目详情中的紧凑数据列表。
+ * @param {object} props - 组件属性
+ * @param {Array<object>} props.items - 待展示的数据项
+ * @param {string} props.emptyDescription - 空列表提示
+ * @param {(item:object,index:number) => React.ReactNode} props.renderItem - 单项渲染函数
+ * @param {(item:object,index:number) => React.Key} props.getItemKey - 单项 key 生成函数
+ * @returns {JSX.Element} 语义化详情列表
+ */
+function DetailList({ items, emptyDescription, renderItem, getItemKey }) {
+  // token 存储当前 antd 主题变量，用于列表项分隔线。
+  const { token } = theme.useToken()
+  if (items.length === 0) return <Empty description={emptyDescription} />
+  return (
+    <div role="list">
+      {items.map((item, index) => (
+        <div
+          key={getItemKey(item, index)}
+          role="listitem"
+          style={{
+            borderBlockEnd: `1px solid ${token.colorSplit}`,
+            paddingBlock: 8,
+          }}
+        >
+          {renderItem(item, index)}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /**
  * 项目详情抽屉
@@ -109,80 +139,70 @@ export default function ProjectDetail({
 
   // 提交历史 Tab 内容
   const commitsTab = (
-    <List
-      size="small"
-      dataSource={commits}
-      locale={{ emptyText: <Empty description="暂无提交" /> }}
-      renderItem={(c) => (
-        <List.Item>
-          <Space orientation="vertical" size={0} style={{ width: '100%' }}>
-            <Space>
-              <code>{c.hash}</code>
-              <span>{c.message}</span>
-            </Space>
-            <span style={{ color: token.colorTextSecondary, fontSize: 12 }}>
-              {c.author} · {c.date}
-            </span>
+    <DetailList
+      items={commits}
+      emptyDescription="暂无提交"
+      getItemKey={(commit, index) => commit.hash || index}
+      renderItem={(commit) => (
+        <Space orientation="vertical" size={0} style={{ width: '100%' }}>
+          <Space>
+            <code>{commit.hash}</code>
+            <span>{commit.message}</span>
           </Space>
-        </List.Item>
+          <span style={{ color: token.colorTextSecondary, fontSize: 12 }}>
+            {commit.author} · {commit.date}
+          </span>
+        </Space>
       )}
     />
   )
 
   // 工作区文件 Tab 内容：包含已跟踪改动与未跟踪文件，名称避免被误解为仅 git diff。
   const filesTab = (
-    <List
-      size="small"
-      dataSource={project.changedFiles || []}
-      locale={{ emptyText: <Empty description="工作区干净" /> }}
-      renderItem={(f) => (
-        <List.Item>
-          <Tag>{(f.index || ' ') + (f.working_dir || ' ')}</Tag>
-          <code>{f.path}</code>
-        </List.Item>
+    <DetailList
+      items={project.changedFiles || []}
+      emptyDescription="工作区干净"
+      getItemKey={(file, index) => file.path || index}
+      renderItem={(file) => (
+        <Space>
+          <Tag>{(file.index || ' ') + (file.working_dir || ' ')}</Tag>
+          <code>{file.path}</code>
+        </Space>
       )}
     />
   )
 
   // worktree Tab 内容
   const worktreeTab = (
-    <List
-      size="small"
-      dataSource={visibleWorktrees}
-      locale={{ emptyText: <Empty description="无 worktree" /> }}
-      renderItem={(w) => (
-        <List.Item
-          actions={[
-            <Button
-              type="link"
-              size="small"
-              key="finder"
-              onClick={() => onOpenFinder(w.path)}
-            >
-              Finder
-            </Button>,
-            <Button
-              type="link"
-              size="small"
-              key="vscode"
-              onClick={() => onOpenVscode(w.path)}
-            >
-              VSCode
-            </Button>,
-          ]}
+    <DetailList
+      items={visibleWorktrees}
+      emptyDescription="无 worktree"
+      getItemKey={(worktree, index) => worktree.path || index}
+      renderItem={(worktree) => (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
         >
           <Space orientation="vertical" size={0}>
             <Space>
-              <code>{w.branch || '(detached)'}</code>
-              {w.isMain && <Tag color="blue">主工作区</Tag>}
-              {w.taskName &&
-                hasVisibilityKey(taskVisibility, 'pinned', w.taskName) && (
-                  <Tag color="blue">置顶</Tag>
-                )}
-              {w.taskName &&
-                hasVisibilityKey(taskVisibility, 'hidden', w.taskName) && (
-                  <Tag color="default">已隐藏</Tag>
-                )}
+              <code>{worktree.branch || '(detached)'}</code>
+              {worktree.isMain && <Tag color="blue">主工作区</Tag>}
+              {worktree.taskName &&
+                hasVisibilityKey(
+                  taskVisibility,
+                  'pinned',
+                  worktree.taskName
+                ) && <Tag color="blue">置顶</Tag>}
+              {worktree.taskName &&
+                hasVisibilityKey(
+                  taskVisibility,
+                  'hidden',
+                  worktree.taskName
+                ) && <Tag color="default">已隐藏</Tag>}
             </Space>
             <span
               style={{
@@ -191,10 +211,26 @@ export default function ProjectDetail({
                 wordBreak: 'break-all',
               }}
             >
-              {w.path}
+              {worktree.path}
             </span>
           </Space>
-        </List.Item>
+          <Space size={0}>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => onOpenFinder(worktree.path)}
+            >
+              Finder
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => onOpenVscode(worktree.path)}
+            >
+              VSCode
+            </Button>
+          </Space>
+        </div>
       )}
     />
   )
@@ -204,7 +240,7 @@ export default function ProjectDetail({
       title={project.name}
       open={!!project}
       onClose={onClose}
-      width={drawerWidth}
+      size={drawerWidth}
       extra={
         <Space>
           <Button

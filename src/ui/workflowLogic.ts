@@ -108,6 +108,50 @@ export function normalizeWorkflowSteps(steps) {
 }
 
 /**
+ * 合并任务可用的通用流程与项目私有流程，并为私有步骤生成任务内唯一 key。
+ * @param {Array<object>} globalSteps - 设置页维护的通用流程步骤
+ * @param {Record<string,Array<object>>} projectWorkflowSteps - 源项目路径到私有步骤数组的映射
+ * @param {Array<{project?:string,projectPath?:string}>} worktrees - 当前任务包含的项目 worktree
+ * @returns {Array<object>} 当前任务实际展示和执行的流程步骤
+ */
+export function buildTaskWorkflowSteps(
+  globalSteps,
+  projectWorkflowSteps,
+  worktrees
+) {
+  // normalizedGlobalSteps 存储规范化后的通用步骤。
+  const normalizedGlobalSteps = normalizeWorkflowSteps(globalSteps)
+  // taskWorktrees 存储当前任务合法的项目 worktree 列表。
+  const taskWorktrees = Array.isArray(worktrees) ? worktrees : []
+  // privateSteps 累积带项目元数据和唯一 key 的私有步骤。
+  const privateSteps = []
+  for (const worktree of taskWorktrees) {
+    // projectPath 存储项目私有配置使用的稳定绝对路径键。
+    const projectPath = String(worktree?.projectPath || '').trim()
+    if (!projectPath) continue
+    // projectName 存储私有步骤在流程弹层展示的项目名称。
+    const projectName = String(worktree?.project || projectPath).trim()
+    // normalizedPrivateSteps 存储当前项目清洗后的私有步骤。
+    const normalizedPrivateSteps = normalizeWorkflowSteps(
+      projectWorkflowSteps?.[projectPath] ?? []
+    )
+    for (const step of normalizedPrivateSteps) {
+      // scopedKey 使用项目路径编码隔离不同项目的同名步骤，避免勾选态和输出缓存串台。
+      const scopedKey = `project:${encodeURIComponent(projectPath)}:${step.key}`
+      privateSteps.push({
+        ...step,
+        key: scopedKey,
+        privateKey: step.key,
+        projectPath,
+        projectName,
+        scope: 'project',
+      })
+    }
+  }
+  return [...normalizedGlobalSteps, ...privateSteps]
+}
+
+/**
  * 取某任务在工作流勾选映射中的「已勾选步骤 key 集合」（容错：缺失时回退空数组）。
  * @param {Record<string,string[]>} map - 工作流映射「任务名 → 已勾选步骤 key 数组」
  * @param {string} taskName - 任务名

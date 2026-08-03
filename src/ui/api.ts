@@ -15,6 +15,8 @@ const TASK_WORKFLOW_OUTPUT_STORAGE_KEY = 'vw-task-workflow-output'
 
 // 浏览器降级实现：返回空数据并在控制台提示
 const browserFallback = {
+  // 浏览器降级环境没有原生窗口标题栏，只需保持接口一致。
+  setWindowTheme: async () => false,
   checkAppUpdate: async () => ({ available: false }),
   downloadAppUpdate: async () => ({ downloaded: false }),
   installAppUpdate: async () => false,
@@ -56,8 +58,23 @@ const browserFallback = {
     mainBranches: ['master', 'main'],
     ignoredProjects: [],
   }),
-  saveConfig: async (c) => c,
+  saveConfig: async (c) => {
+    // switchWorkspaceOnly 为桌面端配置层使用的瞬时字段，浏览器降级返回前需要剔除。
+    const { __switchWorkspaceOnly: switchWorkspaceOnly, ...config } = c || {}
+    void switchWorkspaceOnly
+    return config
+  },
   resetConfig: async () => browserFallback.loadConfig(),
+  // 浏览器降级环境没有 Electron safeStorage，不能读取模型凭据。
+  loadAiModelSettings: async () => ({
+    success: false,
+    error: '仅桌面端可读取 AI 模型配置',
+  }),
+  // 浏览器降级环境不能安全保存 API Key。
+  saveAiModelSettings: async () => ({
+    success: false,
+    error: '仅桌面端可保存 AI 模型配置',
+  }),
   getCommits: async () => [],
   openInFinder: async () => ({ success: true }),
   openInVscode: async () => ({ success: true }),
@@ -74,6 +91,18 @@ const browserFallback = {
     success: false,
     error: '仅桌面端可执行命令',
   }),
+  // 浏览器降级环境没有 Electron 主进程，无法安全转发到 AI 后端。
+  sendAiAssistantMessage: async () => ({
+    success: false,
+    error: '仅桌面端可使用 AI 智能助手',
+  }),
+  // 浏览器降级环境没有主进程，无法建立 AI 流式转发。
+  streamAiAssistantMessage: async () => ({
+    success: false,
+    error: '仅桌面端可使用 AI 智能助手',
+  }),
+  // 浏览器降级环境不会收到 AI 流式文本事件。
+  onAiAssistantStreamChunk: () => () => {},
   copyText: async () => true,
   removeTaskFolder: async () => ({ success: false, error: '非 Electron 环境' }),
   archiveTaskDocs: async (_taskDir, taskName) => ({
@@ -176,7 +205,8 @@ const browserFallback = {
       const r = localStorage.getItem('vw-task-history')
       // list 存储浏览器降级环境中的完整历史记录列表。
       const list = r ? JSON.parse(r) : []
-      if (!workspaceId || !Array.isArray(list)) return Array.isArray(list) ? list : []
+      if (!workspaceId || !Array.isArray(list))
+        return Array.isArray(list) ? list : []
       // migratedList 存储把旧版无工作区记录归入当前工作区后的列表。
       const migratedList = list.map((item) =>
         item?.workspaceId ? item : { ...item, workspaceId }
@@ -216,7 +246,8 @@ const browserFallback = {
       // targetIndex 存储当前工作区下标在完整历史列表中的实际下标。
       const targetIndex = workspaceId
         ? list.reduce((matchingIndexes, item, itemIndex) => {
-            if (item?.workspaceId === workspaceId) matchingIndexes.push(itemIndex)
+            if (item?.workspaceId === workspaceId)
+              matchingIndexes.push(itemIndex)
             return matchingIndexes
           }, [])[idx]
         : idx
@@ -229,7 +260,7 @@ const browserFallback = {
   },
   getClaudeSessionsByTask: async () => [],
   getClaudeTasksSummary: async () => ({}),
-  // 浏览器降级：无主进程，可安全删除列表/环境检查/卡点/想法工作流均返回空或成功兜底
+  // 浏览器降级：无主进程，可安全删除列表/环境检查/备注/想法工作流均返回空或成功兜底
   getSafeToRemoveWorktrees: async () => [],
   checkEnvHealth: async () => ({
     deps: { status: 'ok', message: '非 Electron 环境', fixes: [] },

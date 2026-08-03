@@ -10,6 +10,7 @@ import {
 import { App as AntApp } from 'antd'
 import SettingsModal from '../../src/ui/components/SettingsModal.tsx'
 import { useStore } from '../../src/ui/store/useStore.ts'
+import { DEFAULT_TASK_STATUSES } from '../../src/core/taskStatuses.js'
 
 // mockApi 模拟设置弹窗保存配置时用到的 Electron API。
 const mockApi = vi.hoisted(() => ({
@@ -17,6 +18,8 @@ const mockApi = vi.hoisted(() => ({
   resetConfig: vi.fn(),
   selectDirectory: vi.fn(),
   scanProjects: vi.fn(),
+  loadAiModelSettings: vi.fn(),
+  saveAiModelSettings: vi.fn(),
 }))
 
 vi.mock('../../src/ui/api.ts', () => ({
@@ -25,6 +28,8 @@ vi.mock('../../src/ui/api.ts', () => ({
     resetConfig: mockApi.resetConfig,
     selectDirectory: mockApi.selectDirectory,
     scanProjects: mockApi.scanProjects,
+    loadAiModelSettings: mockApi.loadAiModelSettings,
+    saveAiModelSettings: mockApi.saveAiModelSettings,
   },
 }))
 
@@ -71,6 +76,7 @@ function makeConfig() {
       envHealth: true,
       claudeUsage: true,
     },
+    taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
     tokenPricing: {
       enabled: true,
       input: 1,
@@ -85,6 +91,37 @@ function makeConfig() {
   }
 }
 
+/**
+ * 断言指定容器内的 Ant Design 表单标题带问号说明。
+ * @param {string} labelText - 要检查的表单标题文案
+ * @param {HTMLElement} [container] - 限定查找范围，弹层或重复行字段使用对应容器
+ * @returns {HTMLElement} 问号 Tooltip 触发节点
+ */
+function expectFormLabelHasHelp(labelText, container = document.body) {
+  // labelTextNode 存储表单标题文字节点，用于向上定位 Ant Design 标签容器。
+  const labelTextNode = within(container).getByText(labelText, { exact: true })
+  // formLabel 存储 Ant Design 表单标题容器，问号触发节点应位于其中。
+  const formLabel = labelTextNode.closest('.ant-form-item-label')
+  expect(formLabel).toBeTruthy()
+  // helpTrigger 存储 Ant Design Form.Item tooltip 生成的问号节点。
+  const helpTrigger = formLabel.querySelector('.ant-form-item-tooltip')
+  expect(helpTrigger).toBeTruthy()
+  return helpTrigger
+}
+
+/**
+ * 按 Ant Design 弹层标题定位对应 dialog。
+ * @param {string} title - 弹层标题文案
+ * @returns {Promise<HTMLElement>} 标题所属的 dialog 节点
+ */
+async function findDialogByTitle(title) {
+  // titleNode 存储 Ant Design Modal 的标题节点，避免依赖测试环境缺失的 aria 名称关联。
+  const titleNode = await screen.findByText(title, {
+    selector: '.ant-modal-title',
+  })
+  return titleNode.closest('[role="dialog"]')
+}
+
 describe('SettingsModal 流程配置布局', () => {
   beforeEach(() => {
     // 重置全局 store，避免项目列表等状态串扰。
@@ -92,12 +129,244 @@ describe('SettingsModal 流程配置布局', () => {
     mockApi.saveConfig.mockReset()
     mockApi.resetConfig.mockReset()
     mockApi.selectDirectory.mockReset()
-    mockApi.scanProjects.mockReset().mockResolvedValue([])
+    mockApi.loadAiModelSettings.mockReset().mockResolvedValue({
+      success: true,
+      settings: {
+        model: 'gpt-5.6-sol',
+        baseUrl: '',
+        apiKeyConfigured: true,
+        apiKeyHint: '••••••••-key',
+      },
+    })
+    mockApi.saveAiModelSettings.mockReset().mockResolvedValue({
+      success: true,
+      settings: {
+        model: 'gpt-5.6-sol',
+        baseUrl: '',
+        apiKeyConfigured: true,
+        apiKeyHint: '••••••••-key',
+      },
+    })
+    // 大多数用例只需验证设置 UI，默认保持扫描未完成，避免无关的 Store 异步更新越过 act 边界。
+    mockApi.scanProjects
+      .mockReset()
+      .mockImplementation(() => new Promise(() => {}))
   })
 
   afterEach(() => cleanup())
 
-  afterEach(() => cleanup())
+  it('AI 助手设置展示已保存 Key 的安全掩码', async () => {
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 助手' }))
+    expect(await screen.findByText('••••••••-key')).toBeTruthy()
+  })
+
+  it('设置各 Tab 的字段和分组小标题均提供问号说明', async () => {
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    // pathLabels 存储路径 Tab 所有配置标题，防止后续字段遗漏说明入口。
+    const pathLabels = [
+      '当前路径组合',
+      '主分支名（可多个）',
+      '忽略的项目目录',
+      '扫描时自动 fetch 远程（较慢，但能计算落后提交数）',
+    ]
+    pathLabels.forEach((label) => expectFormLabelHasHelp(label))
+    // currentPathHelp 存储当前路径组合问号节点，用于验证 Tooltip 不只是占位图标。
+    const currentPathHelp = expectFormLabelHasHelp('当前路径组合')
+    fireEvent.mouseEnter(currentPathHelp)
+    await waitFor(() => {
+      expect(
+        screen.getByText('切换项目和 Worktree 使用的路径组合。')
+      ).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }))
+    // pathProfileDialog 存储路径组合详情弹层，用于限定内部字段标题的检查范围。
+    const pathProfileDialog = await findDialogByTitle('管理路径组合')
+    expect(
+      within(pathProfileDialog).getByLabelText('路径组合 1说明')
+    ).toBeTruthy()
+    ;['组合名称', '源项目根目录', 'Worktree 根目录'].forEach((label) =>
+      expectFormLabelHasHelp(label, pathProfileDialog)
+    )
+    fireEvent.click(
+      within(pathProfileDialog).getByRole('button', { name: /完\s*成/ })
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: '工具' }))
+    ;['编辑器打开命令', '终端应用'].forEach((label) =>
+      expectFormLabelHasHelp(label)
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: '工作文档' }))
+    expectFormLabelHasHelp('工作文档模板')
+    fireEvent.click(await screen.findByTestId('work-document-row-1'))
+    // workDocumentDialog 存储文件模板详情弹层，文件类型会展示三个可配置标题。
+    const workDocumentDialog = await findDialogByTitle('编辑工作文档')
+    ;['类型', '路径', '文件默认内容'].forEach((label) =>
+      expectFormLabelHasHelp(label, workDocumentDialog)
+    )
+    fireEvent.click(
+      within(workDocumentDialog).getByRole('button', { name: /完\s*成/ })
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: '流程' }))
+    expectFormLabelHasHelp('需求流程步骤')
+    fireEvent.click(await screen.findByTestId('workflow-step-row-0'))
+    // workflowDialog 存储流程步骤详情弹层，覆盖名称、命令和执行策略标题。
+    const workflowDialog = await findDialogByTitle('编辑流程步骤')
+    ;[
+      '步骤名称',
+      '执行命令（选填）',
+      '任务目录参数',
+      '成功后自动勾选',
+      '失败后停止后续步骤',
+    ].forEach((label) => expectFormLabelHasHelp(label, workflowDialog))
+    fireEvent.click(
+      within(workflowDialog).getByRole('button', { name: /完\s*成/ })
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Token 费用' }))
+    ;[
+      '统计工具',
+      'Input 单价',
+      'Output 单价',
+      'Cache write 单价',
+      'Cache read 单价',
+      '美元兑人民币汇率',
+    ].forEach((label) => expectFormLabelHasHelp(label))
+    expect(screen.getByLabelText('自定义计价说明')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: '展示' }))
+    ;[
+      '任务标题展示偏好',
+      '项目数量',
+      '任务状态',
+      '需求链接',
+      '环境状态',
+      'Token 消耗',
+      '任务状态（7/20）',
+    ].forEach((label) =>
+      expect(screen.getByLabelText(`${label}说明`)).toBeTruthy()
+    )
+    expect(
+      screen.queryByText('展示任务包含的项目数量，快速判断影响范围。')
+    ).toBeNull()
+    fireEvent.mouseEnter(screen.getByLabelText('项目数量说明'))
+    expect(await screen.findByText('任务包含的项目数。')).toBeTruthy()
+    // statusSettings 存储状态配置区，用于确认界面不再显示无意义的行序号。
+    const statusSettings = screen.getByTestId('task-status-settings')
+    expect(within(statusSettings).queryByText('状态 2')).toBeNull()
+    // defaultStatusRow 存储默认状态配置行，用于验证状态名称不再重复展示问号。
+    const defaultStatusRow = screen.getByTestId('task-status-row-not-started')
+    // statusNameLabel 存储状态名称的表单标题容器，用于检查其问号已移除。
+    const statusNameLabel = within(defaultStatusRow)
+      .getByText('状态名称', { exact: true })
+      .closest('.ant-form-item-label')
+    expect(statusNameLabel?.querySelector('.ant-form-item-tooltip')).toBeNull()
+    expectFormLabelHasHelp('看板归类', defaultStatusRow)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'CI/CD' }))
+    expectFormLabelHasHelp('CI/CD 流水线地址（按项目配置，选填）')
+  })
+
+  it('路径与列表型设置移除重复说明并保留统一结构', async () => {
+    // config 存储包含 CI/CD 条目的设置，便于同时验证列表行与新增操作。
+    const config = makeConfig()
+    config.cicdLinks = {
+      'visual-worktree': 'https://ci.example.com/visual-worktree',
+    }
+
+    renderWithApp(
+      <SettingsModal
+        open
+        config={config}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledTimes(1))
+
+    expect(screen.queryByText('可用于切换工作和个人项目工作路径。')).toBeNull()
+
+    fireEvent.click(screen.getByText('工作文档'))
+    expect(
+      screen.queryByText(
+        /\u9ed8\u8ba4\u5de5\u4f5c\u6587\u6863\u4e3a\u4efb\u52a1\u76ee\u5f55\u4e0b的 docs 目录/
+      )
+    ).toBeNull()
+    // addDocumentButton 存储工作文档新增入口，用于确认列表容器仍保留统一结构。
+    const addDocumentButton = screen.getByRole('button', {
+      name: /添加工作文档/,
+    })
+    expect(addDocumentButton.closest('.settings-list-content')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('流程'))
+    expect(
+      screen.queryByText(
+        /\u6bcf\u4e2a\u6b65\u9aa4\u90fd\u4f1a\u663e\u793a在 Worktree/
+      )
+    ).toBeNull()
+    // addWorkflowButton 存储流程新增入口，用于确认移除说明后列表布局未变化。
+    const addWorkflowButton = screen.getByRole('button', {
+      name: /添加流程步骤/,
+    })
+    expect(addWorkflowButton.closest('.settings-list-content')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('CI/CD'))
+    // cicdPanel 存储 CI/CD 列表内容，列表与新增按钮的节奏必须与其他列表型设置一致。
+    const addCicdButton = screen.getByRole('button', {
+      name: /添加项目 CI\/CD 地址/,
+    })
+    const cicdPanel = addCicdButton.closest('.settings-list-content')
+    expect(cicdPanel).toBeTruthy()
+    expect(addCicdButton.classList.contains('settings-add-list-button')).toBe(
+      true
+    )
+  })
+
+  it('CI/CD 空列表不保留会重复产生间距的滚动容器', async () => {
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    await waitFor(() => expect(mockApi.scanProjects).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByText('CI/CD'))
+
+    // addCicdButton 存储空态唯一可见控件，按钮应直接承接 Form 标签的默认 8px 间距。
+    const addCicdButton = screen.getByRole('button', {
+      name: /添加项目 CI\/CD 地址/,
+    })
+    // cicdPanel 存储 CI/CD 列表内容容器，用于确认空态没有不可见 sibling 参与 gap 计算。
+    const cicdPanel = addCicdButton.closest('.settings-list-content')
+    expect(cicdPanel).toBeTruthy()
+    expect(cicdPanel.querySelector('.settings-list-scroll')).toBeNull()
+
+    fireEvent.click(addCicdButton)
+    expect(cicdPanel.querySelector('.settings-list-scroll')).toBeTruthy()
+  })
 
   it('流程步骤主列表只展示紧凑项，点击后用弹层编辑详情', async () => {
     renderWithApp(
@@ -120,7 +389,7 @@ describe('SettingsModal 流程配置布局', () => {
     const row = screen.getByTestId('workflow-step-row-0')
     expect(within(row).getByText('审查很长很长的需求方案标题')).toBeTruthy()
     expect(within(row).getByText('已配置命令')).toBeTruthy()
-    expect(row.style.boxSizing).toBe('border-box')
+    expect(row.classList.contains('settings-list-row')).toBe(true)
     expect(screen.queryByTestId('workflow-step-list')).toBeNull()
     expect(screen.queryByPlaceholderText(/执行命令/)).toBeNull()
 
@@ -276,25 +545,26 @@ describe('SettingsModal 流程配置布局', () => {
       expect(screen.getByTestId('display-settings-panel')).toBeTruthy()
     })
 
-    // panel 存储展示偏好页整体容器，用于验证顶部说明与布局结构。
+    // panel 存储展示偏好页整体容器，用于验证标题与布局结构。
     const panel = screen.getByTestId('display-settings-panel')
     // grid 存储展示项卡片网格，避免页面退回到左侧单列堆叠。
     const grid = screen.getByTestId('display-badge-grid')
-    // envCard 存储环境状态展示项卡片，用于验证说明文案和开关被组织在同一张卡片里。
+    // envCard 存储环境状态展示项卡片，用于验证问号和开关被组织在同一张卡片里。
     const envCard = screen.getByTestId('display-badge-card-envHealth')
 
     expect(within(panel).getByText('任务标题展示偏好')).toBeTruthy()
     expect(
-      within(panel).getByText(
+      within(panel).queryByText(
         '按需选择任务标题旁显示哪些辅助信息，让任务列表保持清爽但不丢关键状态。'
       )
-    ).toBeTruthy()
-    expect(grid.style.gridTemplateColumns).toContain('minmax(220px, 1fr)')
+    ).toBeNull()
+    expect(grid.classList.contains('settings-display-grid')).toBe(true)
     expect(
-      within(envCard).getByText(
+      within(envCard).queryByText(
         '展示自动环境检查结果，快速发现依赖、端口或服务问题。'
       )
-    ).toBeTruthy()
+    ).toBeNull()
+    expect(within(envCard).getByLabelText('环境状态说明')).toBeTruthy()
     expect(within(envCard).getByRole('switch')).toBeTruthy()
   })
 
@@ -336,6 +606,123 @@ describe('SettingsModal 流程配置布局', () => {
     })
   })
 
+  it('展示 Tab 可编辑并保存完整的任务状态标签配置', async () => {
+    mockApi.saveConfig.mockResolvedValueOnce(makeConfig())
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByText('展示'))
+    // statusSettings 存储任务状态标签设置区，用于确认配置没有混入徽标开关卡片。
+    const statusSettings = await screen.findByTestId('task-status-settings')
+    // developingRow 存储“开发中”稳定状态所在行，避免依赖可变的列表序号。
+    const developingRow = within(statusSettings).getByTestId(
+      'task-status-row-developing'
+    )
+    // developingInput 存储“开发中”稳定状态对应的可编辑名称输入框。
+    const developingInput = within(developingRow).getByRole('textbox', {
+      name: '状态名称',
+    })
+    expect(developingInput.value).toBe('开发中')
+    fireEvent.change(developingInput, { target: { value: '处理中' } })
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
+    // savedConfig 存储提交给主进程的完整动态状态列表。
+    const savedConfig = mockApi.saveConfig.mock.calls[0][0]
+    expect(savedConfig.taskStatuses).toHaveLength(DEFAULT_TASK_STATUSES.length)
+    expect(
+      savedConfig.taskStatuses.find((status) => status.key === 'developing')
+        ?.label
+    ).toBe('处理中')
+  })
+
+  it('任务状态标签重复时阻止保存并在对应字段展示错误', async () => {
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByText('展示'))
+    // developingRow 存储待改成重复文案的“开发中”状态行。
+    const developingRow = await screen.findByTestId(
+      'task-status-row-developing'
+    )
+    // developingInput 存储待改成重复文案的“开发中”名称输入框。
+    const developingInput = within(developingRow).getByRole('textbox', {
+      name: '状态名称',
+    })
+    fireEvent.change(developingInput, { target: { value: '未开始' } })
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+
+    expect(await screen.findAllByText('状态标签不能重复')).not.toHaveLength(0)
+    expect(mockApi.saveConfig).not.toHaveBeenCalled()
+  })
+
+  it('任务状态支持新增、删除并实时更新数量', async () => {
+    mockApi.saveConfig.mockResolvedValueOnce(makeConfig())
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByText('展示'))
+    // statusSettings 存储动态状态设置区，用于限定新增和删除操作的查询范围。
+    const statusSettings = await screen.findByTestId('task-status-settings')
+    expect(within(statusSettings).getByText('任务状态（7/20）')).toBeTruthy()
+    fireEvent.click(
+      within(statusSettings).getByRole('button', { name: '添加任务状态' })
+    )
+    expect(within(statusSettings).getByText('任务状态（8/20）')).toBeTruthy()
+    // customStatusRow 存储新增在列表末尾的状态行。
+    const customStatusRow = within(statusSettings)
+      .getAllByTestId(/^task-status-row-/)
+      .at(-1)
+    // customStatusInput 存储新增状态的名称输入框。
+    const customStatusInput = within(customStatusRow).getByRole('textbox', {
+      name: '状态名称',
+    })
+    fireEvent.change(customStatusInput, { target: { value: '联调中' } })
+    // selfTestingRow 存储内置“自测中”状态行，删除后不应继续持久化该 key。
+    const selfTestingRow = within(statusSettings).getByTestId(
+      'task-status-row-self-testing'
+    )
+    fireEvent.click(
+      within(selfTestingRow).getByRole('button', { name: '删除状态' })
+    )
+    expect(within(statusSettings).getByText('任务状态（7/20）')).toBeTruthy()
+    fireEvent.click(
+      within(customStatusRow).getByRole('button', { name: '上移状态' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
+    // savedStatuses 存储提交给主进程的最终列表，应保留新增项并移除指定内置项。
+    const savedStatuses = mockApi.saveConfig.mock.calls[0][0].taskStatuses
+    expect(savedStatuses.some((status) => status.key === 'self-testing')).toBe(
+      false
+    )
+    expect(savedStatuses.some((status) => status.label === '联调中')).toBe(true)
+    expect(
+      savedStatuses.findIndex((status) => status.label === '联调中')
+    ).toBeLessThan(
+      savedStatuses.findIndex((status) => status.key === 'released')
+    )
+  })
+
   it('未打开流程 Tab 保存其它设置时保留已有流程步骤', async () => {
     mockApi.saveConfig.mockResolvedValueOnce(makeConfig())
     renderWithApp(
@@ -365,7 +752,7 @@ describe('SettingsModal 流程配置布局', () => {
     ])
   })
 
-  it('路径 Tab 主体只展示当前组合和短说明，路径组合详情收进弹层', async () => {
+  it('路径 Tab 主体只展示当前组合和问号，路径组合详情收进弹层', async () => {
     renderWithApp(
       <SettingsModal
         open
@@ -375,7 +762,8 @@ describe('SettingsModal 流程配置布局', () => {
       />
     )
 
-    expect(screen.getByText('可用于切换工作和个人项目工作路径。')).toBeTruthy()
+    expect(screen.queryByText('可用于切换工作和个人项目工作路径。')).toBeNull()
+    expectFormLabelHasHelp('当前路径组合')
     expect(screen.queryByText(/保存后当前组合会用于扫描项目/)).toBeNull()
     expect(screen.getByRole('button', { name: /管理路径组合/ })).toBeTruthy()
     expect(
@@ -587,12 +975,13 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /管理路径组合/ }))
-    // addProfileButton 存储统一样式的路径组合新增按钮，用于验证按钮具有舒适的上下内边距。
+    // addProfileButton 存储统一样式的路径组合新增按钮，尺寸由设置页专用 CSS 统一控制。
     const addProfileButton = screen.getByRole('button', {
       name: /添加路径组合/,
     })
-    expect(addProfileButton.style.height).toBe('36px')
-    expect(addProfileButton.style.paddingBlock).toBe('6px')
+    expect(
+      addProfileButton.classList.contains('settings-add-list-button')
+    ).toBe(true)
     fireEvent.click(addProfileButton)
 
     // newRow 存储新增的第二个路径组合行，用于确认新增内容不会继承上一组路径。
@@ -785,14 +1174,23 @@ describe('SettingsModal 流程配置布局', () => {
   it('保存时持久化自定义 Token 费用规则', async () => {
     mockApi.saveConfig.mockImplementation(async (savedConfig) => savedConfig)
     renderWithApp(
-      <SettingsModal open config={makeConfig()} onClose={() => {}} onSaved={() => {}} />
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
     )
     fireEvent.click(screen.getByText('Token 费用'))
     // pricingPanel 存储 Token 费用设置容器，不应再叠加额外 flex gap。
     const pricingPanel = screen.getByTestId('token-pricing-settings-panel')
     expect(pricingPanel.style.gap).toBe('')
-    expect(pricingPanel.querySelector('.token-pricing-fields-grid')).toBeTruthy()
-    expect(pricingPanel.querySelectorAll('.token-pricing-field')).toHaveLength(5)
+    expect(
+      pricingPanel.querySelector('.token-pricing-fields-grid')
+    ).toBeTruthy()
+    expect(pricingPanel.querySelectorAll('.token-pricing-field')).toHaveLength(
+      5
+    )
     expect(Number(screen.getByLabelText('Input 单价').value)).toBe(1)
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
     await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))

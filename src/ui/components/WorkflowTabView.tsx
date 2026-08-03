@@ -4,7 +4,6 @@ import {
   Col,
   Button,
   Input,
-  List,
   Modal,
   Form,
   Space,
@@ -383,11 +382,11 @@ export default function WorkflowTabView() {
             styles={{ image: { height: 40 } }}
           />
         ) : (
-          <List
-            dataSource={workflows}
-            renderItem={(wf) => (
-              // 选中高亮：用 colorPrimaryBg 作为选中背景
-              <List.Item
+          <div role="list">
+            {workflows.map((wf) => (
+              <div
+                key={wf.id}
+                role="listitem"
                 onClick={() => setSelectedId(wf.id)}
                 style={{
                   cursor: 'pointer',
@@ -399,9 +398,20 @@ export default function WorkflowTabView() {
                       ? token.colorPrimaryBg
                       : token.colorFillQuaternary,
                   border: `1px solid ${selectedId === wf.id ? token.colorPrimary : 'transparent'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
                 }}
-                actions={[
-                  <Tooltip title="编辑" key="edit">
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13 }}>{wf.name}</div>
+                  <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
+                    {wf.description || '—'} · {wf.steps.length} 步
+                  </div>
+                </div>
+                <Space size={0}>
+                  <Tooltip title="编辑">
                     <Button
                       size="small"
                       type="text"
@@ -411,8 +421,8 @@ export default function WorkflowTabView() {
                         handleEditWorkflow(wf)
                       }}
                     />
-                  </Tooltip>,
-                  <Tooltip title="删除" key="del">
+                  </Tooltip>
+                  <Tooltip title="删除">
                     <Button
                       size="small"
                       type="text"
@@ -423,22 +433,11 @@ export default function WorkflowTabView() {
                         handleDeleteWorkflow(wf.id)
                       }}
                     />
-                  </Tooltip>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={<span style={{ fontSize: 13 }}>{wf.name}</span>}
-                  description={
-                    <span
-                      style={{ fontSize: 12, color: token.colorTextTertiary }}
-                    >
-                      {wf.description || '—'} · {wf.steps.length} 步
-                    </span>
-                  }
-                />
-              </List.Item>
-            )}
-          />
+                  </Tooltip>
+                </Space>
+              </div>
+            ))}
+          </div>
         )}
       </Col>
 

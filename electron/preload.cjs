@@ -22,6 +22,8 @@ const IPC = {
   LOAD_CONFIG: 'load-config',
   SAVE_CONFIG: 'save-config',
   RESET_CONFIG: 'reset-config',
+  LOAD_AI_MODEL_SETTINGS: 'load-ai-model-settings',
+  SAVE_AI_MODEL_SETTINGS: 'save-ai-model-settings',
   OPEN_IN_FINDER: 'open-in-finder',
   OPEN_IN_VSCODE: 'open-in-vscode',
   OPEN_IN_TERMINAL: 'open-in-terminal',
@@ -61,10 +63,17 @@ const IPC = {
   SAVE_IDEA_WORKFLOWS: 'save-idea-workflows',
   LOAD_IDEA_RUNS: 'load-idea-runs',
   APPEND_IDEA_RUN: 'append-idea-run',
+  SEND_AI_ASSISTANT_MESSAGE: 'send-ai-assistant-message',
+  STREAM_AI_ASSISTANT_MESSAGE: 'stream-ai-assistant-message',
+  SET_WINDOW_THEME: 'set-window-theme',
+  AI_ASSISTANT_STREAM_CHUNK: 'ai-assistant-stream-chunk',
 }
 
 // 暴露给渲染进程的 API 对象
 contextBridge.exposeInMainWorld('api', {
+  // setWindowTheme 同步 Windows/Linux 原生窗口控件覆盖层的主题。
+  setWindowTheme: (themeMode) =>
+    ipcRenderer.invoke(IPC.SET_WINDOW_THEME, themeMode),
   // checkAppUpdate 检查 GitHub Release 新版本。
   checkAppUpdate: () => ipcRenderer.invoke('app-update:check'),
   // downloadAppUpdate 下载完整安装包。
@@ -199,9 +208,9 @@ contextBridge.exposeInMainWorld('api', {
   loadTaskEnvHealth: () => ipcRenderer.invoke(IPC.LOAD_TASK_ENV_HEALTH),
   // 保存任务环境检查缓存（~/.visualWorktree/task-env-health.json）
   saveTaskEnvHealth: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_ENV_HEALTH, map),
-  // 读取任务卡点备注映射（~/.visualWorktree/task-blockers.json）
+  // 读取任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   loadTaskBlockers: () => ipcRenderer.invoke(IPC.LOAD_TASK_BLOCKERS),
-  // 保存任务卡点备注映射（~/.visualWorktree/task-blockers.json）
+  // 保存任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   saveTaskBlockers: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_BLOCKERS, map),
   // 读取想法工作流定义列表（~/.visualWorktree/idea-workflows.json）
   loadIdeaWorkflows: () => ipcRenderer.invoke(IPC.LOAD_IDEA_WORKFLOWS),
@@ -212,6 +221,25 @@ contextBridge.exposeInMainWorld('api', {
   loadIdeaRuns: () => ipcRenderer.invoke(IPC.LOAD_IDEA_RUNS),
   // 追加一条想法工作流运行记录（插入头部，超50条截断）
   appendIdeaRun: (run) => ipcRenderer.invoke(IPC.APPEND_IDEA_RUN, run),
+  // 读取模型、Base URL 和 Key 是否已配置；主进程不会返回 Key 明文。
+  loadAiModelSettings: () => ipcRenderer.invoke(IPC.LOAD_AI_MODEL_SETTINGS),
+  // 把模型配置交给主进程加密保存并同步到 FastAPI。
+  saveAiModelSettings: (settings) =>
+    ipcRenderer.invoke(IPC.SAVE_AI_MODEL_SETTINGS, settings),
+  // 发送 AI 助手消息：渲染进程只经过 IPC，不直接访问后端地址或模型凭证。
+  sendAiAssistantMessage: (message) =>
+    ipcRenderer.invoke(IPC.SEND_AI_ASSISTANT_MESSAGE, message),
+  // 请求 AI 助手流式回答，文本片段通过独立事件持续推送。
+  streamAiAssistantMessage: (request) =>
+    ipcRenderer.invoke(IPC.STREAM_AI_ASSISTANT_MESSAGE, request),
+  // 订阅 AI 助手文本片段，返回精确取消当前监听器的函数。
+  onAiAssistantStreamChunk: (callback) => {
+    // listener 存储剥离 Electron event 参数后的 AI 文本片段监听器。
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on(IPC.AI_ASSISTANT_STREAM_CHUNK, listener)
+    return () =>
+      ipcRenderer.removeListener(IPC.AI_ASSISTANT_STREAM_CHUNK, listener)
+  },
   // 订阅批量进度事件，返回取消订阅函数
   onBatchProgress: (callback) => {
     // listener 包装回调，剥离 event 参数

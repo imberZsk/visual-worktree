@@ -296,7 +296,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     await waitFor(() => {
@@ -310,7 +310,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     await waitFor(() =>
@@ -347,7 +347,7 @@ describe('App worktree 流程执行', () => {
     await waitFor(() =>
       expect(mockApi.loadTaskWorkflowOutput).toHaveBeenCalledTimes(1)
     )
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
 
     expect(screen.getByText('未通过')).toBeTruthy()
     expect(
@@ -368,7 +368,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     await waitFor(() => {
@@ -383,7 +383,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     // outputTitle 存储实时输出 Modal 的标题节点；流程 Modal 也在页面上，不能用第一个 ant-modal-wrap 泛选。
@@ -410,7 +410,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     await waitFor(() =>
@@ -456,7 +456,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('执行'))
 
     await waitFor(() =>
@@ -478,7 +478,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('运行全部'))
 
     await waitFor(() =>
@@ -504,7 +504,7 @@ describe('App worktree 流程执行', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('TASK-A')).toBeTruthy())
-    fireEvent.click(screen.getByText('流程'))
+    fireEvent.click(screen.getByRole('button', { name: /打开需求流程/ }))
     fireEvent.click(screen.getByText('运行全部'))
 
     await waitFor(() =>

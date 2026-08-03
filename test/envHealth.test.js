@@ -12,6 +12,25 @@ import { makeTempRoot, initRepo } from './helpers.js'
 // envHealthService 测试：用真实临时目录 + 真实 TCP 监听验证完整运行路径，
 // 不 mock，确保 IPC 实际调用时不会再「点了没反应」。
 
+/**
+ * 请求系统分配一个当前空闲的本机 TCP 端口，避免测试与正在开发的 Vite 服务冲突。
+ * @returns {Promise<number>} 关闭临时监听后可供环境检查探测的端口号
+ */
+async function getAvailablePort() {
+  // server 存储只用于请求随机端口的临时 TCP 服务。
+  const server = net.createServer()
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  // address 存储系统为临时服务分配的监听地址。
+  const address = server.address()
+  // port 存储有效的随机端口；异常地址结构使用 0 触发测试失败而非误探测固定端口。
+  const port = address && typeof address === 'object' ? address.port : 0
+  await new Promise((resolve) => server.close(resolve))
+  return port
+}
+
 describe('envHealthService', () => {
   let ctx
   // taskDir 模拟一个任务目录，其下放各项目子目录
@@ -264,12 +283,14 @@ describe('envHealthService', () => {
 
       // proj 为真实前端项目，环境完整时应成为本次检查唯一项目。
       const proj = join(taskDir, 'web')
+      // testPort 存储当前用例独占的空闲端口，避免与本机 Vite 开发服务冲突。
+      const testPort = await getAvailablePort()
       mkdirSync(join(proj, 'node_modules'), { recursive: true })
       writeFileSync(
         join(proj, 'package.json'),
         JSON.stringify({
           name: 'web',
-          scripts: { dev: 'vite --port 5173' },
+          scripts: { dev: `vite --port ${testPort}` },
           dependencies: { react: '^18.0.0' },
           devDependencies: { vite: '^5.0.0' },
         })
@@ -339,12 +360,14 @@ describe('envHealthService', () => {
 
       // proj 为真实前端项目，环境完整时应成为本次检查唯一项目。
       const proj = join(taskDir, 'web')
+      // testPort 存储当前用例独占的空闲端口，避免与本机 Vite 开发服务冲突。
+      const testPort = await getAvailablePort()
       mkdirSync(join(proj, 'node_modules'), { recursive: true })
       writeFileSync(
         join(proj, 'package.json'),
         JSON.stringify({
           name: 'web',
-          scripts: { dev: 'vite --port 5173' },
+          scripts: { dev: `vite --port ${testPort}` },
           dependencies: { react: '^18.0.0' },
           devDependencies: { vite: '^5.0.0' },
         })
@@ -437,12 +460,14 @@ describe('envHealthService', () => {
     it('returns project-level kind, checks and ok summary for healthy frontend worktrees', async () => {
       // proj 为健康前端项目：依赖目录与 lock 都存在，端口空闲，整体应为 ok
       const proj = join(taskDir, 'web')
+      // testPort 存储当前用例独占的空闲端口，避免与本机 Vite 开发服务冲突。
+      const testPort = await getAvailablePort()
       mkdirSync(join(proj, 'node_modules'), { recursive: true })
       writeFileSync(
         join(proj, 'package.json'),
         JSON.stringify({
           name: 'web',
-          scripts: { dev: 'vite --port 5173' },
+          scripts: { dev: `vite --port ${testPort}` },
           dependencies: { react: '^18.0.0' },
           devDependencies: { vite: '^5.0.0' },
         })

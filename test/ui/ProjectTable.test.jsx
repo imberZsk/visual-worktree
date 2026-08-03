@@ -59,7 +59,6 @@ function baseProps(overrides = {}) {
     onDetail: noop,
     onCheckoutMain: noop,
     onPull: noop,
-    onSyncUpdates: noop,
     onOpenFinder: noop,
     onOpenVscode: noop,
     onOpenTerminal: noop,
@@ -69,30 +68,39 @@ function baseProps(overrides = {}) {
 }
 
 describe('ProjectTable visibility actions', () => {
-  it('在拉取按钮后展示同步更新按钮并回调当前项目', () => {
-    // onSyncUpdates 存储同步更新点击回调，用于验证按钮接线与项目参数。
-    const onSyncUpdates = vi.fn()
+  it('扫描加载态只显示在项目表格区域', () => {
+    // container 存储项目列表区域 DOM；加载时保留空表背景并清空长数据，确保默认小 loading 始终可见。
+    const { container } = render(
+      <ProjectTable {...baseProps({ loading: true })} />
+    )
+    expect(container.querySelector('.ant-table')).toBeTruthy()
+    expect(container.querySelector('.project-table-empty')).toBeTruthy()
+    expect(container.querySelector('.ant-spin-spinning')).toBeTruthy()
+    expect(container.querySelector('.ant-empty')).toBeTruthy()
+    expect(container.querySelectorAll('.ant-table-row')).toHaveLength(0)
+  })
+
+  it('真正没有项目时也使用响应式空状态背景', () => {
+    // container 存储无项目数据时的表格 DOM，空态与加载态应共享稳定尺寸。
+    const { container } = render(
+      <ProjectTable {...baseProps({ data: [], loading: false })} />
+    )
+    expect(
+      container.querySelector('.project-table-empty .ant-empty')
+    ).toBeTruthy()
+  })
+
+  it('保留拉取操作且不提供会提交推送源目录的同步更新按钮', () => {
     render(
       <ProjectTable
         {...baseProps({
           data: [{ ...makeProjects()[0], canPull: true }],
-          onSyncUpdates,
         })}
       />
     )
 
-    // syncButton 存储右侧固定操作列内的同步更新按钮；antd 固定列会生成表格行副本，因此由按钮反查目标行。
-    const syncButton = screen.getByRole('button', { name: '同步更新' })
-    // pullButton 存储拉取按钮，用 DOM 顺序校验同步更新紧随其后；固定列副本不会影响两个按钮的相对位置。
-    const pullButton = screen.getByRole('button', { name: /拉\s*取/ })
-    expect(
-      pullButton.compareDocumentPosition(syncButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
-    fireEvent.click(syncButton)
-    expect(onSyncUpdates).toHaveBeenCalledWith(
-      expect.objectContaining({ path: '/repo/alpha' })
-    )
+    expect(screen.getByRole('button', { name: /拉\s*取/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '同步更新' })).toBeNull()
   })
 
   it('渲染隐藏和置顶项目按钮，点击时回调项目路径与目标状态', () => {

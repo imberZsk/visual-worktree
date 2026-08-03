@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
@@ -22,11 +22,17 @@
     "developer-tools"
   ],
   "engines": {
-    "node": ">=22.12.0"
+    "node": "22.22.2"
+  },
+  "volta": {
+    "node": "22.22.2",
+    "pnpm": "11.13.0"
   },
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
+    "postinstall": "cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ install-electron",
+    "predev": "pnpm run verify:electron",
     "dev": "concurrently -k -n dev:vite,dev:electron \"pnpm run dev:vite\" \"pnpm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "wait-on tcp:5275 && cross-env NODE_ENV=development electron .",
@@ -34,9 +40,13 @@
     "build:ui": "tsc && vite build",
     "start": "pnpm run build:ui && cross-env NODE_ENV=production electron .",
     "test": "vitest run",
+    "test:e2e": "pnpm run build:ui && playwright test",
+    "test:e2e:headed": "pnpm run build:ui && playwright test --headed",
+    "test:e2e:ui": "pnpm run build:ui && playwright test --ui",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc",
+    "verify:electron": "node scripts/verify-electron-install.mjs",
     "verify:boot": "node scripts/verify-boot.mjs",
     "dist": "pnpm run build:ui && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --mac --arm64 --publish never",
     "dist:win": "pnpm run build:ui && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win --x64 --publish never",
@@ -59,6 +69,7 @@
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^26.1.1",

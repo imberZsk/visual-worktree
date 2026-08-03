@@ -7,7 +7,9 @@ import {
   within,
   waitFor,
 } from '@testing-library/react'
+import { App as AntApp } from 'antd'
 import WorktreePanel from '../../src/ui/components/WorktreePanel.tsx'
+import { TASK_STATUSES } from '../../src/ui/worktreeLogic.ts'
 import {
   TASK_LINK_NAME_PLACEHOLDER,
   TASK_LINK_PLACEHOLDER,
@@ -892,13 +894,54 @@ describe('WorktreePanel 需求流程入口', () => {
   it('任务级渲染「流程」入口按钮', () => {
     render(<WorktreePanel {...baseProps({ workflowSteps: steps })} />)
     // 折叠态下流程入口按钮也应可见（在 extra 区域），两个任务各一个
-    expect(screen.getAllByText('流程').length).toBe(2)
+    expect(
+      screen.getAllByRole('button', { name: /打开需求流程/ })
+    ).toHaveLength(2)
+  })
+
+  it('可在流程弹层为当前项目新增并持久化私有流程', async () => {
+    // onSaveProjectWorkflowSteps 间谍，捕获项目路径与规范化前的新增步骤。
+    const onSaveProjectWorkflowSteps = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AntApp>
+        <WorktreePanel
+          {...baseProps({
+            workflowSteps: [{ key: 'review', label: '通用审查', command: '' }],
+            projectWorkflowSteps: {},
+            onSaveProjectWorkflowSteps,
+          })}
+        />
+      </AntApp>
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
+    fireEvent.click(await screen.findByText('添加私有流程'))
+    // editor 存储私有流程编辑弹层，输入项目专属名称和命令。
+    const editor = screen
+      .getByText('添加私有流程', { selector: '.ant-modal-title' })
+      .closest('[role="dialog"]')
+    fireEvent.change(within(editor).getByLabelText('流程名称'), {
+      target: { value: '项目单测' },
+    })
+    fireEvent.change(within(editor).getByLabelText('执行命令'), {
+      target: { value: 'pnpm test' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+    await waitFor(() =>
+      expect(onSaveProjectWorkflowSteps).toHaveBeenCalledTimes(1)
+    )
+    expect(onSaveProjectWorkflowSteps).toHaveBeenCalledWith('/src/projA', [
+      expect.objectContaining({
+        key: expect.stringMatching(/^private-step-/),
+        label: '项目单测',
+        command: 'pnpm test',
+      }),
+    ])
   })
 
   it('点击流程按钮弹出 Modal 并列出全部步骤', () => {
     render(<WorktreePanel {...baseProps({ workflowSteps: steps })} />)
     // 点击第一个任务的流程入口
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // Modal 标题与各步骤名应出现；标题带任务名，避免多任务时上下文不清。
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByText('需求流程 - TASK-A')).toBeTruthy()
@@ -914,7 +957,7 @@ describe('WorktreePanel 需求流程入口', () => {
     render(
       <WorktreePanel {...baseProps({ workflowSteps: steps, onToggleStep })} />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // Modal 内容渲染在 portal（document.body）：直接定位「开始」label 的复选框 input 点击。
     // 经由文字节点向上找到 antd Checkbox 容器，再取其内的真实 input 触发 change。
     const startLabel = screen.getByText('开始')
@@ -932,7 +975,7 @@ describe('WorktreePanel 需求流程入口', () => {
         })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // Modal 内容在 portal，须从 document 查询：选中态复选框带 ant-checkbox-checked 类
     const checked = document.querySelectorAll('.ant-checkbox-checked')
     expect(checked.length).toBe(1)
@@ -946,7 +989,7 @@ describe('WorktreePanel 需求流程入口', () => {
         {...baseProps({ workflowSteps: steps, onRunStepAction })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // 仅配了 command 的步骤（branch-to-jira）渲染「执行」按钮，点击触发回调
     fireEvent.click(screen.getByText('执行'))
     expect(onRunStepAction).toHaveBeenCalledTimes(1)
@@ -958,7 +1001,7 @@ describe('WorktreePanel 需求流程入口', () => {
 
   it('每个步骤都可勾选，且配了命令的步骤打勾与执行并存', () => {
     render(<WorktreePanel {...baseProps({ workflowSteps: steps })} />)
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // 三个步骤都应渲染勾选框（所有步骤都可勾选）
     const checkboxes = document.querySelectorAll('.ant-checkbox-wrapper')
     expect(checkboxes.length).toBe(3)
@@ -973,12 +1016,12 @@ describe('WorktreePanel 需求流程入口', () => {
       { key: 'b', label: 'B', command: '' },
     ]
     render(<WorktreePanel {...baseProps({ workflowSteps: noCmdSteps })} />)
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     expect(screen.queryByText('执行')).toBeNull()
   })
 
-  it('步骤数超过 5 时进度用紧凑 N/M 文字展示（不撑长）', () => {
-    // 7 个步骤、已勾选 2 个：应出现紧凑的 2/7 文字（圆点模式只在 ≤5 步时启用）
+  it('任务栏流程入口只用黄绿图标表达未完成和已完成', () => {
+    // 7 个步骤、TASK-A 已完成 2 个而 TASK-B 全部完成，用于验证二态图标。
     const manySteps = Array.from({ length: 7 }).map((_, i) => ({
       key: `s${i}`,
       label: `步骤${i}`,
@@ -988,12 +1031,17 @@ describe('WorktreePanel 需求流程入口', () => {
       <WorktreePanel
         {...baseProps({
           workflowSteps: manySteps,
-          workflowMap: { 'TASK-A': ['s0', 's1'] },
+          workflowMap: {
+            'TASK-A': ['s0', 's1'],
+            'TASK-B': manySteps.map((step) => step.key),
+          },
         })}
       />
     )
-    // 进度文字 2/7 直接渲染在按钮上（折叠态可见），断言其存在
-    expect(screen.getByText('2/7')).toBeTruthy()
+    expect(screen.queryByText('2/7')).toBeNull()
+    expect(screen.queryByText('7/7')).toBeNull()
+    expect(screen.getByTestId('workflow-status-pending-TASK-A')).toBeTruthy()
+    expect(screen.getByTestId('workflow-status-complete-TASK-B')).toBeTruthy()
   })
 
   it('点击流程入口不触发面板展开/折叠（onActiveKeysChange 不被调用）', () => {
@@ -1004,13 +1052,13 @@ describe('WorktreePanel 需求流程入口', () => {
         {...baseProps({ workflowSteps: steps, onActiveKeysChange })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     expect(onActiveKeysChange).not.toHaveBeenCalled()
   })
 
   it('未配置任何步骤时不渲染流程入口', () => {
     render(<WorktreePanel {...baseProps({ workflowSteps: [] })} />)
-    expect(screen.queryByText('流程')).toBeNull()
+    expect(screen.queryByRole('button', { name: /打开需求流程/ })).toBeNull()
   })
 
   it('runningSteps 命中时该步骤「执行」按钮显示 loading 并禁用', () => {
@@ -1023,7 +1071,7 @@ describe('WorktreePanel 需求流程入口', () => {
         })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // 执行中：按钮带 loading（antd 注入 ant-btn-loading 类）且禁用，避免重复点击
     // loadingBtn 为步骤级「执行中」按钮；页面上任务级「运行全部」也会 loading，不能用首个 .ant-btn-loading 误选。
     const loadingBtn = [...document.querySelectorAll('.ant-btn-loading')].find(
@@ -1048,7 +1096,7 @@ describe('WorktreePanel 需求流程入口', () => {
       />
     )
     // 点开第一个任务（TASK-A）的流程入口
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
     // TASK-A 的执行按钮应为常态「执行」可点击
     const btn = screen.getByText('执行')
     expect(btn).toBeTruthy()
@@ -1064,7 +1112,7 @@ describe('WorktreePanel 需求流程入口', () => {
         {...baseProps({ workflowSteps: steps, onRunWorkflowSteps })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
 
     fireEvent.click(screen.getByText('运行全部'))
 
@@ -1093,7 +1141,7 @@ describe('WorktreePanel 需求流程入口', () => {
         })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
 
     expect(screen.getByText('未通过')).toBeTruthy()
     fireEvent.click(screen.getByText('重试'))
@@ -1120,7 +1168,7 @@ describe('WorktreePanel 需求流程入口', () => {
         })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
 
     expect(screen.getByText('已完成')).toBeTruthy()
     expect(screen.queryByText('未通过')).toBeNull()
@@ -1148,7 +1196,7 @@ describe('WorktreePanel 需求流程入口', () => {
         })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
 
     // row 存储流程步骤整行容器；有状态标签时必须顶部对齐，避免右侧按钮被第二行状态标签拉到中间。
     const row = screen.getByTestId('workflow-step-row-unit-test')
@@ -1174,7 +1222,7 @@ describe('WorktreePanel 需求流程入口', () => {
         {...baseProps({ workflowSteps: steps, onRunWorkflowSteps })}
       />
     )
-    fireEvent.click(screen.getAllByText('流程')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /打开需求流程/ })[0])
 
     fireEvent.click(screen.getByText('从此处运行'))
 
@@ -1184,6 +1232,20 @@ describe('WorktreePanel 需求流程入口', () => {
 })
 
 describe('WorktreePanel 空态', () => {
+  it('无任务且正在加载时在内容区显示紧凑 loading', () => {
+    // container 存储渲染结果，用于确认只保留 Ant Design Spin 而不显示加载文案。
+    const { container } = render(
+      <WorktreePanel {...baseProps({ tasks: [], loading: true })} />
+    )
+
+    expect(
+      screen.getByRole('status', { name: 'Worktree 加载状态' })
+    ).toBeTruthy()
+    expect(container.querySelector('.ant-spin')).toBeTruthy()
+    expect(screen.queryByText('正在加载 Worktree...')).toBeNull()
+    expect(screen.queryByText(/暂无 worktree/)).toBeNull()
+  })
+
   it('无任务且非加载时显示空状态提示', () => {
     render(<WorktreePanel {...baseProps({ tasks: [], loading: false })} />)
     // 空态文案来自组件 Empty description
@@ -1233,6 +1295,30 @@ describe('WorktreePanel 任务状态标记', () => {
     // TASK-A 显示「已发布」，TASK-B 仍为默认「未开始」
     expect(screen.getByText('已发布')).toBeTruthy()
     expect(screen.getAllByText('未开始').length).toBe(1)
+  })
+
+  it('任务标题和状态菜单使用当前工作区自定义标签', async () => {
+    render(
+      <WorktreePanel
+        {...baseProps({
+          taskStatusMap: { 'TASK-A': 'developing' },
+          taskStatuses: TASK_STATUSES.map((status) => {
+            if (status.key === 'developing') {
+              return { ...status, label: '处理中' }
+            }
+            if (status.key === 'pending-release') {
+              return { ...status, label: '等待上线' }
+            }
+            return { ...status }
+          }),
+        })}
+      />
+    )
+
+    expect(screen.getByText('处理中')).toBeTruthy()
+    fireEvent.click(screen.getByText('处理中'))
+    await waitFor(() => expect(screen.getByText('等待上线')).toBeTruthy())
+    expect(screen.queryByText('待发布')).toBeNull()
   })
 
   it('点击状态标签选择状态会回调 onTaskStatusChange(任务名, 状态key)', async () => {

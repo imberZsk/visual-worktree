@@ -625,7 +625,8 @@ export async function scanWorktreesByTask(
 ) {
   // status 控制是否查询每个 worktree 的未提交/领先落后状态(较慢)；mainBranches 主分支名
   const { status = false, mainBranches = DEFAULT_MAIN_BRANCHES } = opts
-  if (!existsSync(projectsRoot)) return []
+  // worktree 根目录不存在时没有可扫描的数据；源项目根目录即使配置错误，仍可由后续兜底扫描恢复任务内的 Git worktree。
+  if (!existsSync(worktreesRoot)) return []
   // 规范化 worktreesRoot 的真实路径，消除 symlink 差异(如 macOS /var → /private/var)，
   // 否则与 git 返回的绝对路径前缀匹配会失败
   const realWtRoot = existsSync(worktreesRoot)
@@ -634,8 +635,8 @@ export async function scanWorktreesByTask(
   // 归一化为正斜杠后末尾补分隔符便于前缀匹配；Windows 下 realWtRoot 是反斜杠，
   // 而 git 返回路径是正斜杠，须统一到正斜杠才能与 wt.path 前缀对齐
   const wtRootPrefix = toPosixPath(realWtRoot).replace(/\/?$/, '/')
-  // 收集所有源项目目录
-  const entries = readdirSync(projectsRoot)
+  // entries 存储源项目根目录的直接子项；根目录不存在时保留空数组，让任务目录兜底扫描继续执行。
+  const entries = existsSync(projectsRoot) ? readdirSync(projectsRoot) : []
   // projectDirs 为源项目绝对路径列表
   const projectDirs = []
   for (const entry of entries) {
@@ -715,44 +716,24 @@ export async function scanWorktreesByTask(
       taskMap.get(taskName).worktrees.push(item)
     }
   }
-  // 可选：为每个 worktree 附加工作区状态（未提交/领先落后）
-  if (status) {
-    // 收集所有需要查状态的 worktree 项，受控并发查询（限流避免 git 进程风暴）
-    const all = []
-    for (const group of taskMap.values()) all.push(...group.worktrees)
-    await mapWithConcurrency(all, async (item) => {
-      // prunable 的 worktree 目录可能已不存在，跳过状态查询
-      if (item.prunable || !existsSync(item.path)) {
-        item.hasUncommittedChanges = false
-        item.hasTrackedChanges = false
-        item.hasUntrackedChanges = false
-        item.untrackedFilesCount = 0
-        item.missing = item.prunable || !existsSync(item.path)
-        return
-      }
-      try {
-        const st = await getProjectStatus(item.path, { mainBranches })
-        item.hasUncommittedChanges = st.hasUncommittedChanges
-        item.hasTrackedChanges = st.hasTrackedChanges
-        item.hasUntrackedChanges = st.hasUntrackedChanges
-        item.ahead = st.ahead
-        item.behind = st.behind
-        item.changedFilesCount = st.changedFiles.length
-        item.untrackedFilesCount = st.untrackedFilesCount
-      } catch (e) {
-        item.hasUncommittedChanges = false
-        item.hasTrackedChanges = false
-        item.hasUntrackedChanges = false
-        item.untrackedFilesCount = 0
-      }
-    })
-  }
-  // 补充：把 worktreesRoot 下没有 worktree 的空目录也纳入结果（显示给用户便于管理）
-  if (existsSync(worktreesRoot)) {
+  // 兜底扫描：项目根目录配置已切换、移动或不存在时，正常路径无法从源仓库的 Git 注册信息找到 worktree。
+  // 此时直接检查任务目录的一级项目子目录，仍可恢复真实 Git worktree，避免 UI 只显示任务名和 0 个项目。
+  {
     // knownTaskPaths 存储已有 worktree 任务目录的真实路径，用于避免把含 / 任务名的父级目录误显示成任务
     const knownTaskPaths = Array.from(taskMap.values()).map((task) =>
       existsSync(task.path) ? realpathSync(task.path) : task.path
     )
+    // discoveredWorktreePaths 存储已由源项目扫描到的 worktree 真实路径，避免兜底结果重复加入。
+    const discoveredWorktreePaths = new Set()
+    for (const group of taskMap.values()) {
+      for (const worktree of group.worktrees) {
+        // normalizedPath 存储 worktree 的真实规范路径；失效 worktree 不能 realpath，回退原始路径用于去重。
+        const normalizedPath = existsSync(worktree.path)
+          ? realpathSync(worktree.path)
+          : worktree.path
+        discoveredWorktreePaths.add(toPosixPath(normalizedPath))
+      }
+    }
     for (const entry of readdirSync(worktreesRoot)) {
       if (entry.startsWith('.')) continue
       // full 存储 worktreesRoot 下一级目录的完整路径
@@ -771,17 +752,113 @@ export async function scanWorktreesByTask(
             taskPathPosix.startsWith(realFullPosix + '/')
           )
         })
-        if (
-          statSync(full).isDirectory() &&
-          !isParentOfKnownTask &&
-          !taskMap.has(entry)
-        ) {
+        if (!statSync(full).isDirectory() || isParentOfKnownTask) continue
+        if (!taskMap.has(entry))
           taskMap.set(entry, { task: entry, path: full, worktrees: [] })
+        // taskGroup 存储当前任务的聚合对象；已有源项目扫描结果时无需重复执行 Git 命令。
+        const taskGroup = taskMap.get(entry)
+        if (taskGroup.worktrees.length > 0) continue
+        // projectEntries 存储任务目录下的直接子项；约定结构为 {任务名}/{项目名}。
+        const projectEntries = readdirSync(full)
+        // fallbackCandidates 存储可作为 Git worktree 兜底识别的项目目录。
+        const fallbackCandidates = []
+        for (const projectEntry of projectEntries) {
+          if (projectEntry.startsWith('.')) continue
+          // projectPath 存储任务内候选项目目录的完整路径。
+          const projectPath = join(full, projectEntry)
+          try {
+            if (statSync(projectPath).isDirectory() && isGitRepo(projectPath))
+              fallbackCandidates.push(projectPath)
+          } catch (e) {
+            // 单个项目目录不可访问时忽略，不影响同任务的其他项目。
+          }
+        }
+        const fallbackResults = await mapWithConcurrency(
+          fallbackCandidates,
+          async (worktreePath) => {
+            // git 存储指向候选 worktree 的 Git 实例，用于读取其共享仓库的 remote 信息。
+            const git = simpleGit(worktreePath)
+            try {
+              // result 同时读取 worktree 注册记录和 remote，确保恢复后的项目与正常扫描字段一致。
+              const result = await Promise.all([
+                getWorktrees(worktreePath, mainBranches),
+                getOriginRemoteInfo(git),
+              ])
+              return {
+                worktreePath,
+                registeredWorktrees: result[0],
+                remoteInfo: result[1],
+              }
+            } catch (e) {
+              return null
+            }
+          }
+        )
+        for (const fallbackResult of fallbackResults) {
+          if (!fallbackResult) continue
+          // realWorktreePath 存储候选目录的规范路径，用来在 Git 注册记录中精确定位当前 worktree。
+          const realWorktreePath = realpathSync(fallbackResult.worktreePath)
+          const normalizedWorktreePath = toPosixPath(realWorktreePath)
+          if (discoveredWorktreePaths.has(normalizedWorktreePath)) continue
+          // registeredWorktree 存储当前候选目录对应的 Git 注册记录。
+          const registeredWorktree = fallbackResult.registeredWorktrees.find(
+            (worktree) => toPosixPath(worktree.path) === normalizedWorktreePath
+          )
+          // sourceWorktree 存储同一仓库的主工作区记录，作为删除等 Git 操作的源项目路径。
+          const sourceWorktree = fallbackResult.registeredWorktrees.find(
+            (worktree) => worktree.isMain
+          )
+          taskGroup.worktrees.push({
+            project: basename(fallbackResult.worktreePath),
+            projectPath: sourceWorktree?.path || fallbackResult.worktreePath,
+            path: registeredWorktree?.path || fallbackResult.worktreePath,
+            branch: registeredWorktree?.branch || '',
+            head: registeredWorktree?.head || '',
+            prunable: registeredWorktree?.prunable || false,
+            branchIsMain: registeredWorktree?.branchIsMain || false,
+            remoteUrl: fallbackResult.remoteInfo.remoteUrl,
+            gitlabUrl: fallbackResult.remoteInfo.gitlabUrl,
+          })
+          discoveredWorktreePaths.add(normalizedWorktreePath)
         }
       } catch (e) {
         // 目录不可访问时忽略
       }
     }
+  }
+
+  // 可选：为每个 worktree 附加工作区状态（未提交/领先落后）
+  if (status) {
+    // all 存储所有需要查状态的 worktree 项，受控并发查询（限流避免 git 进程风暴）。
+    const all = []
+    for (const group of taskMap.values()) all.push(...group.worktrees)
+    await mapWithConcurrency(all, async (item) => {
+      // prunable 的 worktree 目录可能已不存在，跳过状态查询
+      if (item.prunable || !existsSync(item.path)) {
+        item.hasUncommittedChanges = false
+        item.hasTrackedChanges = false
+        item.hasUntrackedChanges = false
+        item.untrackedFilesCount = 0
+        item.missing = item.prunable || !existsSync(item.path)
+        return
+      }
+      try {
+        // st 存储当前 worktree 的 Git 状态，用于补充 UI 展示字段。
+        const st = await getProjectStatus(item.path, { mainBranches })
+        item.hasUncommittedChanges = st.hasUncommittedChanges
+        item.hasTrackedChanges = st.hasTrackedChanges
+        item.hasUntrackedChanges = st.hasUntrackedChanges
+        item.ahead = st.ahead
+        item.behind = st.behind
+        item.changedFilesCount = st.changedFiles.length
+        item.untrackedFilesCount = st.untrackedFilesCount
+      } catch (e) {
+        item.hasUncommittedChanges = false
+        item.hasTrackedChanges = false
+        item.hasUntrackedChanges = false
+        item.untrackedFilesCount = 0
+      }
+    })
   }
 
   // 按任务名排序返回
