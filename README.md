@@ -33,7 +33,7 @@ Visual Worktree 是一个跨平台（macOS / Windows）桌面应用，用于可�
 
 ## 从源码开发
 
-只有从源码运行、测试或打包时才需要 Node.js 22.22.2 和 pnpm 11.13.0。项目同时通过 `engines`、Volta 和 CI 固定这两个版本。
+只有从源码运行、测试或打包时才需要 Node.js 22.22.2 和 pnpm 11.13.1。项目同时通过 `engines`、Volta 和 CI 固定这两个版本。
 
 ```bash
 pnpm install

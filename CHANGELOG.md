@@ -43,7 +43,7 @@
 ### 修复
 
 - 修复多条全局 Toast 同时居中显示时，后出现的提示被消息容器裁切遮挡的问题；消息组现在在完整视口容器内居中并保持独立间距。
-- 修复 pnpm 11 未允许 Electron 构建脚本、且 Electron 43 不再声明 install lifecycle 导致 `pnpm dev` 启动时才长时间下载运行时的问题；启用 Electron 构建白名单、通过项目 postinstall 调用官方安装命令并显式传入公开镜像、固定 Node.js 22.22.2 / pnpm 11.13.0，并在本地开发、macOS/Windows CI 和 Release 安装后校验运行时完整性。
+- 修复 pnpm 11 未允许 Electron 构建脚本、且 Electron 43 不再声明 install lifecycle 导致 `pnpm dev` 启动时才长时间下载运行时的问题；启用 Electron 构建白名单、通过项目 postinstall 调用官方安装命令并显式传入公开镜像、固定 Node.js 22.22.2 / pnpm 11.13.1，并在本地开发、macOS/Windows CI 和 Release 安装后校验运行时完整性，同时避开已被安装器标记为损坏的 pnpm 11.13.0。
 - 修复 CI/CD 地址为空时仍渲染隐藏列表容器、导致标签与新增按钮之间重复叠加 12px 间距的问题，并将空列表布局约束补入 UI/样式规范。
 
 ## [1.7.1] - 2026-07-22

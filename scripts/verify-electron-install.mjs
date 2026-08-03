@@ -20,7 +20,7 @@ export async function inspectElectronInstall(electronPackageFile) {
   const distDir = join(packageDir, 'dist')
   // missingRuntimeHint 存储所有完整性错误共用的可操作修复提示。
   const missingRuntimeHint =
-    'Electron 运行时不完整，请使用 Node.js 22.22.2 和 pnpm 11.13.0 重新执行 pnpm install；若依赖图未变化，请执行 pnpm run postinstall。'
+    'Electron 运行时不完整，请使用 Node.js 22.22.2 和 pnpm 11.13.1 重新执行 pnpm install；若依赖图未变化，请执行 pnpm run postinstall。'
 
   // executableRelativePath 存储 path.txt 中记录的平台可执行文件相对路径。
   let executableRelativePath

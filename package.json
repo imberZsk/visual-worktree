@@ -4,7 +4,7 @@
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.13.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/imberZsk/visual-worktree.git"
@@ -26,7 +26,7 @@
   },
   "volta": {
     "node": "22.22.2",
-    "pnpm": "11.13.0"
+    "pnpm": "11.13.1"
   },
   "main": "electron/main.js",
   "type": "module",

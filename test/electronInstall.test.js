@@ -71,7 +71,7 @@ describe('Electron 安装配置与完整性校验', () => {
       'electron_mirror=https://npmmirror.com/mirrors/electron/'
     )
     expect(packageConfig.engines.node).toBe('22.22.2')
-    expect(packageConfig.packageManager).toBe('pnpm@11.13.0')
+    expect(packageConfig.packageManager).toBe('pnpm@11.13.1')
     expect(packageConfig.scripts.postinstall).toBe(
       'cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ install-electron'
     )
