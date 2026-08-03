@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
 import { mkdirSync, realpathSync } from 'fs'
-import { scanWorktreesByTask } from '../src/core/gitService.js'
+import { scanWorktreesByTask, toPosixPath } from '../src/core/gitService.js'
 import { makeTempRoot, initRepo, git } from './helpers.js'
 
 // 按任务分组扫描 worktree 测试。
@@ -115,12 +115,24 @@ describe('scanWorktreesByTask', () => {
       worktreesRoot
     )
     const task = tasks.find((item) => item.task === 'TASK-FALLBACK')
+    // expectedSourceProject 存储与生产扫描一致的源项目真实路径，Windows 下展开 8.3 短名并统一分隔符。
+    const expectedSourceProject = toPosixPath(
+      realpathSync.native
+        ? realpathSync.native(sourceProject)
+        : realpathSync(sourceProject)
+    )
+    // expectedTaskWorktreePath 存储与 Git worktree 注册记录一致的任务目录真实路径。
+    const expectedTaskWorktreePath = toPosixPath(
+      realpathSync.native
+        ? realpathSync.native(taskWorktreePath)
+        : realpathSync(taskWorktreePath)
+    )
 
     expect(task.worktrees).toHaveLength(1)
     expect(task.worktrees[0]).toMatchObject({
       project: 'source-project',
-      projectPath: realpathSync(sourceProject),
-      path: realpathSync(taskWorktreePath),
+      projectPath: expectedSourceProject,
+      path: expectedTaskWorktreePath,
       branch: 'feat/fallback',
     })
   })
