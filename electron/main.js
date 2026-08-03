@@ -6,12 +6,17 @@ import {
   session,
   clipboard,
   dialog,
+  safeStorage,
 } from 'electron'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { execFile } from 'child_process'
 import { registerIpcHandlers } from './ipcHandlers.js'
-import { shouldOpenDevTools } from '../src/core/windowBehavior.js'
+import {
+  getWindowChromeOptions,
+  shouldOpenDevTools,
+  shouldShowMainWindow,
+} from '../src/core/windowBehavior.js'
 import { loadAutoUpdater, registerAppUpdater } from './appUpdater.js'
 
 // Electron 主进程入口：创建窗口、注册 IPC、加载渲染进程。
@@ -64,11 +69,13 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    // 冒烟模式下不显示窗口，避免 CI/无头环境弹窗
-    show: process.env.PM_SMOKE !== '1',
+    // 冒烟与 E2E 模式保留真实渲染窗口但不显示，避免自动化测试抢占用户焦点。
+    show: shouldShowMainWindow(process.env),
     title: 'Visual Worktree',
     // 窗口背景色：默认暗色（与应用默认主题一致），避免启动时白屏闪烁
     backgroundColor: '#141414',
+    // 隐藏重复的原生标题栏，同时按平台保留系统窗口控制按钮。
+    ...getWindowChromeOptions(process.platform),
     webPreferences: {
       // preload 必须是 CommonJS（.cjs），在隔离环境暴露安全 API
       preload: join(__dirname, 'preload.cjs'),
@@ -98,6 +105,7 @@ registerIpcHandlers(ipcMain, {
   shell,
   clipboard,
   dialog,
+  safeStorage,
 })
 // appUpdater 存储打包环境动态加载并兼容 CommonJS/ESM 后的更新器；导入或解析失败时安全降级，不阻断启动。
 const appUpdater = await loadAutoUpdater(

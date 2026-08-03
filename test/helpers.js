@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { execSync } from 'child_process';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { execSync } from 'child_process'
 
 // 测试辅助：在临时目录创建真实 git 仓库，用于核心模块的集成测试。
 // 用真实 git 而非 mock，确保对 simple-git 行为的断言可靠。
@@ -17,8 +17,14 @@ export function git(cwd, cmd) {
     cwd,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, GIT_AUTHOR_NAME: 'test', GIT_AUTHOR_EMAIL: 't@t.co', GIT_COMMITTER_NAME: 'test', GIT_COMMITTER_EMAIL: 't@t.co' },
-  }).toString();
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'test',
+      GIT_AUTHOR_EMAIL: 't@t.co',
+      GIT_COMMITTER_NAME: 'test',
+      GIT_COMMITTER_EMAIL: 't@t.co',
+    },
+  }).toString()
 }
 
 /**
@@ -27,11 +33,11 @@ export function git(cwd, cmd) {
  */
 export function makeTempRoot() {
   // tmpRoot 存放本次测试用的所有临时仓库
-  const tmpRoot = mkdtempSync(join(tmpdir(), 'pm-test-'));
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'pm-test-'))
   return {
     root: tmpRoot,
     cleanup: () => rmSync(tmpRoot, { recursive: true, force: true }),
-  };
+  }
 }
 
 /**
@@ -41,13 +47,13 @@ export function makeTempRoot() {
  * @returns {string} 仓库路径
  */
 export function initRepo(dir, defaultBranch = 'master') {
-  mkdirSync(dir, { recursive: true });
-  git(dir, `init -q -b ${defaultBranch}`);
-  git(dir, 'config commit.gpgsign false');
-  writeFileSync(join(dir, 'README.md'), '# repo\n');
-  git(dir, 'add -A');
-  git(dir, 'commit -q -m "init"');
-  return dir;
+  mkdirSync(dir, { recursive: true })
+  git(dir, `init -q -b ${defaultBranch}`)
+  git(dir, 'config commit.gpgsign false')
+  writeFileSync(join(dir, 'README.md'), '# repo\n')
+  git(dir, 'add -A')
+  git(dir, 'commit -q -m "init"')
+  return dir
 }
 
 /**
@@ -58,19 +64,19 @@ export function initRepo(dir, defaultBranch = 'master') {
  */
 export function makeRemoteAndClone(baseDir, defaultBranch = 'master') {
   // remote 是裸仓库，模拟 origin
-  const remote = join(baseDir, 'remote.git');
+  const remote = join(baseDir, 'remote.git')
   // seed 是用于初始化远程内容的临时工作区
-  const seed = join(baseDir, 'seed');
-  mkdirSync(remote, { recursive: true });
-  git(remote, `init -q --bare -b ${defaultBranch}`);
-  initRepo(seed, defaultBranch);
-  git(seed, `remote add origin ${remote}`);
-  git(seed, `push -q -u origin ${defaultBranch}`);
+  const seed = join(baseDir, 'seed')
+  mkdirSync(remote, { recursive: true })
+  git(remote, `init -q --bare -b ${defaultBranch}`)
+  initRepo(seed, defaultBranch)
+  git(seed, `remote add origin ${remote}`)
+  git(seed, `push -q -u origin ${defaultBranch}`)
   // local 是被测仓库，从 remote 克隆
-  const local = join(baseDir, 'local');
-  git(baseDir, `clone -q ${remote} local`);
-  git(local, 'config commit.gpgsign false');
-  return { remote, local, seed };
+  const local = join(baseDir, 'local')
+  git(baseDir, `clone -q ${remote} local`)
+  git(local, 'config commit.gpgsign false')
+  return { remote, local, seed }
 }
 
 /**
@@ -81,7 +87,7 @@ export function makeRemoteAndClone(baseDir, defaultBranch = 'master') {
  * @param {string} msg - 提交信息
  */
 export function commitFile(dir, file, content, msg) {
-  writeFileSync(join(dir, file), content);
-  git(dir, 'add -A');
-  git(dir, `commit -q -m "${msg}"`);
+  writeFileSync(join(dir, file), content)
+  git(dir, 'add -A')
+  git(dir, `commit -q -m "${msg}"`)
 }

@@ -60,7 +60,7 @@ export const useStore = create((set, get) => ({
   projectVisibility: loadVisibilityPrefsFromStorage(
     PROJECT_VISIBILITY_STORAGE_KEY
   ),
-  // 任务卡点备注映射「任务名 → 卡点文本」（持久化到 ~/.visualWorktree/task-blockers.json）；启动后由 loadTaskBlockers 异步填充
+  // 任务备注映射「任务名 → 备注文本」（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）；启动后由 loadTaskBlockers 异步填充
   taskBlockerMap: {},
   // 任务工作流勾选映射「任务名 → 已勾选步骤 key 数组」（需求流程进度，持久化到 ~/.visualWorktree/task-workflow.json）；
   // 启动后由 loadTaskWorkflow 异步填充，localStorage 预填保证首屏可用
@@ -103,7 +103,12 @@ export const useStore = create((set, get) => ({
    */
   setTaskStatus: (taskName, statusKey) => {
     // next 为更新后的状态映射（纯函数返回新对象，保证不可变更新）
-    const next = setTaskStatusInMap(get().taskStatusMap, taskName, statusKey)
+    const next = setTaskStatusInMap(
+      get().taskStatusMap,
+      taskName,
+      statusKey,
+      get().config?.taskStatuses
+    )
     // fire-and-forget 持久化到文件（不等待，避免阻塞 UI 更新）
     api.saveTaskStatus(next)
     set({ taskStatusMap: next })
@@ -238,12 +243,12 @@ export const useStore = create((set, get) => ({
   },
 
   /**
-   * 设置某任务的卡点备注并持久化到 ~/.visualWorktree/task-blockers.json
+   * 设置某任务的备注并持久化到 ~/.visualWorktree/task-blockers.json
    * @param {string} taskName - 任务名
-   * @param {string} text - 卡点备注文本；为空时删除该任务卡点
+   * @param {string} text - 备注文本；为空时删除该任务备注
    */
   setTaskBlocker: (taskName, text) => {
-    // next 为更新后的卡点映射
+    // next 为更新后的备注映射
     const next = { ...get().taskBlockerMap }
     // 去首尾空白后非空才存，空则删除该键避免存储残留
     const trimmed = (text || '').trim()
@@ -254,7 +259,7 @@ export const useStore = create((set, get) => ({
   },
 
   /**
-   * 从 ~/.visualWorktree/task-blockers.json 异步加载任务卡点映射，启动时调用一次
+   * 从 ~/.visualWorktree/task-blockers.json 异步加载任务备注映射，启动时调用一次
    */
   loadTaskBlockers: async () => {
     try {

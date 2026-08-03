@@ -9,6 +9,7 @@ import {
   loadTaskWorkflowMap,
   saveTaskWorkflowMap,
   TASK_WORKFLOW_STORAGE_KEY,
+  buildTaskWorkflowSteps,
 } from '../src/ui/workflowLogic.ts'
 
 // 任务工作流（需求流程）纯逻辑测试：步骤规范化、勾选态读写、进度计算、localStorage 持久化。
@@ -30,6 +31,41 @@ describe('DEFAULT_WORKFLOW_STEPS', () => {
     // keys 为全部默认步骤的 key，用 Set 去重后长度应不变
     const keys = DEFAULT_WORKFLOW_STEPS.map((s) => s.key)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('buildTaskWorkflowSteps', () => {
+  it('只合并当前任务所含项目的私有流程并隔离同名步骤 key', () => {
+    // steps 存储通用流程和两个项目的同名私有步骤。
+    const steps = buildTaskWorkflowSteps(
+      [{ key: 'review', label: '通用审查', command: '' }],
+      {
+        '/src/projA': [
+          { key: 'test', label: '前端测试', command: 'pnpm test' },
+        ],
+        '/src/projB': [{ key: 'test', label: '后端测试', command: 'npm test' }],
+        '/src/projC': [
+          { key: 'deploy', label: '部署', command: './deploy.sh' },
+        ],
+      },
+      [
+        { project: 'projA', projectPath: '/src/projA' },
+        { project: 'projB', projectPath: '/src/projB' },
+      ]
+    )
+    // privateSteps 存储任务中两个项目实际追加的私有步骤。
+    const privateSteps = steps.filter((step) => step.scope === 'project')
+    expect(steps.map((step) => step.label)).toEqual([
+      '通用审查',
+      '前端测试',
+      '后端测试',
+    ])
+    expect(new Set(privateSteps.map((step) => step.key)).size).toBe(2)
+    expect(privateSteps[0]).toMatchObject({
+      privateKey: 'test',
+      projectPath: '/src/projA',
+      projectName: 'projA',
+    })
   })
 })
 

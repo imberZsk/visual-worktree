@@ -14,7 +14,11 @@ import { api } from '../api.ts'
  * @param {'claude-code'|'codex'} [props.usageTool] - 当前统计工具
  * @returns {JSX.Element|null} 用量标签（无数据时返回 null）
  */
-export default function ClaudeUsageTag({ taskName, summary, usageTool = 'claude-code' }) {
+export default function ClaudeUsageTag({
+  taskName,
+  summary,
+  usageTool = 'claude-code',
+}) {
   // usageToolName 存储当前统计工具的用户可见名称。
   const usageToolName = usageTool === 'codex' ? 'Codex' : 'Claude Code'
   // loading 标记是否正在加载用量数据

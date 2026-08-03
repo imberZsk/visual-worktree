@@ -33,12 +33,23 @@ describe('弹层默认行为', () => {
     expect(source).toMatch(/modal=\{\{\s*centered:\s*true\s*\}\}/)
   })
 
-  it('根入口全局配置消息提示在视口内居中', () => {
+  it('根入口全局配置消息提示组在完整视口内居中', () => {
     // source 存储渲染入口源码，用于验证所有 Ant Design message 共用同一份居中配置。
     const source = readFileSync(join(process.cwd(), 'src/ui/main.tsx'), 'utf8')
+    // stylesSource 存储全局样式源码，用于验证消息组通过容器布局居中而非负向位移。
+    const stylesSource = readFileSync(
+      join(process.cwd(), 'src/ui/styles.css'),
+      'utf8'
+    )
 
-    expect(source).toContain("const MESSAGE_CENTER_OFFSET = '50%'")
-    expect(source).toContain("const MESSAGE_CENTER_TRANSFORM = 'translateY(-50%)'")
+    expect(source).toContain(
+      "const MESSAGE_VIEWPORT_EDGE_OFFSET = 'var(--ant-margin-lg)'"
+    )
+    expect(source).toContain("const MESSAGE_LIST_CLASS = 'global-message-list'")
+    expect(source).not.toContain('translateY(-50%)')
+    expect(stylesSource).toMatch(
+      /\.global-message-list\s*\{[^}]*justify-content:\s*center;/s
+    )
     expect(source).toMatch(/<AntApp\s+message=\{GLOBAL_MESSAGE_CONFIG\}>/)
   })
 })

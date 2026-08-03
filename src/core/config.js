@@ -1,21 +1,28 @@
-import { homedir } from 'os';
-import { dirname, join } from 'path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { DEFAULT_WORKFLOW_STEPS } from './workflowSteps.js';
-import { DEFAULT_WORK_DOCUMENT_TEMPLATES } from './taskDocsService.js';
+import { homedir } from 'os'
+import { join } from 'path'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { DEFAULT_WORKFLOW_STEPS } from './workflowSteps.js'
+import { DEFAULT_WORK_DOCUMENT_TEMPLATES } from './taskDocsService.js'
+import { DEFAULT_TASK_STATUSES, normalizeTaskStatuses } from './taskStatuses.js'
 
-// 应用配置管理：持久化用户设置（源项目路径、worktree 路径、主分支名、忽略列表）。
-// 配置存于用户目录下，纯 Node 模块便于测试。
+// 配置文件只全局保存当前工作区 id；路径与全部系统设置均归属于各自工作区。
 
 // DEFAULT_SOURCE_PROJECTS_PATH 存储默认源项目根目录。
-const DEFAULT_SOURCE_PROJECTS_PATH = join(homedir(), 'Desktop', 'work', 'projects');
-// DEFAULT_WORKTREES_PATH 存储默认 worktree 根目录。
-const DEFAULT_WORKTREES_PATH = join(homedir(), 'Desktop', 'work', 'worktrees');
-// DEFAULT_PATH_PROFILE_ID 存储内置默认路径组合的稳定 id。
-const DEFAULT_PATH_PROFILE_ID = 'default';
-// DEFAULT_PATH_PROFILE_NAME 存储内置默认路径组合的展示名称。
-const DEFAULT_PATH_PROFILE_NAME = '工作路径';
-// DEFAULT_TOKEN_PRICING 存储用户未启用自定义计价时的配置；单价单位为美元/百万 Token。
+const DEFAULT_SOURCE_PROJECTS_PATH = join(
+  homedir(),
+  'Desktop',
+  'work',
+  'projects'
+)
+// DEFAULT_WORKTREES_PATH 存储默认 Worktree 根目录。
+const DEFAULT_WORKTREES_PATH = join(homedir(), 'Desktop', 'work', 'worktrees')
+// DEFAULT_PATH_PROFILE_ID 存储默认工作区的稳定 id。
+const DEFAULT_PATH_PROFILE_ID = 'default'
+// DEFAULT_PATH_PROFILE_NAME 存储默认工作区名称。
+const DEFAULT_PATH_PROFILE_NAME = '工作路径'
+// SWITCH_WORKSPACE_ONLY_FIELD 存储切换工作区时使用的瞬时控制字段，不会写入磁盘。
+export const SWITCH_WORKSPACE_ONLY_FIELD = '__switchWorkspaceOnly'
+// DEFAULT_TOKEN_PRICING 存储默认 Token 计价配置；单价单位为美元/百万 Token。
 const DEFAULT_TOKEN_PRICING = {
   enabled: false,
   input: 3,
@@ -23,56 +30,25 @@ const DEFAULT_TOKEN_PRICING = {
   cacheWrite: 3.75,
   cacheRead: 0.3,
   usdToCny: 7.2,
-};
+}
 // DEFAULT_AI_USAGE_TOOL 存储默认参与 Token 统计的本地 AI 工具。
-const DEFAULT_AI_USAGE_TOOL = 'claude-code';
+const DEFAULT_AI_USAGE_TOOL = 'claude-code'
 
-// 默认配置：基于用户的实际工作目录
-const DEFAULT_CONFIG = {
-  // 首次配置是否已完成；新安装默认未完成，成功保存设置后启用，历史配置自动迁移为已完成。
+// DEFAULT_WORKSPACE_SETTINGS 存储每个工作区独立拥有的系统设置默认值。
+const DEFAULT_WORKSPACE_SETTINGS = {
   onboardingCompleted: false,
-  // 源项目根目录：扫描的主要对象
-  sourceProjectsPath: DEFAULT_SOURCE_PROJECTS_PATH,
-  // worktree 根目录：实际开发时建立 worktree 的位置
-  worktreesPath: DEFAULT_WORKTREES_PATH,
-  // 当前启用的路径组合 id；顶层 sourceProjectsPath/worktreesPath 始终同步为该组合的路径，供旧调用链继续使用。
-  activePathProfileId: DEFAULT_PATH_PROFILE_ID,
-  // 路径组合列表：每组同时包含源项目根目录与 worktree 根目录，便于在工作/个人等多套目录间切换。
-  pathProfiles: [
-    {
-      id: DEFAULT_PATH_PROFILE_ID,
-      name: DEFAULT_PATH_PROFILE_NAME,
-      sourceProjectsPath: DEFAULT_SOURCE_PROJECTS_PATH,
-      worktreesPath: DEFAULT_WORKTREES_PATH,
-    },
-  ],
-  // 视为主分支的分支名
   mainBranches: ['master', 'main'],
-  // 扫描时排除的目录名
   ignoredProjects: [],
-  // 扫描时是否自动 fetch 远程（慢但能算出 behind）
   autoFetch: false,
-  // 项目 CI/CD 流水线地址：{ 项目目录名: URL }，有则填写，无则不填
   cicdLinks: {},
-  // 编辑器命令模板：{path} 占位符会被替换为实际路径，支持 VSCode(code)/Cursor(cursor)/Trae(trae) 等；
-  // code 命令会自动注入 -n 在新窗口打开，不替换用户当前窗口
   vscodeCommand: 'code {path}',
-  // 终端选择：按平台给不同默认——Windows 默认 wt(Windows Terminal)，macOS/其他默认系统 Terminal。
-  // WHY 按平台：默认值直接决定新用户首次「打开终端」用哪个应用；给 Windows 存 'Terminal' 虽也能被主进程兜底到 wt，
-  // 但设置页下拉会显示不匹配项。取当前平台的合理默认，让展示与行为一致。macOS：Terminal / iTerm2 / Ghostty；Windows：wt / powershell / cmd。
   terminalApp: process.platform === 'win32' ? 'wt' : 'Terminal',
-  // 任务工作流步骤清单：worktree 视图里每个任务展示的「需求流程」步骤（可在设置中增删改）。
-  // 每项 { key, label, command }，所有步骤都可勾选；command 非空的步骤额外可「执行」。
-  // 取默认清单的深拷贝，避免多处共享同一数组引用被意外修改。
-  workflowSteps: DEFAULT_WORKFLOW_STEPS.map((s) => ({ ...s })),
-  // 环境检查角色配置：定义任务目录下「前端/后端」子目录的映射，空数组表示自动扫描全部子目录。
-  // 每项 { name: string, dirs: string[] }，如 [{ name: '前端', dirs: ['web-app', 'h5'] }]。
-  // 保存到 ~/.visualWorktree/config.json，检查时按角色过滤并分组展示结果。
+  workflowSteps: DEFAULT_WORKFLOW_STEPS.map((step) => ({ ...step })),
+  projectWorkflowSteps: {},
   envCheckRoles: [],
-  // 工作文档模板：新建任务时在任务根目录自动创建，删除任务前按同一配置归档；项目 worktree 只生成固定说明文件。
-  // 每项 { type:'directory'|'file', path:string, content:string }，默认工作文档模板只包含 docs 目录。
-  workDocumentTemplates: DEFAULT_WORK_DOCUMENT_TEMPLATES.map((template) => ({ ...template })),
-  // 任务标题徽标展示开关：控制 Worktree 任务标题旁项目数量、状态、链接、环境、Token 用量是否展示。
+  workDocumentTemplates: DEFAULT_WORK_DOCUMENT_TEMPLATES.map((template) => ({
+    ...template,
+  })),
   taskTitleBadges: {
     projectCount: true,
     taskStatus: true,
@@ -80,283 +56,426 @@ const DEFAULT_CONFIG = {
     envHealth: true,
     claudeUsage: true,
   },
-  // Token 费用自定义规则：启用后所有模型统一按这里的四类单价和汇率计算。
+  taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
   tokenPricing: { ...DEFAULT_TOKEN_PRICING },
-  // AI Token 统计工具：支持 Claude Code 与 Codex，本字段随其他设置写入配置文件。
   aiUsageTool: DEFAULT_AI_USAGE_TOOL,
-};
+}
+// WORKSPACE_SETTING_KEYS 存储允许写入单个工作区 settings 的字段，阻止运行时字段混入磁盘。
+const WORKSPACE_SETTING_KEYS = Object.keys(DEFAULT_WORKSPACE_SETTINGS)
+
+/**
+ * 深拷贝 JSON 可序列化数据，避免默认对象引用被调用方修改。
+ * @param {object} value - 待克隆对象
+ * @returns {object} 独立副本
+ */
+function cloneJson(value) {
+  // clonedValue 存储通过 JSON 往返生成的独立对象。
+  const clonedValue = JSON.parse(JSON.stringify(value))
+  return clonedValue
+}
 
 /**
  * 规范化 Token 费用配置，避免损坏配置或负数价格进入费用计算。
  * @param {object} pricing - 待规范化的 Token 费用配置
- * @returns {{enabled:boolean,input:number,output:number,cacheWrite:number,cacheRead:number,usdToCny:number}} 有效计价配置
+ * @returns {object} 有效计价配置
  */
 function normalizeTokenPricing(pricing) {
   // normalizedPricing 存储合并默认值后的计价配置。
-  const normalizedPricing = { ...DEFAULT_TOKEN_PRICING, ...(pricing || {}) };
+  const normalizedPricing = { ...DEFAULT_TOKEN_PRICING, ...(pricing || {}) }
   // numericKeys 存储必须为非负有限数的单价字段。
-  const numericKeys = ['input', 'output', 'cacheWrite', 'cacheRead'];
+  const numericKeys = ['input', 'output', 'cacheWrite', 'cacheRead']
   for (const key of numericKeys) {
     // numericValue 存储当前字段转换后的数值。
-    const numericValue = Number(normalizedPricing[key]);
-    normalizedPricing[key] = Number.isFinite(numericValue) && numericValue >= 0
-      ? numericValue
-      : DEFAULT_TOKEN_PRICING[key];
+    const numericValue = Number(normalizedPricing[key])
+    normalizedPricing[key] =
+      Number.isFinite(numericValue) && numericValue >= 0
+        ? numericValue
+        : DEFAULT_TOKEN_PRICING[key]
   }
-  // exchangeRate 存储美元兑人民币汇率，必须为正数才能用于换算。
-  const exchangeRate = Number(normalizedPricing.usdToCny);
-  normalizedPricing.usdToCny = Number.isFinite(exchangeRate) && exchangeRate > 0
-    ? exchangeRate
-    : DEFAULT_TOKEN_PRICING.usdToCny;
-  normalizedPricing.enabled = normalizedPricing.enabled === true;
-  return normalizedPricing;
-}
-
-// 旧配置目录（带连字符）：历史版本把 config.json 存这里，与 task-status 等所在的 .visualWorktree 目录不一致。
-// 现统一到 .visualWorktree，loadConfig 时一次性迁移旧文件过来。仅用于默认目录的迁移，不影响测试注入的 baseDir。
-const LEGACY_CONFIG_DIR = join(homedir(), '.visual-worktree');
-
-/**
- * 克隆默认配置，避免调用方修改返回对象时污染模块级 DEFAULT_CONFIG。
- * @returns {object} 默认配置的深拷贝
- */
-function cloneDefaultConfig() {
-  // clonedConfig 存储可安全返回/写盘的默认配置副本；DEFAULT_CONFIG 只包含 JSON 可序列化数据。
-  const clonedConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-  return clonedConfig;
+  // exchangeRate 存储美元兑人民币汇率，必须为正数。
+  const exchangeRate = Number(normalizedPricing.usdToCny)
+  normalizedPricing.usdToCny =
+    Number.isFinite(exchangeRate) && exchangeRate > 0
+      ? exchangeRate
+      : DEFAULT_TOKEN_PRICING.usdToCny
+  normalizedPricing.enabled = normalizedPricing.enabled === true
+  return normalizedPricing
 }
 
 /**
- * 规范化单个路径组合，补齐 id/name/path 等字段。
- * @param {object} profile - 待规范化的路径组合
- * @param {number} index - 组合在列表中的下标，用于生成兜底名称和 id
- * @param {object} fallback - 兜底路径组合，缺字段时继承它的路径
- * @returns {{id:string,name:string,sourceProjectsPath:string,worktreesPath:string}} 规范化后的路径组合
+ * 规范化单个工作区的独立系统设置。
+ * @param {object} settings - 原始工作区设置
+ * @returns {object} 补齐默认值后的设置
  */
-function normalizePathProfile(profile, index, fallback) {
-  // fallbackId 存储当前行缺失 id 时的兜底 id；第一行沿用 default，后续按序号生成稳定值。
-  const fallbackId = index === 0 ? DEFAULT_PATH_PROFILE_ID : `profile-${index + 1}`;
-  // id 存储路径组合唯一标识；空白值会被兜底 id 替代。
-  const id = String(profile?.id || fallbackId).trim() || fallbackId;
-  // name 存储路径组合显示名称；空白时用「路径组合 N」兜底。
-  const name = String(profile?.name || `路径组合 ${index + 1}`).trim() || `路径组合 ${index + 1}`;
-  // sourceProjectsPath 存储该组合的源项目根目录；缺失时使用兜底组合路径。
-  const sourceProjectsPath = String(profile?.sourceProjectsPath || fallback.sourceProjectsPath || '').trim();
-  // worktreesPath 存储该组合的 worktree 根目录；缺失时使用兜底组合路径。
-  const worktreesPath = String(profile?.worktreesPath || fallback.worktreesPath || '').trim();
-  return { id, name, sourceProjectsPath, worktreesPath };
+function normalizeWorkspaceSettings(settings) {
+  // normalizedSettings 存储默认设置与磁盘设置合并后的结果。
+  const normalizedSettings = {
+    ...cloneJson(DEFAULT_WORKSPACE_SETTINGS),
+    ...(settings || {}),
+  }
+  normalizedSettings.tokenPricing = normalizeTokenPricing(
+    normalizedSettings.tokenPricing
+  )
+  // rawTaskStatuses 存储磁盘中显式保存的动态状态列表；旧版配置缺失时交由标签映射迁移。
+  const rawTaskStatuses = Array.isArray(settings?.taskStatuses)
+    ? settings.taskStatuses
+    : undefined
+  normalizedSettings.taskStatuses = normalizeTaskStatuses(
+    rawTaskStatuses,
+    settings?.taskStatusLabels
+  )
+  // 旧版标签映射完成迁移后不再向运行时和磁盘配置继续扩散。
+  delete normalizedSettings.taskStatusLabels
+  normalizedSettings.aiUsageTool =
+    normalizedSettings.aiUsageTool === 'codex' ? 'codex' : DEFAULT_AI_USAGE_TOOL
+  normalizedSettings.onboardingCompleted =
+    normalizedSettings.onboardingCompleted === true
+  return normalizedSettings
 }
 
 /**
- * 去重路径组合 id，避免表单复制或手写配置造成同 id 多组。
- * @param {Array<{id:string,name:string,sourceProjectsPath:string,worktreesPath:string}>} profiles - 已初步规范化的路径组合
- * @returns {Array<{id:string,name:string,sourceProjectsPath:string,worktreesPath:string}>} id 唯一的路径组合
+ * 从运行时扁平配置提取当前工作区允许持久化的系统设置。
+ * @param {object} config - 渲染层提交的当前工作区配置
+ * @param {object} fallbackSettings - 缺省字段使用的已有设置
+ * @returns {object} 当前工作区完整设置
  */
-function dedupePathProfileIds(profiles) {
-  // seenIds 存储已经出现过的组合 id。
-  const seenIds = new Set();
-  return profiles.map((profile, index) => {
-    // baseId 存储当前组合原始 id，用于第一次出现时保持不变。
-    const baseId = profile.id || (index === 0 ? DEFAULT_PATH_PROFILE_ID : `profile-${index + 1}`);
-    // nextId 存储去重后的 id；重复时追加序号，保证 Select value 唯一。
-    let nextId = baseId;
-    // suffix 存储重复 id 的递增后缀。
-    let suffix = 2;
-    while (seenIds.has(nextId)) {
-      nextId = `${baseId}-${suffix}`;
-      suffix += 1;
+function extractWorkspaceSettings(config, fallbackSettings) {
+  // mergedSettings 存储已有设置与本次提交字段合并后的结果。
+  const mergedSettings = { ...fallbackSettings }
+  for (const key of WORKSPACE_SETTING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(config || {}, key)) {
+      mergedSettings[key] = config[key]
     }
-    seenIds.add(nextId);
-    return { ...profile, id: nextId };
-  });
+  }
+  return normalizeWorkspaceSettings(mergedSettings)
 }
 
 /**
- * 规范化完整配置里的路径组合，并把当前启用组合同步到顶层路径字段。
- * @param {object} config - 合并默认值后的配置对象
- * @param {{preferTopLevelPaths?:boolean}} [opts] - preferTopLevelPaths 为 true 时用顶层路径覆盖当前组合，兼容旧版保存调用
- * @returns {object} 已规范化路径组合并同步顶层路径的配置
+ * 创建默认工作区磁盘对象。
+ * @returns {object} 包含路径和独立 settings 的默认工作区
  */
-function normalizePathProfilesInConfig(config, opts = {}) {
-  // preferTopLevelPaths 标记本次保存是否来自旧版顶层路径字段；为真时不让旧 pathProfiles 覆盖用户刚保存的路径。
-  const { preferTopLevelPaths = false } = opts;
-  // fallbackProfile 存储从顶层字段构造出的兜底路径组合。
-  const fallbackProfile = {
+function createDefaultWorkspace() {
+  // workspace 存储首次启动使用的默认工作区。
+  const workspace = {
     id: DEFAULT_PATH_PROFILE_ID,
     name: DEFAULT_PATH_PROFILE_NAME,
-    sourceProjectsPath: config.sourceProjectsPath || DEFAULT_SOURCE_PROJECTS_PATH,
-    worktreesPath: config.worktreesPath || DEFAULT_WORKTREES_PATH,
-  };
-  // rawProfiles 存储配置文件里的路径组合数组；旧配置没有该字段时回退空数组。
-  const rawProfiles = Array.isArray(config.pathProfiles) ? config.pathProfiles : [];
-  // normalizedProfiles 存储补齐字段且过滤无效项后的路径组合列表。
-  let normalizedProfiles = rawProfiles
-    .map((profile, index) => normalizePathProfile(profile, index, fallbackProfile))
-    .filter((profile) => profile.sourceProjectsPath && profile.worktreesPath);
-  if (normalizedProfiles.length === 0) normalizedProfiles = [normalizePathProfile(fallbackProfile, 0, fallbackProfile)];
-  normalizedProfiles = dedupePathProfileIds(normalizedProfiles);
-
-  // requestedActiveId 存储配置里声明的当前组合 id；缺失或失效时使用第一组。
-  const requestedActiveId = String(config.activePathProfileId || normalizedProfiles[0].id).trim();
-  // activeProfileIndex 存储当前组合在列表中的下标，用于覆盖或回退。
-  const activeProfileIndex = normalizedProfiles.findIndex((profile) => profile.id === requestedActiveId);
-  // activeIndex 存储最终启用的组合下标；找不到时回退第一组。
-  const activeIndex = activeProfileIndex >= 0 ? activeProfileIndex : 0;
-
-  if (preferTopLevelPaths) {
-    // topLevelSourceProjectsPath 存储旧版保存入口传入的源项目根目录。
-    const topLevelSourceProjectsPath = String(config.sourceProjectsPath || fallbackProfile.sourceProjectsPath || '').trim();
-    // topLevelWorktreesPath 存储旧版保存入口传入的 worktree 根目录。
-    const topLevelWorktreesPath = String(config.worktreesPath || fallbackProfile.worktreesPath || '').trim();
-    normalizedProfiles[activeIndex] = {
-      ...normalizedProfiles[activeIndex],
-      sourceProjectsPath: topLevelSourceProjectsPath,
-      worktreesPath: topLevelWorktreesPath,
-    };
+    sourceProjectsPath: DEFAULT_SOURCE_PROJECTS_PATH,
+    worktreesPath: DEFAULT_WORKTREES_PATH,
+    settings: normalizeWorkspaceSettings(),
   }
+  return workspace
+}
 
-  // activeProfile 存储最终启用的路径组合。
-  const activeProfile = normalizedProfiles[activeIndex];
+/**
+ * 创建新的磁盘配置结构。
+ * @returns {{activePathProfileId:string,pathProfiles:Array<object>}} 默认磁盘配置
+ */
+function createDefaultPersistedConfig() {
+  // persistedConfig 存储只包含工作区索引与工作区数据的磁盘结构。
+  const persistedConfig = {
+    activePathProfileId: DEFAULT_PATH_PROFILE_ID,
+    pathProfiles: [createDefaultWorkspace()],
+  }
+  return persistedConfig
+}
+
+/**
+ * 规范化单个磁盘工作区。
+ * @param {object} profile - 原始工作区
+ * @param {number} index - 工作区下标
+ * @param {object|null} existingProfile - 同 id 的已有工作区，用于保留未提交设置
+ * @returns {object} 有效工作区
+ */
+function normalizeWorkspaceProfile(profile, index, existingProfile = null) {
+  // fallbackId 存储缺失 id 时使用的稳定标识。
+  const fallbackId =
+    index === 0 ? DEFAULT_PATH_PROFILE_ID : `profile-${index + 1}`
+  // id 存储工作区唯一标识。
+  const id = String(profile?.id || fallbackId).trim() || fallbackId
+  // name 存储工作区展示名称。
+  const name =
+    String(profile?.name || `工作区 ${index + 1}`).trim() ||
+    `工作区 ${index + 1}`
+  // sourceProjectsPath 存储工作区源项目路径。
+  const sourceProjectsPath = String(
+    profile?.sourceProjectsPath || DEFAULT_SOURCE_PROJECTS_PATH
+  ).trim()
+  // worktreesPath 存储工作区 Worktree 路径。
+  const worktreesPath = String(
+    profile?.worktreesPath || DEFAULT_WORKTREES_PATH
+  ).trim()
+  // rawSettings 存储显式设置或同工作区已有设置，新工作区使用默认值。
+  const rawSettings = profile?.settings || existingProfile?.settings
   return {
-    ...config,
-    pathProfiles: normalizedProfiles,
-    activePathProfileId: activeProfile.id,
+    id,
+    name,
+    sourceProjectsPath,
+    worktreesPath,
+    settings: normalizeWorkspaceSettings(rawSettings),
+  }
+}
+
+/**
+ * 规范化磁盘配置，过滤无效工作区并保证 id 唯一。
+ * @param {object} persistedConfig - 原始磁盘配置
+ * @returns {object} 有效磁盘配置
+ */
+function normalizePersistedConfig(persistedConfig) {
+  // rawProfiles 存储原始工作区数组；早期版本的路径组合尚未包含 settings，不能因此丢弃用户已保存的路径。
+  const rawProfiles = Array.isArray(persistedConfig?.pathProfiles)
+    ? persistedConfig.pathProfiles.filter(
+        (profile) => profile && typeof profile === 'object'
+      )
+    : []
+  // sourceProfiles 存储最终参与规范化的工作区源数组。
+  const sourceProfiles = rawProfiles.length
+    ? rawProfiles
+    : [createDefaultWorkspace()]
+  // requestedActiveId 存储磁盘声明的当前工作区 id。
+  const requestedActiveId = String(
+    persistedConfig?.activePathProfileId || ''
+  ).trim()
+  // legacySettingsProfileId 存储应继承旧顶层设置的工作区 id；旧结构只有一份顶层设置，因此只迁移到当时启用的工作区。
+  const legacySettingsProfileId = sourceProfiles.some(
+    (profile) => profile?.id === requestedActiveId
+  )
+    ? requestedActiveId
+    : sourceProfiles[0]?.id
+  // legacySettings 存储旧扁平配置中属于工作区的设置字段；仅用于兼容尚未写入 profile.settings 的已存路径组合。
+  const legacySettings = extractWorkspaceSettings(persistedConfig, {})
+  // seenIds 存储已经占用的工作区 id。
+  const seenIds = new Set()
+  // pathProfiles 存储清洗且 id 唯一的工作区列表。
+  const pathProfiles = sourceProfiles.map((profile, index) => {
+    // profileWithSettings 存储补齐 settings 后的路径组合；其他非活动旧组合使用默认设置，避免一份旧顶层设置错误复制到多个工作区。
+    const profileWithSettings = profile?.settings
+      ? profile
+      : {
+          ...profile,
+          settings:
+            profile?.id === legacySettingsProfileId
+              ? legacySettings
+              : undefined,
+        }
+    // normalizedProfile 存储当前规范化后的工作区。
+    const normalizedProfile = normalizeWorkspaceProfile(
+      profileWithSettings,
+      index
+    )
+    // baseId 存储去重前的工作区 id。
+    const baseId = normalizedProfile.id
+    // uniqueId 存储最终唯一 id。
+    let uniqueId = baseId
+    // suffix 存储重复 id 的递增后缀。
+    let suffix = 2
+    while (seenIds.has(uniqueId)) {
+      uniqueId = `${baseId}-${suffix}`
+      suffix += 1
+    }
+    seenIds.add(uniqueId)
+    return { ...normalizedProfile, id: uniqueId }
+  })
+  // activePathProfileId 存储存在于列表中的当前工作区 id。
+  const activePathProfileId = pathProfiles.some(
+    (profile) => profile.id === requestedActiveId
+  )
+    ? requestedActiveId
+    : pathProfiles[0].id
+  return { activePathProfileId, pathProfiles }
+}
+
+/**
+ * 将磁盘工作区结构投影为现有业务组件使用的当前工作区扁平配置。
+ * @param {object} persistedConfig - 已规范化磁盘配置
+ * @returns {object} 当前工作区运行时配置
+ */
+function toRuntimeConfig(persistedConfig) {
+  // activeProfile 存储当前启用工作区。
+  const activeProfile =
+    persistedConfig.pathProfiles.find(
+      (profile) => profile.id === persistedConfig.activePathProfileId
+    ) || persistedConfig.pathProfiles[0]
+  // pathProfiles 存储供设置页和顶部选择器使用的工作区元数据，不暴露其他工作区 settings。
+  const pathProfiles = persistedConfig.pathProfiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    sourceProjectsPath: profile.sourceProjectsPath,
+    worktreesPath: profile.worktreesPath,
+  }))
+  return {
+    ...cloneJson(activeProfile.settings),
     sourceProjectsPath: activeProfile.sourceProjectsPath,
     worktreesPath: activeProfile.worktreesPath,
-  };
+    activePathProfileId: activeProfile.id,
+    pathProfiles,
+  }
 }
 
+// DEFAULT_CONFIG 存储提供给渲染层的默认工作区扁平配置。
+const DEFAULT_CONFIG = toRuntimeConfig(createDefaultPersistedConfig())
+
 /**
- * 计算配置文件存放路径
- * @param {string} [baseDir] - 配置目录（测试时可注入临时目录）
- * @returns {{dir:string, file:string}} 配置目录与文件路径
+ * 计算配置文件存放路径。
+ * @param {string} [baseDir] - 配置目录（测试时可注入）
+ * @returns {{dir:string,file:string}} 配置目录与文件路径
  */
 export function getConfigPaths(baseDir) {
-  // dir 为配置目录，默认 ~/.visualWorktree（与 task-status/links/workflow 等统一在同一目录）
-  const dir = baseDir || join(homedir(), '.visualWorktree');
-  return { dir, file: join(dir, 'config.json') };
+  // dir 存储配置目录，默认使用 ~/.visualWorktree。
+  const dir = baseDir || join(homedir(), '.visualWorktree')
+  return { dir, file: join(dir, 'config.json') }
 }
 
 /**
- * 计算流程步骤配置文件路径。
- * 流程步骤现与普通配置一起存放在 ~/.visualWorktree/config.json；保留此函数供测试/兼容调用。
- * @param {string} [baseDir] - 测试用根目录；默认用户 home
- * @returns {{dir:string, file:string}} 配置目录与 config.json 路径
+ * 计算流程步骤所在配置文件路径。
+ * @param {string} [baseDir] - 配置目录
+ * @returns {{dir:string,file:string}} 配置目录与文件路径
  */
 export function getWorkflowStepsPaths(baseDir) {
-  return getConfigPaths(baseDir);
+  return getConfigPaths(baseDir)
 }
 
 /**
- * 将旧目录 ~/.visual-worktree/config.json 一次性迁移到新目录 ~/.visualWorktree/config.json。
- * 仅当使用默认目录（未注入 baseDir）、新文件尚不存在、旧文件存在时执行。迁移后保留旧文件不删，规避误删风险。
- * @param {string} newFile - 新目录下的目标 config.json 完整路径
- * @returns {void}
+ * 读取并规范化磁盘配置；旧扁平结构不迁移，直接回退新默认结构。
+ * @param {string} [baseDir] - 配置目录
+ * @returns {object} 磁盘工作区配置
  */
-function migrateLegacyConfig(newFile) {
-  // legacyFile 为旧目录下的 config.json 路径
-  const legacyFile = join(LEGACY_CONFIG_DIR, 'config.json');
-  // 新文件已存在或旧文件不存在时无需迁移
-  if (existsSync(newFile) || !existsSync(legacyFile)) return;
+function readPersistedConfig(baseDir) {
+  // paths 存储配置目录与文件路径。
+  const paths = getConfigPaths(baseDir)
+  if (!existsSync(paths.file)) {
+    // defaultPersistedConfig 存储文件不存在时使用的新结构。
+    const defaultPersistedConfig = createDefaultPersistedConfig()
+    if (existsSync(paths.dir)) {
+      defaultPersistedConfig.pathProfiles[0].settings.onboardingCompleted = true
+    }
+    return defaultPersistedConfig
+  }
   try {
-    // newDir 为新配置目录，迁移前确保其存在
-    const newDir = dirname(newFile);
-    if (!existsSync(newDir)) mkdirSync(newDir, { recursive: true });
-    // 直接复制旧文件内容到新位置（保留旧文件，便于回滚/排查）
-    writeFileSync(newFile, readFileSync(legacyFile, 'utf8'), 'utf8');
-  } catch (e) {
-    // 迁移失败不阻断启动：后续按「新文件不存在」回退默认配置，用户可重新保存
+    // parsedConfig 存储磁盘 JSON 解析结果。
+    const parsedConfig = JSON.parse(readFileSync(paths.file, 'utf8'))
+    return normalizePersistedConfig(parsedConfig)
+  } catch {
+    // fallbackConfig 存储文件损坏时的安全新结构。
+    const fallbackConfig = createDefaultPersistedConfig()
+    fallbackConfig.pathProfiles[0].settings.onboardingCompleted = true
+    return fallbackConfig
   }
 }
 
 /**
- * 读取配置，文件不存在时返回默认配置并与默认值合并
- * @param {string} [baseDir] - 配置目录（测试用）
- * @returns {object} 配置对象
+ * 读取当前工作区配置。
+ * @param {string} [baseDir] - 配置目录
+ * @returns {object} 当前工作区扁平配置
  */
 export function loadConfig(baseDir) {
-  // dir 存储当前配置与历史业务数据所在目录，用于识别已经使用过应用的老用户。
-  // file 存储当前配置文件路径，用于读取已保存的系统设置。
-  const { dir, file } = getConfigPaths(baseDir);
-  // 仅默认目录（未注入 baseDir）时尝试从旧目录迁移，避免污染测试用的临时目录
-  if (!baseDir) migrateLegacyConfig(file);
-  if (!existsSync(file)) {
-    // fallbackConfig 存储缺少配置文件时返回的默认配置。
-    const fallbackConfig = cloneDefaultConfig();
-    // 老版本可能只留下任务状态等数据目录、没有 config.json；目录存在即可证明用户已使用过应用，不应再弹首次配置提示。
-    if (existsSync(dir) || (!baseDir && existsSync(LEGACY_CONFIG_DIR))) {
-      fallbackConfig.onboardingCompleted = true;
-    }
-    return fallbackConfig;
-  }
-  try {
-    // 合并：用户配置覆盖默认，保证新增字段有默认值
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    // mergedConfig 存储默认配置与磁盘配置合并后的结果，随后统一规范化路径组合。
-    const mergedConfig = { ...cloneDefaultConfig(), ...parsed };
-    // 历史配置在引导标识引入前已经由用户保存过路径，缺少字段时视为已完成，避免升级后重复弹出首次配置提示。
-    if (!Object.prototype.hasOwnProperty.call(parsed, 'onboardingCompleted')) {
-      mergedConfig.onboardingCompleted = true;
-    }
-    // hasPathProfiles 标记磁盘配置是否已经使用新路径组合结构；旧配置优先从顶层路径迁移。
-    const hasPathProfiles = Array.isArray(parsed?.pathProfiles);
-    // normalizedConfig 存储完成路径迁移后的配置，再补齐嵌套的 Token 计价默认值。
-    const normalizedConfig = normalizePathProfilesInConfig(mergedConfig, { preferTopLevelPaths: !hasPathProfiles });
-    normalizedConfig.tokenPricing = normalizeTokenPricing(parsed?.tokenPricing);
-    normalizedConfig.aiUsageTool = parsed?.aiUsageTool === 'codex'
-      ? 'codex'
-      : DEFAULT_AI_USAGE_TOOL;
-    return normalizedConfig;
-  } catch (e) {
-    // fallbackConfig 存储配置损坏时的安全默认值；配置文件本身证明用户已使用过应用，因此不重复弹首次提示。
-    const fallbackConfig = cloneDefaultConfig();
-    fallbackConfig.onboardingCompleted = true;
-    return fallbackConfig;
-  }
+  // persistedConfig 存储磁盘上的多工作区配置。
+  const persistedConfig = readPersistedConfig(baseDir)
+  return toRuntimeConfig(persistedConfig)
 }
 
 /**
- * 保存配置到磁盘
- * @param {object} config - 待保存的配置
- * @param {string} [baseDir] - 配置目录（测试用）
- * @returns {object} 实际写入的完整配置
+ * 保存工作区列表或当前工作区设置。
+ * @param {object} config - 渲染层提交的当前工作区扁平配置
+ * @param {string} [baseDir] - 配置目录
+ * @returns {object} 保存后的当前工作区扁平配置
  */
 export function saveConfig(config, baseDir) {
-  const { dir, file } = getConfigPaths(baseDir);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  // previous 为磁盘上现有配置；用于普通设置保存时保留流程步骤，避免缺省字段覆盖用户流程
-  const previous = loadConfig(baseDir);
-  // merged 为默认值、旧配置与传入配置的合并结果
-  const merged = { ...cloneDefaultConfig(), ...previous, ...config };
-  // hasIncomingProfiles 标记本次保存是否来自新版路径组合表单。
-  const hasIncomingProfiles = Object.prototype.hasOwnProperty.call(config || {}, 'pathProfiles');
-  // hasIncomingTopLevelPaths 标记本次保存是否来自旧版顶层路径字段。
-  const hasIncomingTopLevelPaths = Object.prototype.hasOwnProperty.call(config || {}, 'sourceProjectsPath')
-    || Object.prototype.hasOwnProperty.call(config || {}, 'worktreesPath');
-  // normalized 存储写盘前的完整配置；旧版路径保存要同步覆盖当前路径组合。
-  const normalized = normalizePathProfilesInConfig(merged, { preferTopLevelPaths: !hasIncomingProfiles && hasIncomingTopLevelPaths });
-  normalized.tokenPricing = normalizeTokenPricing(merged.tokenPricing);
-  normalized.aiUsageTool = merged.aiUsageTool === 'codex'
-    ? 'codex'
-    : DEFAULT_AI_USAGE_TOOL;
-  writeFileSync(file, JSON.stringify(normalized, null, 2), 'utf8');
-  return normalized;
+  // paths 存储配置目录与文件路径。
+  const paths = getConfigPaths(baseDir)
+  if (!existsSync(paths.dir)) mkdirSync(paths.dir, { recursive: true })
+  // previousPersistedConfig 存储保存前的完整多工作区配置。
+  const previousPersistedConfig = readPersistedConfig(baseDir)
+  // previousRuntimeConfig 存储当前工作区扁平配置，用于补齐部分保存调用。
+  const previousRuntimeConfig = toRuntimeConfig(previousPersistedConfig)
+  // incomingConfig 存储补齐缺省字段后的本次提交。
+  const incomingConfig = { ...previousRuntimeConfig, ...(config || {}) }
+  // switchesWorkspaceOnly 标记本次仅切换工作区，不能把旧工作区设置写入目标工作区。
+  const switchesWorkspaceOnly = config?.[SWITCH_WORKSPACE_ONLY_FIELD] === true
+  // requestedProfiles 存储本次提交的工作区元数据；缺失时沿用原列表。
+  const requestedProfiles = Array.isArray(incomingConfig.pathProfiles)
+    ? incomingConfig.pathProfiles
+    : previousRuntimeConfig.pathProfiles
+  // pathProfiles 存储合并路径变更并保留各自 settings 后的工作区列表。
+  const pathProfiles = requestedProfiles.map((profile, index) => {
+    // existingProfile 存储同 id 的已有工作区，负责保留未激活工作区设置。
+    const existingProfile = previousPersistedConfig.pathProfiles.find(
+      (item) => item.id === profile?.id
+    )
+    return normalizeWorkspaceProfile(profile, index, existingProfile)
+  })
+  // requestedActiveId 存储本次要求启用的工作区 id。
+  const requestedActiveId = String(
+    incomingConfig.activePathProfileId || ''
+  ).trim()
+  // activePathProfileId 存储列表中有效的目标工作区 id。
+  const activePathProfileId = pathProfiles.some(
+    (profile) => profile.id === requestedActiveId
+  )
+    ? requestedActiveId
+    : pathProfiles[0]?.id || DEFAULT_PATH_PROFILE_ID
+  // activeProfile 存储即将返回给渲染层的目标工作区。
+  const activeProfile = pathProfiles.find(
+    (profile) => profile.id === activePathProfileId
+  )
+  if (activeProfile && !switchesWorkspaceOnly) {
+    // 顶层路径是现有表单与初始化流程的运行时字段，显式提交时必须同步回当前工作区。
+    if (
+      Object.prototype.hasOwnProperty.call(config || {}, 'sourceProjectsPath')
+    ) {
+      activeProfile.sourceProjectsPath = String(
+        config.sourceProjectsPath || DEFAULT_SOURCE_PROJECTS_PATH
+      ).trim()
+    }
+    if (Object.prototype.hasOwnProperty.call(config || {}, 'worktreesPath')) {
+      activeProfile.worktreesPath = String(
+        config.worktreesPath || DEFAULT_WORKTREES_PATH
+      ).trim()
+    }
+    // settingsFallback 存储目标工作区原设置，部分提交时以它补齐。
+    const settingsFallback = activeProfile.settings
+    activeProfile.settings = extractWorkspaceSettings(
+      incomingConfig,
+      settingsFallback
+    )
+  }
+  // persistedConfig 存储最终写入磁盘的新结构。
+  const persistedConfig = normalizePersistedConfig({
+    activePathProfileId,
+    pathProfiles,
+  })
+  writeFileSync(paths.file, JSON.stringify(persistedConfig, null, 2), 'utf8')
+  return toRuntimeConfig(persistedConfig)
 }
 
 /**
- * 将配置文件恢复为应用默认设置。
- * @param {string} [baseDir] - 配置目录（测试用）
- * @returns {object} 写入磁盘并返回的默认配置
+ * 只恢复当前工作区默认设置，不影响其他工作区。
+ * @param {string} [baseDir] - 配置目录
+ * @returns {object} 重置后的当前工作区扁平配置
  */
 export function resetConfig(baseDir) {
-  const { dir, file } = getConfigPaths(baseDir);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  // defaultConfig 存储即将写入磁盘的默认配置副本；恢复默认不合并旧配置，确保旧字段被清掉。
-  const defaultConfig = cloneDefaultConfig();
-  // 恢复默认发生在用户已进入设置的场景，不属于新安装，避免重置后再次弹出首次配置提示。
-  defaultConfig.onboardingCompleted = true;
-  writeFileSync(file, JSON.stringify(defaultConfig, null, 2), 'utf8');
-  return defaultConfig;
+  // paths 存储配置目录与文件路径。
+  const paths = getConfigPaths(baseDir)
+  if (!existsSync(paths.dir)) mkdirSync(paths.dir, { recursive: true })
+  // persistedConfig 存储重置前完整工作区配置。
+  const persistedConfig = readPersistedConfig(baseDir)
+  // activeProfile 存储本次唯一需要恢复默认的工作区。
+  const activeProfile = persistedConfig.pathProfiles.find(
+    (profile) => profile.id === persistedConfig.activePathProfileId
+  )
+  if (activeProfile) {
+    activeProfile.sourceProjectsPath = DEFAULT_SOURCE_PROJECTS_PATH
+    activeProfile.worktreesPath = DEFAULT_WORKTREES_PATH
+    activeProfile.settings = normalizeWorkspaceSettings({
+      onboardingCompleted: true,
+    })
+  }
+  writeFileSync(paths.file, JSON.stringify(persistedConfig, null, 2), 'utf8')
+  return toRuntimeConfig(persistedConfig)
 }
 
-export { DEFAULT_CONFIG, DEFAULT_TOKEN_PRICING, DEFAULT_AI_USAGE_TOOL };
+export {
+  DEFAULT_CONFIG,
+  DEFAULT_TOKEN_PRICING,
+  DEFAULT_AI_USAGE_TOOL,
+  DEFAULT_WORKSPACE_SETTINGS,
+}

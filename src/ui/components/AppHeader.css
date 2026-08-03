@@ -1,0 +1,65 @@
+/* 应用内 Header 同时承担自定义标题栏拖动区域，背景和边界沿用 Ant Design 主题变量。 */
+.app-header.ant-layout-header {
+  align-items: center;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex: 0 0 64px;
+  gap: 12px;
+  justify-content: space-between;
+  padding-inline-start: max(16px, calc(env(titlebar-area-x, 0px) + 16px));
+  padding-inline-end: max(
+    16px,
+    calc(
+      100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px
+    )
+  );
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* macOS 隐藏标题栏后保留交通灯区域和 27px 视觉缓冲，避免标题贴近最右侧窗口按钮。 */
+.app-header--macos.ant-layout-header {
+  padding-inline-start: 96px;
+}
+
+/* 左侧标题和导航使用稳定横向布局，窄窗口时允许导航区域收缩。 */
+.app-header__left {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* 标题在剩余空间不足时单行省略，不挤压导航与窗口操作。 */
+.app-header__title {
+  flex: 0 1 auto;
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Header 内所有真实控件必须退出拖动区域，确保点击、选择和键盘操作正常。 */
+.app-header__interactive {
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* 路径组合选择器使用紧凑的稳定宽度。 */
+.app-header__path-profile {
+  width: 132px;
+}
+
+/* 窄窗口压缩路径组合宽度，给主操作保留可点击空间。 */
+.app-header__path-profile--narrow {
+  width: 104px;
+}
+
+/* 更新下载进度保持固定槽位，避免百分比变化推挤右侧按钮。 */
+.app-header__update-progress {
+  margin: 0;
+  width: 96px;
+}

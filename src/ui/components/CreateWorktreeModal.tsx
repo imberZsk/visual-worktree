@@ -165,7 +165,7 @@ export default function CreateWorktreeModal({
           <Alert
             type="info"
             showIcon
-            message="将创建到"
+            title="将创建到"
             description={
               (projectPaths || []).length > 0
                 ? `${worktreesPath || '<worktree根目录>'}/${task}/<项目名>  →  分支 ${branch || '<分支名>'}`

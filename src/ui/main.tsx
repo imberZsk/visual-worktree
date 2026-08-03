@@ -3,23 +3,26 @@ import { createRoot } from 'react-dom/client'
 import { ConfigProvider, theme as antdTheme, App as AntApp } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App.tsx'
+import { api } from './api.ts'
 import { useStore } from './store/useStore.ts'
 import './styles.css'
 
 // 渲染进程入口：挂载 React 应用，配置 antd 中文语言与明暗主题。
 
-// MESSAGE_CENTER_OFFSET 存储全局消息层相对视口顶部的居中偏移。
-const MESSAGE_CENTER_OFFSET = '50%'
-// MESSAGE_CENTER_TRANSFORM 存储消息列表按自身高度回退一半的位移，确保提示框几何中心对齐视口中心。
-const MESSAGE_CENTER_TRANSFORM = 'translateY(-50%)'
+// MESSAGE_VIEWPORT_EDGE_OFFSET 存储 Ant Design 消息容器的边缘补偿，与组件默认 marginLG 保持一致，使容器从视口顶部开始。
+const MESSAGE_VIEWPORT_EDGE_OFFSET = 'var(--ant-margin-lg)'
+// MESSAGE_LIST_CLASS 存储全局消息容器业务类名，由样式表负责在完整视口内居中消息组。
+const MESSAGE_LIST_CLASS = 'global-message-list'
 // GLOBAL_MESSAGE_CONFIG 存储 Ant Design 全局消息层的居中配置，统一作用于成功、警告和错误提示。
 const GLOBAL_MESSAGE_CONFIG = {
-  top: MESSAGE_CENTER_OFFSET,
-  styles: {
-    listContent: {
-      transform: MESSAGE_CENTER_TRANSFORM,
-    },
+  top: MESSAGE_VIEWPORT_EDGE_OFFSET,
+  classNames: {
+    list: MESSAGE_LIST_CLASS,
   },
+}
+// APP_THEME_SEED 存储全产品统一的 Ant Design 主色种子；明暗状态色由对应算法派生。
+const APP_THEME_SEED = {
+  colorPrimary: '#1677ff',
 }
 
 /**
@@ -40,7 +43,9 @@ function Root() {
       'data-theme',
       isDark ? 'dark' : 'light'
     )
-  }, [isDark])
+    // Windows/Linux 的原生窗口控制按钮覆盖在 Header 上，需要和应用主题保持一致。
+    void api.setWindowTheme(themeMode)
+  }, [isDark, themeMode])
 
   return (
     <ConfigProvider
@@ -50,6 +55,7 @@ function Root() {
         algorithm: isDark
           ? antdTheme.darkAlgorithm
           : antdTheme.defaultAlgorithm,
+        token: APP_THEME_SEED,
       }}
     >
       {/* AntApp 提供 message/Modal 的主题上下文，使弹窗也跟随明暗 */}

@@ -1,0 +1,86 @@
+/* Worktree 顶部工具栏在可用宽度不足时按操作组换行，避免搜索框与排序控件重叠。 */
+.worktree-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+/* 左右操作组允许内容收缩，窄窗口下由 Space 自身换行。 */
+.worktree-toolbar__primary-actions,
+.worktree-toolbar__secondary-actions {
+  min-width: 0;
+}
+
+/* 右侧搜索、显隐与排序操作保持靠右对齐。 */
+.worktree-toolbar__secondary-actions {
+  justify-content: flex-end;
+}
+
+/* Worktree 搜索框与项目 Tab 宽度一致，避免输入时推挤相邻控件。 */
+.worktree-toolbar__search {
+  width: 200px;
+}
+
+/* AI 用量浮层保留稳定宽度和紧凑行距。 */
+.worktree-toolbar__usage-tooltip {
+  line-height: 1.8;
+  min-width: 180px;
+}
+
+/* AI 用量浮层标题与明细保持紧密关联。 */
+.worktree-toolbar__usage-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* AI 用量名称与数值分居两端，确保多行列对齐。 */
+.worktree-toolbar__usage-row {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+/* 用量标签可悬停查看详情，并移除 Tag 默认外边距。 */
+.worktree-toolbar__usage-tag {
+  cursor: help;
+  margin: 0;
+}
+
+/* 排序说明使用 Ant Design 次级文字色和紧凑字号。 */
+.worktree-toolbar__sort-label {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+/* Worktree 排序切换器沿用顶部视图 Segmented 的质感，只按小尺寸轻微增强边界。 */
+.worktree-toolbar .worktree-sort-segmented {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+/* 小号选中块只给极轻的贴合阴影，避免像独立悬浮卡片。 */
+.worktree-toolbar .worktree-sort-segmented .ant-segmented-thumb,
+.worktree-toolbar .worktree-sort-segmented .ant-segmented-item-selected {
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+}
+
+/* 暗色模式使用更暗的内边界，避免出现白边。 */
+html[data-theme='dark'] .worktree-toolbar .worktree-sort-segmented {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* 暗色模式下选中块只保留贴近默认控件的微弱阴影。 */
+html[data-theme='dark']
+  .worktree-toolbar
+  .worktree-sort-segmented
+  .ant-segmented-thumb,
+html[data-theme='dark']
+  .worktree-toolbar
+  .worktree-sort-segmented
+  .ant-segmented-item-selected {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+}

@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
+  App as AntApp,
   Collapse,
   Tag,
   Button,
@@ -12,6 +13,10 @@ import {
   Checkbox,
   theme,
   Spin,
+  Form,
+  Input,
+  Select,
+  Switch,
 } from 'antd'
 import {
   EyeInvisibleOutlined,
@@ -24,7 +29,6 @@ import {
   PlusOutlined,
   LinkOutlined,
   RocketOutlined,
-  UnorderedListOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
   FileTextOutlined,
@@ -32,13 +36,23 @@ import {
   PushpinOutlined,
   GitlabOutlined,
   ConsoleSqlOutlined,
+  EditOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
 import {
-  TASK_STATUSES,
   getTaskStatusMeta,
+  getTaskStatuses,
   normalizeTaskLinkItems,
 } from '../worktreeLogic.ts'
-import { isStepDone, computeWorkflowProgress } from '../workflowLogic.ts'
+import {
+  TASK_ARG_MODE_APPEND_PATH,
+  TASK_ARG_MODE_AUTO,
+  TASK_ARG_MODE_NONE,
+  buildTaskWorkflowSteps,
+  computeWorkflowProgress,
+  isStepDone,
+  normalizeWorkflowSteps,
+} from '../workflowLogic.ts'
 import {
   getRunnableWorkflowSteps,
   getWorkflowStepRunStatus,
@@ -53,10 +67,19 @@ import { VscodeIcon } from '../icons.tsx'
 import ClaudeUsageTag from './ClaudeUsageTag.tsx'
 import TaskLinksEditor from './TaskLinksEditor.tsx'
 import SingleLineText from './SingleLineText.tsx'
+import { withConfirmDefaults } from '../modalDefaults.ts'
+import './WorktreePanel.css'
 
-// 进度徽标用圆点展示的最大步骤数阈值：步骤数 ≤ 此值时用一排圆点直观展示，
-// 超过则改用紧凑的「✓ N/M」文字，避免圆点过多把任务行撑长。
-const PROGRESS_DOT_MAX = 5
+// PRIVATE_WORKFLOW_EDITOR_Z_INDEX 存储项目私有流程编辑弹层层级，需高于外层需求流程弹层。
+const PRIVATE_WORKFLOW_EDITOR_Z_INDEX = 1200
+// PRIVATE_WORKFLOW_KEY_PREFIX 存储新增项目私有步骤的稳定 key 前缀。
+const PRIVATE_WORKFLOW_KEY_PREFIX = 'private-step'
+// PRIVATE_WORKFLOW_TASK_ARG_OPTIONS 存储私有步骤任务目录参数模式选项。
+const PRIVATE_WORKFLOW_TASK_ARG_OPTIONS = [
+  { label: '自动', value: TASK_ARG_MODE_AUTO },
+  { label: '不追加', value: TASK_ARG_MODE_NONE },
+  { label: '总是追加', value: TASK_ARG_MODE_APPEND_PATH },
+]
 
 // Worktree 任务视角面板：按任务（worktreesRoot 下的目录）分组，
 // 每组展示该任务涉及的所有项目 worktree 及其分支/状态，支持打开/删除/prune。
@@ -66,17 +89,20 @@ const PROGRESS_DOT_MAX = 5
  * @param {object} props - 组件属性
  * @param {string} props.taskName - 任务名（作为状态映射的键）
  * @param {string} [props.statusKey] - 当前状态 key（未设置则回退默认「未开始」）
+ * @param {Array<object>} [props.taskStatuses] - 当前工作区动态任务状态定义列表。
  * @param {(taskName:string, statusKey?:string)=>void} props.onChange - 切换状态回调
  * @returns {JSX.Element} 状态标签下拉
  */
-function TaskStatusControl({ taskName, statusKey, onChange }) {
+function TaskStatusControl({ taskName, statusKey, taskStatuses, onChange }) {
   // meta 为当前状态的展示信息（label/color）；未设置时兜底为「未开始」
-  const meta = getTaskStatusMeta(statusKey)
+  const meta = getTaskStatusMeta(statusKey, taskStatuses)
+  // availableTaskStatuses 存储当前工作区按用户顺序配置的完整状态菜单。
+  const availableTaskStatuses = getTaskStatuses(taskStatuses)
   // 下拉菜单项：列出全部状态（含「未开始」），选中即写回
-  const menuItems = TASK_STATUSES.map((s) => ({
+  const menuItems = availableTaskStatuses.map((s) => ({
     key: s.key,
     label: (
-      <Tag color={s.color} style={{ marginInlineEnd: 0 }}>
+      <Tag color={s.color} className="task-status-menu-tag">
         {s.label}
       </Tag>
     ),
@@ -85,10 +111,7 @@ function TaskStatusControl({ taskName, statusKey, onChange }) {
     // stopPropagation 必须放在 Dropdown 外层的包裹元素上：
     // 若放在 Dropdown 的子元素上，会被 antd Dropdown(rc-trigger) 克隆子节点时覆盖掉 onClick，
     // 导致点击仍冒泡到 Collapse 头部触发展开/折叠。外层包裹则由我们完全掌控，可靠拦截冒泡。
-    <span
-      onClick={(e) => e.stopPropagation()}
-      style={{ display: 'inline-flex', cursor: 'pointer' }}
-    >
+    <span className="task-status-control" onClick={(e) => e.stopPropagation()}>
       <Dropdown
         trigger={['click']}
         menu={{
@@ -97,8 +120,8 @@ function TaskStatusControl({ taskName, statusKey, onChange }) {
           onClick: ({ key }) => onChange(taskName, key),
         }}
       >
-        <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
-          {meta.label} <DownOutlined style={{ fontSize: 10 }} />
+        <Tag color={meta.color} className="worktree-title-tag task-status-tag">
+          {meta.label} <DownOutlined className="task-status-chevron" />
         </Tag>
       </Dropdown>
     </span>
@@ -296,21 +319,134 @@ function WorkflowControl({
   lastStepOutputs = {},
   onViewLastOutput,
   onViewCurrentOutput,
+  projectWorkflowSteps = {},
+  onSaveProjectWorkflowSteps,
 }) {
   // open 控制 Modal 开合（受控）；点击步骤后不自动关闭，便于连续操作多个步骤
   const [open, setOpen] = useState(false)
+  // editingPrivateStep 存储当前新增或编辑的项目私有步骤元数据；null 表示编辑弹层关闭。
+  const [editingPrivateStep, setEditingPrivateStep] = useState(null)
+  // privateStepForm 存储项目私有步骤编辑表单实例。
+  const [privateStepForm] = Form.useForm()
+  // savingPrivateStep 标记私有步骤是否正在写入配置，防止重复提交。
+  const [savingPrivateStep, setSavingPrivateStep] = useState(false)
   // 取主题 token，用于步骤分隔线等颜色适配明暗主题
   const { token } = theme.useToken()
+  // message 与 modal 存储跟随当前主题的反馈和确认框 API。
+  const { message, modal } = AntApp.useApp()
+
+  // projectOptions 存储当前任务可选择的项目列表，私有流程只能绑定任务中实际存在的项目。
+  const projectOptions = useMemo(
+    () =>
+      (Array.isArray(task?.worktrees) ? task.worktrees : [])
+        .filter((worktree) => worktree?.projectPath)
+        .map((worktree) => ({
+          label: worktree.project || worktree.projectPath,
+          value: worktree.projectPath,
+        })),
+    [task]
+  )
+
+  /**
+   * 打开项目私有流程编辑弹层。
+   * @param {object|null} step - 已有私有步骤；传 null 时新建
+   */
+  const openPrivateStepEditor = (step = null) => {
+    // defaultProjectPath 存储新建时默认选中的首个项目路径。
+    const defaultProjectPath =
+      step?.projectPath || projectOptions[0]?.value || ''
+    // formValues 存储写入编辑表单的当前步骤值。
+    const formValues = {
+      projectPath: defaultProjectPath,
+      label: step?.label || '',
+      command: step?.command || '',
+      autoCheckOnSuccess: step?.autoCheckOnSuccess !== false,
+      stopOnFailure: step?.stopOnFailure !== false,
+      taskArgMode: step?.taskArgMode || TASK_ARG_MODE_AUTO,
+    }
+    setEditingPrivateStep(
+      step
+        ? { projectPath: step.projectPath, privateKey: step.privateKey }
+        : { projectPath: defaultProjectPath, privateKey: '' }
+    )
+    privateStepForm.setFieldsValue(formValues)
+  }
+
+  /**
+   * 保存新增或编辑的项目私有流程步骤。
+   */
+  const savePrivateStep = async () => {
+    // values 存储表单校验通过后的项目和步骤配置。
+    const values = await privateStepForm.validateFields()
+    // projectPath 存储本次保存目标项目的绝对路径。
+    const projectPath = String(values.projectPath || '').trim()
+    // privateKey 存储私有步骤在项目范围内的稳定 key。
+    const privateKey =
+      editingPrivateStep?.privateKey ||
+      `${PRIVATE_WORKFLOW_KEY_PREFIX}-${Date.now()}`
+    // nextStep 存储本次清洗后待保存的私有步骤。
+    const nextStep = {
+      key: privateKey,
+      label: String(values.label || '').trim(),
+      command: String(values.command || '').trim(),
+      autoCheckOnSuccess: values.autoCheckOnSuccess !== false,
+      stopOnFailure: values.stopOnFailure !== false,
+      taskArgMode: values.taskArgMode || TASK_ARG_MODE_AUTO,
+    }
+    // targetSteps 存储目标项目中除当前步骤外的私有步骤。
+    const targetSteps = normalizeWorkflowSteps(
+      projectWorkflowSteps?.[projectPath] ?? []
+    ).filter((step) => step.key !== privateKey)
+    setSavingPrivateStep(true)
+    try {
+      await onSaveProjectWorkflowSteps?.(projectPath, [
+        ...targetSteps,
+        nextStep,
+      ])
+      setEditingPrivateStep(null)
+      message.success(
+        editingPrivateStep?.privateKey ? '私有流程已更新' : '私有流程已添加'
+      )
+    } catch (error) {
+      message.error(`保存私有流程失败：${error?.message || '未知错误'}`)
+    } finally {
+      setSavingPrivateStep(false)
+    }
+  }
+
+  /**
+   * 删除指定项目私有步骤，并持久化剩余配置。
+   * @param {object} step - 待删除的私有步骤
+   */
+  const deletePrivateStep = (step) => {
+    modal.confirm(
+      withConfirmDefaults({
+        title: '删除私有流程',
+        content: `确认删除「${step.label}」？`,
+        okType: 'danger',
+        onOk: async () => {
+          // nextSteps 存储删除目标步骤后该项目剩余的私有流程。
+          const nextSteps = normalizeWorkflowSteps(
+            projectWorkflowSteps?.[step.projectPath] ?? []
+          ).filter((item) => item.key !== step.privateKey)
+          await onSaveProjectWorkflowSteps?.(step.projectPath, nextSteps)
+          message.success('私有流程已删除')
+        },
+      })
+    )
+  }
 
   // 无步骤配置时不渲染入口（设置里清空了全部步骤的极端情况）
-  if (!steps || steps.length === 0) return null
+  if (
+    (!steps || steps.length === 0) &&
+    (!onSaveProjectWorkflowSteps || projectOptions.length === 0)
+  )
+    return null
 
   // progress 该任务的 checkbox 步骤完成进度 {done,total}，用于按钮上的徽标展示
   const progress = computeWorkflowProgress(steps, workflowMap, taskName)
-  // allDone 是否全部步骤已完成：用于切换「绿色对勾」与「进度圆点」两种展示
+  // allDone 是否全部步骤已完成：任务栏只展示完成/未完成二态，具体步数留在弹层内。
   const allDone = progress.total > 0 && progress.done === progress.total
-  // notStarted 是否一步未做：用于淡化未开始状态的视觉（不显眼，避免像未读红点那样制造焦虑）
-  const notStarted = progress.done === 0
   // runnableSteps 存储当前任务流程中配置了命令的步骤，决定是否展示/启用批量运行入口。
   const runnableSteps = getRunnableWorkflowSteps(steps)
   // taskRunSummary 存储任务级流程执行摘要，用于入口上显示执行中/失败态。
@@ -348,17 +484,27 @@ function WorkflowControl({
             </div>
           )}
         </div>
-        <Button
-          size="small"
-          type="primary"
-          ghost
-          icon={<ThunderboltOutlined />}
-          disabled={runnableSteps.length === 0 || hasAnyRunning}
-          loading={hasAnyRunning}
-          onClick={() => onRunWorkflowSteps?.(task)}
-        >
-          运行全部
-        </Button>
+        <Space size={8}>
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            disabled={projectOptions.length === 0}
+            onClick={() => openPrivateStepEditor()}
+          >
+            添加私有流程
+          </Button>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            icon={<ThunderboltOutlined />}
+            disabled={runnableSteps.length === 0 || hasAnyRunning}
+            loading={hasAnyRunning}
+            onClick={() => onRunWorkflowSteps?.(task, undefined, steps)}
+          >
+            运行全部
+          </Button>
+        </Space>
       </div>
       {steps.map((step) => {
         // rawDone 当前步骤持久化的原始勾选态（所有步骤都可勾选，勾选态来自 workflowMap）
@@ -437,6 +583,14 @@ function WorkflowControl({
                   />
                 </Checkbox>
                 {statusTag}
+                {step.scope === 'project' && (
+                  <Tag
+                    color="blue"
+                    style={{ marginInlineEnd: 0, flexShrink: 0 }}
+                  >
+                    {step.projectName} 私有
+                  </Tag>
+                )}
               </div>
             </div>
             {/* 文案后的操作区：查看（icon-only 省空间，避免挤占文案）+ 执行。
@@ -487,11 +641,30 @@ function WorkflowControl({
                     size="small"
                     type="link"
                     disabled={hasAnyRunning}
-                    onClick={() => onRunWorkflowSteps?.(task, step.key)}
+                    onClick={() => onRunWorkflowSteps?.(task, step.key, steps)}
                     style={{ paddingInline: 4 }}
                   >
                     从此处运行
                   </Button>
+                </>
+              )}
+              {step.scope === 'project' && (
+                <>
+                  <Tooltip title="编辑私有流程">
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => openPrivateStepEditor(step)}
+                    />
+                  </Tooltip>
+                  <Tooltip title="删除私有流程">
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => deletePrivateStep(step)}
+                    />
+                  </Tooltip>
                 </>
               )}
             </div>
@@ -507,118 +680,31 @@ function WorkflowControl({
       onClick={(e) => e.stopPropagation()}
       style={{ display: 'inline-flex' }}
     >
-      <Tooltip
-        title={
-          progress.total > 0
-            ? `需求流程：已完成 ${progress.done}/${progress.total} 步`
-            : '查看/操作需求流程'
-        }
-      >
-        {/* 流程入口按钮：用分段圆点表达进度，比生硬的「0/4」数字更友好直观。
-            无可勾选步骤时只显示「流程」；全部完成显示绿色对勾；否则用一排小圆点（已完成实心、未完成空心）一眼看完成度 */}
+      <Tooltip title={allDone ? '需求流程已完成' : '需求流程未完成'}>
+        {/* 任务栏入口只保留 Ant Design 状态图标，避免文字和前置图标与右侧操作区争抢空间。 */}
         <Button
           size="small"
           type="link"
-          icon={<UnorderedListOutlined />}
+          aria-label={`打开需求流程 ${taskName}`}
+          icon={
+            allDone ? (
+              <CheckCircleOutlined
+                data-testid={`workflow-status-complete-${taskName}`}
+                style={{ color: token.colorSuccess }}
+              />
+            ) : (
+              <ClockCircleOutlined
+                data-testid={`workflow-status-pending-${taskName}`}
+                style={{ color: token.colorWarning }}
+              />
+            )
+          }
           onClick={(e) => {
             e.stopPropagation()
             setOpen(true)
           }}
           style={{ paddingInline: 4 }}
-        >
-          流程
-          {taskRunSummary.hasRunning && (
-            <Spin size="small" style={{ marginInlineStart: 5 }} />
-          )}
-          {!taskRunSummary.hasRunning && taskRunSummary.hasFailed && (
-            <WarningOutlined
-              style={{ color: token.colorError, marginInlineStart: 5 }}
-            />
-          )}
-          {/* 进度指示容器：对勾/圆点/文字三态互斥切换（尤其 allDone 切换）宽度不同会撑动标题行，
-              统一包一层 minWidth 容器占位，让 allDone 时的对勾与进度态占据一致宽度，避免横向抖动（CLS）。
-              左对齐保证内容起点稳定，minWidth 取一个能容纳典型进度展示的经验值 */}
-          {progress.total > 0 && (
-            <span
-              style={{
-                marginInlineStart: 5,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                minWidth: 46,
-                verticalAlign: 'middle',
-              }}
-            >
-              {allDone && (
-                // 全部完成：绿色对勾，给用户「这条流程已走完」的明确正反馈
-                <CheckCircleOutlined style={{ color: token.colorSuccess }} />
-              )}
-              {!allDone && progress.total <= PROGRESS_DOT_MAX && (
-                // 步骤数较少（≤阈值）：一排圆点，每个步骤一个；已完成的用主题色实心、未完成的用淡灰空心，最直观
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                  }}
-                >
-                  {Array.from({ length: progress.total }).map((_, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        // 前 done 个圆点为已完成（主题色实心），其余为未完成（淡灰空心感）
-                        background:
-                          i < progress.done
-                            ? token.colorPrimary
-                            : token.colorFillSecondary,
-                      }}
-                    />
-                  ))}
-                  {/* 进度文字补充：圆点旁附 N/M 文字，未开始时淡化以降低存在感（不制造「待办焦虑」） */}
-                  <span
-                    style={{
-                      marginInlineStart: 2,
-                      fontSize: 11,
-                      color: notStarted
-                        ? token.colorTextQuaternary
-                        : token.colorTextSecondary,
-                    }}
-                  >
-                    {progress.done}/{progress.total}
-                  </span>
-                </span>
-              )}
-              {!allDone && progress.total > PROGRESS_DOT_MAX && (
-                // 步骤数较多（>阈值）：圆点会排成长条撑宽任务行，改用紧凑「✓图标 + N/M」文字，宽度恒定
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                    fontSize: 12,
-                    color: notStarted
-                      ? token.colorTextQuaternary
-                      : token.colorTextSecondary,
-                  }}
-                >
-                  <CheckCircleOutlined
-                    style={{
-                      fontSize: 11,
-                      color:
-                        progress.done > 0
-                          ? token.colorPrimary
-                          : token.colorTextQuaternary,
-                    }}
-                  />
-                  {progress.done}/{progress.total}
-                </span>
-              )}
-            </span>
-          )}
-        </Button>
+        />
       </Tooltip>
       <Modal
         title={`需求流程 - ${taskName}`}
@@ -629,6 +715,67 @@ function WorkflowControl({
         onCancel={() => setOpen(false)}
       >
         {content}
+      </Modal>
+      <Modal
+        title={editingPrivateStep?.privateKey ? '编辑私有流程' : '添加私有流程'}
+        open={!!editingPrivateStep}
+        zIndex={PRIVATE_WORKFLOW_EDITOR_Z_INDEX}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={savingPrivateStep}
+        onOk={savePrivateStep}
+        onCancel={() => setEditingPrivateStep(null)}
+        destroyOnHidden
+      >
+        <Form
+          form={privateStepForm}
+          layout="vertical"
+          initialValues={{
+            autoCheckOnSuccess: true,
+            stopOnFailure: true,
+            taskArgMode: TASK_ARG_MODE_AUTO,
+          }}
+        >
+          <Form.Item
+            name="projectPath"
+            label="所属项目"
+            rules={[{ required: true, message: '请选择项目' }]}
+          >
+            <Select
+              options={projectOptions}
+              disabled={!!editingPrivateStep?.privateKey}
+            />
+          </Form.Item>
+          <Form.Item
+            name="label"
+            label="流程名称"
+            rules={[
+              { required: true, whitespace: true, message: '请输入流程名称' },
+            ]}
+          >
+            <Input placeholder="例如：运行项目单元测试" />
+          </Form.Item>
+          <Form.Item name="command" label="执行命令">
+            <Input.TextArea rows={4} placeholder="留空时仅作为可勾选步骤" />
+          </Form.Item>
+          <Form.Item name="taskArgMode" label="任务目录参数">
+            <Select options={PRIVATE_WORKFLOW_TASK_ARG_OPTIONS} />
+          </Form.Item>
+          <Form.Item
+            name="autoCheckOnSuccess"
+            label="成功后自动勾选"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="stopOnFailure"
+            label="失败后停止后续步骤"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+        </Form>
       </Modal>
     </span>
   )
@@ -693,6 +840,7 @@ function wtStatusTags(wt) {
  * @param {object} props - 组件属性
  * @param {Array} props.tasks - 按任务分组的 worktree 数据
  * @param {boolean} props.loading - 是否加载中
+ * @param {string} [props.emptyDescription] - 无可展示任务时的空态文案
  * @param {string[]|undefined} props.activeKeys - 受控展开的任务面板 key 集合
  * @param {(keys:string[])=>void} props.onActiveKeysChange - 展开集合变化回调
  * @param {(path:string)=>void} props.onOpenFinder - 打开 Finder
@@ -703,6 +851,7 @@ function wtStatusTags(wt) {
  * @param {(task:object)=>void} props.onRemoveTask - 删除整个任务下的所有 worktree
  * @param {(wt:object)=>void} props.onPrune - 清理某项目的失效 worktree
  * @param {Record<string,string>} props.taskStatusMap - 任务名 → 人工状态 key 的映射
+ * @param {Array<object>} [props.taskStatuses] - 当前工作区动态任务状态定义列表。
  * @param {(taskName:string, statusKey?:string)=>void} props.onTaskStatusChange - 切换/清除任务状态
  * @param {Record<string,string|string[]|Array<{name?:string,url?:string}>>} props.taskLinkMap - 任务名 → Jira/飞书需求/工单链接条目列表 的映射
  * @param {(taskName:string, links:Array<{name:string,url:string}>|string[]|string)=>void} props.onTaskLinkChange - 设置/清除任务链接
@@ -713,6 +862,8 @@ function wtStatusTags(wt) {
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
  * @param {'claude-code'|'codex'} props.aiUsageTool - 当前参与 Token 统计的 AI 工具
  * @param {Array<{key:string,label:string,type:string}>} props.workflowSteps - 工作流（需求流程）步骤清单（从全局配置读取）
+ * @param {Record<string,Array<object>>} props.projectWorkflowSteps - 项目绝对路径到私有流程步骤的映射
+ * @param {(projectPath:string,steps:Array<object>)=>Promise<void>} props.onSaveProjectWorkflowSteps - 保存项目私有流程
  * @param {Record<string,string[]>} props.workflowMap - 任务名 → 已勾选步骤 key 数组 的映射
  * @param {(taskName:string, stepKey:string, done:boolean)=>void} props.onToggleStep - 切换某任务某 checkbox 步骤的勾选态
  * @param {(task:object, step:object)=>void} props.onRunStepAction - 执行某任务某 action 步骤
@@ -729,6 +880,7 @@ function wtStatusTags(wt) {
 export default function WorktreePanel({
   tasks,
   loading,
+  emptyDescription = '暂无 worktree。点击右上角「创建 Worktree」按任务批量创建',
   activeKeys,
   onActiveKeysChange,
   onOpenFinder,
@@ -739,6 +891,7 @@ export default function WorktreePanel({
   onRemoveTask,
   onPrune,
   taskStatusMap = {},
+  taskStatuses = [],
   onTaskStatusChange,
   taskLinkMap = {},
   onTaskLinkChange,
@@ -750,6 +903,8 @@ export default function WorktreePanel({
   claudeUsageMap = {},
   aiUsageTool = 'claude-code',
   workflowSteps = [],
+  projectWorkflowSteps = {},
+  onSaveProjectWorkflowSteps,
   workflowMap = {},
   onToggleStep,
   onRunStepAction,
@@ -784,7 +939,8 @@ export default function WorktreePanel({
     // scrollContainer 存储当前任务的徽标横向滚动节点。
     const scrollContainer = event.currentTarget
     // hasHorizontalOverflow 标记徽标内容是否超出当前动态分配到的宽度。
-    const hasHorizontalOverflow = scrollContainer.scrollWidth > scrollContainer.clientWidth
+    const hasHorizontalOverflow =
+      scrollContainer.scrollWidth > scrollContainer.clientWidth
     // usesVerticalWheel 标记本次主要来自普通鼠标纵向滚轮，而非触控板横向手势。
     const usesVerticalWheel = Math.abs(event.deltaY) > Math.abs(event.deltaX)
     if (!hasHorizontalOverflow || !usesVerticalWheel) return
@@ -824,12 +980,15 @@ export default function WorktreePanel({
   // 三态（loading / empty / 有数据）共用同一 minHeight 外层容器，避免加载态→空态→数据态之间的高度跳变（CLS）
   if (!tasks || tasks.length === 0) {
     return (
-      <div style={{ minHeight: 240 }}>
-        {loading ? null : (
-          <Empty
-            description="暂无 worktree。点击右上角「创建 Worktree」按任务批量创建"
-            style={{ marginTop: 60 }}
-          />
+      <div
+        className="task-view-state"
+        role={loading ? 'status' : undefined}
+        aria-label={loading ? 'Worktree 加载状态' : undefined}
+      >
+        {loading ? (
+          <Spin size="small" />
+        ) : (
+          <Empty description={emptyDescription} />
         )}
       </div>
     )
@@ -853,6 +1012,12 @@ export default function WorktreePanel({
     const hasTaskLinks = taskLinks.length > 0
     // projectCount 存储当前任务覆盖的 worktree 项目数量，用于任务标题第一枚信息徽标
     const projectCount = t.worktrees.length
+    // taskWorkflowSteps 存储当前任务合并通用与各项目私有配置后的实际流程步骤。
+    const taskWorkflowSteps = buildTaskWorkflowSteps(
+      workflowSteps,
+      projectWorkflowSteps,
+      t.worktrees
+    )
     // projectCountTag 存储空心方形项目数徽标；替代 Badge 圆点，让它与状态/链接/环境等标签同级展示
     const projectCountTag = (
       <Tooltip title={`${projectCount} 个项目`}>
@@ -953,24 +1118,43 @@ export default function WorktreePanel({
             className="worktree-task-name"
             style={{ maxWidth: 360, fontWeight: 600 }}
           />
-          <div className="worktree-task-badges-scroll" onWheel={handleBadgeWheel}>
+          <div
+            className="worktree-task-badges-scroll"
+            onWheel={handleBadgeWheel}
+          >
             {taskPinned && (
-              <Tag color="blue" style={{ marginInlineEnd: 0 }}>置顶</Tag>
+              <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+                置顶
+              </Tag>
             )}
             {taskHidden && (
-              <Tag color="default" style={{ marginInlineEnd: 0 }}>已隐藏</Tag>
+              <Tag color="default" style={{ marginInlineEnd: 0 }}>
+                已隐藏
+              </Tag>
             )}
             {/* 徽标组独立横向滚动，任务名和右侧操作始终保持在固定区域。 */}
             {titleBadges.projectCount && projectCountTag}
             {titleBadges.taskStatus && (
-              <TaskStatusControl taskName={t.task} statusKey={taskStatusMap[t.task]} onChange={onTaskStatusChange} />
+              <TaskStatusControl
+                taskName={t.task}
+                statusKey={taskStatusMap[t.task]}
+                taskStatuses={taskStatuses}
+                onChange={onTaskStatusChange}
+              />
             )}
             {titleBadges.taskLinks && hasTaskLinks && taskLinkTags}
             {titleBadges.envHealth && onEnvCheck && (
-              <EnvHealthStatusTag task={t} entry={envHealthMap[t.task]} onClick={onEnvCheck} />
+              <EnvHealthStatusTag
+                task={t}
+                entry={envHealthMap[t.task]}
+                onClick={onEnvCheck}
+              />
             )}
             {titleBadges.claudeUsage && (
-              <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+              <span
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: 'inline-flex' }}
+              >
                 <ClaudeUsageTag
                   taskName={t.task}
                   summary={claudeUsageMap[t.task]}
@@ -992,7 +1176,9 @@ export default function WorktreePanel({
           <WorkflowControl
             taskName={t.task}
             task={t}
-            steps={workflowSteps}
+            steps={taskWorkflowSteps}
+            projectWorkflowSteps={projectWorkflowSteps}
+            onSaveProjectWorkflowSteps={onSaveProjectWorkflowSteps}
             workflowMap={workflowMap}
             onToggleStep={onToggleStep}
             onRunStepAction={onRunStepAction}

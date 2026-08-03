@@ -99,9 +99,9 @@ export const IPC = {
   LOAD_TASK_ENV_HEALTH: 'load-task-env-health',
   // 保存任务环境检查缓存（~/.visualWorktree/task-env-health.json）
   SAVE_TASK_ENV_HEALTH: 'save-task-env-health',
-  // 读取任务卡点备注映射（~/.visualWorktree/task-blockers.json）
+  // 读取任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   LOAD_TASK_BLOCKERS: 'load-task-blockers',
-  // 保存任务卡点备注映射（~/.visualWorktree/task-blockers.json）
+  // 保存任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   SAVE_TASK_BLOCKERS: 'save-task-blockers',
   // 读取想法工作流定义列表（~/.visualWorktree/idea-workflows.json）
   LOAD_IDEA_WORKFLOWS: 'load-idea-workflows',
@@ -111,4 +111,16 @@ export const IPC = {
   LOAD_IDEA_RUNS: 'load-idea-runs',
   // 追加一条想法工作流运行记录
   APPEND_IDEA_RUN: 'append-idea-run',
-};
+  // 读取本机安全存储中的 AI 模型配置状态
+  LOAD_AI_MODEL_SETTINGS: 'load-ai-model-settings',
+  // 加密保存并同步 AI 模型配置
+  SAVE_AI_MODEL_SETTINGS: 'save-ai-model-settings',
+  // 通过主进程请求 AI 助手后端
+  SEND_AI_ASSISTANT_MESSAGE: 'send-ai-assistant-message',
+  // 请求 AI 助手流式回答
+  STREAM_AI_ASSISTANT_MESSAGE: 'stream-ai-assistant-message',
+  // 同步自定义标题栏的明暗主题
+  SET_WINDOW_THEME: 'set-window-theme',
+  // 推送 AI 助手的单个文本片段
+  AI_ASSISTANT_STREAM_CHUNK: 'ai-assistant-stream-chunk',
+}

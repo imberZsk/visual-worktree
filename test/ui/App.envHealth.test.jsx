@@ -5,6 +5,7 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  act,
 } from '@testing-library/react'
 import { App as AntApp } from 'antd'
 import {
@@ -27,6 +28,7 @@ const mockApi = vi.hoisted(() => ({
   getClaudeTasksSummary: vi.fn(),
   getClaudeSessionsByTask: vi.fn(),
   onStepOutput: vi.fn(),
+  onBatchProgress: vi.fn(),
   saveTaskWorkflow: vi.fn(),
   saveTaskEnvHealth: vi.fn(),
   saveTaskLinks: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock('../../src/ui/api.ts', () => ({
     getClaudeTasksSummary: mockApi.getClaudeTasksSummary,
     getClaudeSessionsByTask: mockApi.getClaudeSessionsByTask,
     onStepOutput: mockApi.onStepOutput,
+    onBatchProgress: mockApi.onBatchProgress,
     saveTaskWorkflow: mockApi.saveTaskWorkflow,
     saveTaskEnvHealth: mockApi.saveTaskEnvHealth,
     saveTaskLinks: mockApi.saveTaskLinks,
@@ -172,6 +175,7 @@ describe('App 自动环境检查', () => {
     mockApi.getClaudeTasksSummary.mockReset().mockResolvedValue({})
     mockApi.getClaudeSessionsByTask.mockReset().mockResolvedValue([])
     mockApi.onStepOutput.mockReset().mockReturnValue(() => {})
+    mockApi.onBatchProgress.mockReset().mockReturnValue(() => {})
     mockApi.saveTaskWorkflow.mockReset().mockResolvedValue(true)
     mockApi.saveTaskEnvHealth.mockReset().mockResolvedValue(true)
     mockApi.saveTaskLinks.mockReset().mockResolvedValue(true)
@@ -221,6 +225,59 @@ describe('App 自动环境检查', () => {
 
     await waitFor(() => {
       expect(screen.getByText('环境正常')).toBeTruthy()
+    })
+  })
+
+  it('提交创建后关闭表单弹层并展示逐项目创建进度', async () => {
+    // resolveCreate 延迟创建完成，用于检查请求执行期间的两个弹层状态。
+    let resolveCreate
+    // progressListener 存储 UI 注册的进度事件回调，用于模拟主进程逐项推送。
+    let progressListener
+    mockApi.batchAddWorktree.mockReset().mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      })
+    )
+    mockApi.onBatchProgress.mockImplementation((listener) => {
+      progressListener = listener
+      return vi.fn()
+    })
+
+    renderApp()
+
+    await waitFor(() => expect(screen.getByText('创建 Worktree')).toBeTruthy())
+    fireEvent.click(screen.getByText('创建 Worktree'))
+    fireEvent.change(screen.getByPlaceholderText('PROJ-1234-需求简述'), {
+      target: { value: 'TASK-NEW' },
+    })
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
+    fireEvent.click(screen.getByTitle('projA'))
+    fireEvent.click(getCreateConfirmButton())
+
+    await waitFor(() => {
+      // createModal 存储原表单弹层，用关闭动画 class 判断它已退出可交互状态。
+      const createModal = screen
+        .getByText('按任务创建 Worktree')
+        .closest('.ant-modal')
+      expect(createModal?.className).toContain('ant-zoom-leave')
+      expect(screen.getByText('正在创建 Worktree')).toBeTruthy()
+      expect(screen.getByText('0/1 · 正在准备创建...')).toBeTruthy()
+    })
+
+    act(() => {
+      progressListener({ done: 1, total: 1, current: 'projA' })
+    })
+    await waitFor(() => expect(screen.getByText('1/1 · projA')).toBeTruthy())
+
+    await act(async () => {
+      resolveCreate([{ project: 'projA', success: true }])
+    })
+    await waitFor(() => {
+      // progressModal 存储创建进度弹层，完成后应进入关闭动画。
+      const progressModal = screen
+        .getByText('正在创建 Worktree')
+        .closest('.ant-modal')
+      expect(progressModal?.className).toContain('ant-zoom-leave')
     })
   })
 

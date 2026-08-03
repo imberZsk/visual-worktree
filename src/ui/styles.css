@@ -13,11 +13,37 @@ body,
   scrollbar-gutter: stable;
 }
 
-/* 视图切换时的淡入 + 轻微上移，缓和 Tab 切换的生硬感 */
-/* min-height 常驻生效：内容不足一屏时也保持稳定的高度基准，避免加载完成后容器塌陷造成的整屏跳动（CLS） */
+/* AntD 消息容器占满视口后居中整个消息组，避免负位移把并发 Toast 推出 overflow 可视区。 */
+.global-message-list {
+  justify-content: center;
+}
+
+/* 视图切换时的淡入 + 轻微上移；固定最小高度避免数据加载前后内容区塌陷。 */
 .view-fade {
   animation: viewFadeIn 0.22s ease-out;
   min-height: calc(100vh - 96px);
+}
+
+/* 工作区切换遮罩占满内容区，避免不同 Tab 的空列表闪烁；Header 在遮罩外仍保持清晰可见。 */
+.workspace-switch-spin,
+.workspace-switch-spin > .ant-spin-container {
+  min-height: calc(100vh - 96px);
+}
+
+/* Worktree 与看板首次加载共用内容区局部状态，不遮挡顶部导航和工具栏。 */
+.task-view-state {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 240px;
+}
+
+/* 历史记录异步切换时保留紧凑稳定高度，小号 loading 不会撑大弹层或造成列表跳动。 */
+.history-task-loading {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @keyframes viewFadeIn {
@@ -34,6 +60,15 @@ body,
 /* 修复表格固定右列在垂直滚动时出现的层级 bug（sticky 列 z-index 过高遮盖上方内容） */
 .ant-table-body .ant-table-cell-fix-right {
   z-index: 1 !important;
+}
+
+/* 项目表无数据/加载背景随窗口高度伸缩；clamp 防止小窗口溢出或大屏空态被无限拉长。 */
+.project-table-empty .ant-table-placeholder {
+  height: clamp(240px, calc(100vh - 330px), 720px);
+}
+
+.project-table-empty .ant-table-placeholder > td {
+  height: 100%;
 }
 
 /* AntD Modal 默认从最近点击位置缩放；全局固定中心原点，让弹层直接从屏幕中间出现 */
@@ -59,30 +94,6 @@ body,
 .path-profile-select .ant-select-arrow {
   font-size: 10px;
   inset-inline-end: 8px;
-}
-
-/* Worktree 排序切换器沿用顶部视图 Segmented 的质感，只按小尺寸轻微增强边界 */
-.worktree-sort-segmented {
-  border-radius: 6px;
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
-}
-
-/* 小号选中块只给极轻的贴合阴影，避免像独立悬浮卡片 */
-.worktree-sort-segmented .ant-segmented-thumb,
-.worktree-sort-segmented .ant-segmented-item-selected {
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
-}
-
-/* 暗色模式使用更暗的内边界，避免出现白边 */
-html[data-theme='dark'] .worktree-sort-segmented {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-}
-
-/* 暗色模式下选中块只保留贴近默认控件的微弱阴影 */
-html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-thumb,
-html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-item-selected {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
 }
 
 /* 任务标题徽标统一为 22px 高度，图标和文字垂直居中，避免环境/链接/Token 标签各自错位 */
@@ -179,61 +190,104 @@ html[data-theme='dark'] .worktree-sort-segmented .ant-segmented-item-selected {
   flex: 0 0 auto;
 }
 
-/* Token 费用页使用统一紧凑节奏，避免 AntD 默认 Form.Item 间距与自定义布局叠加。 */
-[data-testid='token-pricing-settings-panel'] .ant-form-item {
-  margin-bottom: 0;
+/* AI 助手入口固定在内容右下角，并避开系统窗口边缘。 */
+.ai-assistant-trigger {
+  bottom: 24px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
+  position: fixed;
+  right: 24px;
+  z-index: 900;
 }
 
-/* 工具选择与计价规则之间保留一个标准中等间距。 */
-.token-pricing-tool-field {
-  margin-bottom: 16px !important;
-}
-
-/* 计价标题、说明和开关在同一行组织，信息与操作保持清晰对应。 */
-.token-pricing-rule-header {
-  align-items: flex-start;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+/* 聊天区域使用固定上下结构，消息过多时只滚动消息列表。 */
+.ai-assistant-chat {
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
-/* 标题说明区域允许收缩，长文案在抽屉窄屏下自然换行。 */
-.token-pricing-rule-copy {
+/* 消息列表占据抽屉剩余高度，避免输入区被内容挤出视口。 */
+.ai-assistant-messages {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
 }
 
-/* 说明文字使用 AntD 次级文字色与紧凑行高。 */
-.token-pricing-rule-description {
-  font-size: 12px;
-  line-height: 1.5;
+/* 所有聊天消息限制宽度并允许长文本换行。 */
+.ai-assistant-message {
+  max-width: 85%;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
 }
 
-/* 四类 Token 单价采用两列紧凑网格；窄屏自动回落为单列。 */
-.token-pricing-fields-grid {
-  display: grid;
-  gap: 12px 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 用户消息靠右展示。 */
+.ai-assistant-message-user {
+  align-self: flex-end;
+  background: var(--ant-color-primary, #1677ff);
+  border-radius: 8px 8px 2px 8px;
+  color: #fff;
 }
 
-/* 汇率占满网格整行，避免最后一项悬空。 */
-.token-pricing-exchange-field {
-  grid-column: 1 / -1;
+/* 智能体消息靠左展示，并跟随 Ant Design 主题色变量。 */
+.ai-assistant-message-assistant {
+  align-self: flex-start;
+  background: var(--ant-color-fill-secondary, #f0f0f0);
+  border-radius: 8px 8px 8px 2px;
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
 }
 
-@media (max-width: 520px) {
-  .token-pricing-fields-grid {
-    grid-template-columns: minmax(0, 1fr);
+/* 错误消息靠左展示，使用错误色背景提示本次请求未完成。 */
+.ai-assistant-message-error {
+  align-self: flex-start;
+  background: var(--ant-color-error-bg, #fff2f0);
+  border: 1px solid var(--ant-color-error-border, #ffccc7);
+  border-radius: 8px 8px 8px 2px;
+  color: var(--ant-color-error, #ff4d4f);
+}
+
+/* 加载消息维持固定高度，避免转圈出现时推动输入区跳动。 */
+.ai-assistant-message-loading {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 42px;
+}
+
+/* 暗色主题下覆盖无 CSS 变量时的亮色兜底，保证消息气泡与抽屉背景协调。 */
+html[data-theme='dark'] .ai-assistant-message-assistant {
+  background: #303030;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 暗色主题下错误气泡使用低亮度红色背景，维持清晰但不过度刺眼。 */
+html[data-theme='dark'] .ai-assistant-message-error {
+  background: #2a1215;
+  border-color: #58181c;
+  color: #ff7875;
+}
+
+/* 输入区固定在聊天框底部，发送按钮维持稳定尺寸。 */
+.ai-assistant-composer {
+  align-items: flex-end;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .ai-assistant-drawer .ant-drawer-content-wrapper {
+    max-width: 100vw;
   }
 
-  .token-pricing-exchange-field {
-    grid-column: auto;
+  .ai-assistant-trigger {
+    bottom: 16px;
+    right: 16px;
   }
 }
 
@@ -299,13 +353,17 @@ html[data-theme='dark'] .env-health-refresh-overlay {
 }
 
 /* 历史任务分页贴合列表底部，不额外撑出一段空白 */
-.history-task-list .ant-list-pagination {
+.history-task-pagination {
   margin-block-end: 0;
+  margin-block-start: 16px;
 }
 
 /* 历史任务列表项用固定左右布局：左侧文本可省略，右侧操作位不随 docsPath 缺失而跳动 */
 .history-task-list .history-task-list-item {
+  border-block-end: 1px solid var(--ant-color-split);
+  display: flex;
   padding-inline: 0;
+  padding-block: 12px;
 }
 
 /* 历史任务单行主体容器，min-width:0 允许左侧内容在固定操作区旁正确收缩 */

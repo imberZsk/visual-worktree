@@ -1,3 +1,9 @@
+import {
+  DEFAULT_TASK_STATUS as DEFAULT_TASK_STATUS_KEY,
+  DEFAULT_TASK_STATUSES,
+  normalizeTaskStatuses,
+} from '../core/taskStatuses.js'
+
 // Worktree 面板前端纯逻辑：与 React/antd 解耦，便于 vitest 单测。
 
 /**
@@ -35,28 +41,16 @@ export function computeActiveKeysAfterCreate(taskName) {
 // 用户需要手动标记「进行中 / 待发布 / 已完成」以便归类与追踪。该状态纯属前端展示，
 // 不参与任何 git 操作，按任务名持久化到 localStorage。
 
-// 任务状态定义列表（研发工作流）：key 为持久化标识，label 为展示名，color 对应 antd Tag 色
-// 「未开始」作为默认/清除状态；其余六个对应完整研发流程阶段
-export const TASK_STATUSES = [
-  { key: 'not-started', label: '未开始', color: 'default' },
-  { key: 'developing', label: '开发中', color: 'processing' },
-  { key: 'self-testing', label: '自测中', color: 'cyan' },
-  { key: 'pending-test', label: '待提测', color: 'orange' },
-  { key: 'testing', label: '测试中', color: 'purple' },
-  { key: 'pending-release', label: '待发布', color: 'gold' },
-  { key: 'released', label: '已发布', color: 'success' },
-]
+// TASK_STATUSES 存储默认任务状态定义，保留现有导出以兼容排序、测试和未传自定义标签的调用方。
+export const TASK_STATUSES = normalizeTaskStatuses(DEFAULT_TASK_STATUSES)
 
-// 默认状态 key：任务从未手动标记时视为「未开始」，展示与存储均以此为兜底
-export const DEFAULT_TASK_STATUS = 'not-started'
+// DEFAULT_TASK_STATUS 存储默认状态 key：未手动标记时视为「未开始」，存储仍使用稳定 key。
+export const DEFAULT_TASK_STATUS = DEFAULT_TASK_STATUS_KEY
 
 // 状态排序权重：按 TASK_STATUSES 数组下标派生，新增/调整状态时此映射自动同步
 export const STATUS_SORT_ORDER = Object.fromEntries(
   TASK_STATUSES.map((s, i) => [s.key, i])
 )
-
-// 状态 key → 状态定义 的索引，便于按 key 取 label/color，避免每次线性查找
-const STATUS_BY_KEY = new Map(TASK_STATUSES.map((s) => [s.key, s]))
 
 // 任务状态映射在 localStorage 中的存储键
 export const TASK_STATUS_STORAGE_KEY = 'vw-task-status'
@@ -64,11 +58,40 @@ export const TASK_STATUS_STORAGE_KEY = 'vw-task-status'
 /**
  * 按状态 key 取状态定义（label/color），未设置/未知时回退到默认「未开始」
  * @param {string} statusKey - 状态标识
- * @returns {{key:string,label:string,color:string}} 状态定义（始终非空，兜底为未开始）
+ * @param {Array<object>} [taskStatuses] - 当前工作区动态状态定义列表
+ * @returns {{key:string,label:string,color:string,kanbanColumn:string}} 状态定义（始终非空，兜底为未开始）
  */
-export function getTaskStatusMeta(statusKey) {
-  // 未设置或未知 key 一律回退默认状态「未开始」，保证任务总有可展示的状态
-  return STATUS_BY_KEY.get(statusKey) || STATUS_BY_KEY.get(DEFAULT_TASK_STATUS)
+export function getTaskStatusMeta(statusKey, taskStatuses) {
+  // normalizedStatuses 存储补齐默认状态并清洗异常配置后的当前工作区状态列表。
+  const normalizedStatuses = normalizeTaskStatuses(taskStatuses)
+  // defaultMeta 存储当前工作区的默认状态，配置损坏时仍由规范化函数保证存在。
+  const defaultMeta = normalizedStatuses[0]
+  // matchedMeta 存储按稳定 key 找到的动态状态定义；未知或已删除状态回退「未开始」。
+  const matchedMeta =
+    normalizedStatuses.find((status) => status.key === statusKey) || defaultMeta
+  return { ...matchedMeta }
+}
+
+/**
+ * 生成当前工作区用于状态菜单展示的完整状态定义。
+ * @param {Array<object>} [taskStatuses] - 当前工作区动态状态定义列表。
+ * @returns {Array<{key:string,label:string,color:string,kanbanColumn:string}>} 保持用户顺序和语义配置的状态列表。
+ */
+export function getTaskStatuses(taskStatuses) {
+  return normalizeTaskStatuses(taskStatuses)
+}
+
+/**
+ * 生成任务状态排序权重，列表顺序调整后任务视图同步使用新的次序。
+ * @param {Array<object>} [taskStatuses] - 当前工作区动态状态定义列表。
+ * @returns {Record<string,number>} 状态 key 到零起始排序权重的映射。
+ */
+export function getTaskStatusSortOrder(taskStatuses) {
+  // normalizedStatuses 存储当前工作区可用的完整状态列表。
+  const normalizedStatuses = getTaskStatuses(taskStatuses)
+  return Object.fromEntries(
+    normalizedStatuses.map((status, index) => [status.key, index])
+  )
 }
 
 /**
@@ -76,17 +99,22 @@ export function getTaskStatusMeta(statusKey) {
  * @param {Record<string,string>} map - 现有「任务名 → 状态 key」映射
  * @param {string} taskName - 任务名
  * @param {string} [statusKey] - 目标状态 key；为空/未知/默认「未开始」时清除该任务状态
+ * @param {Array<object>} [taskStatuses] - 当前工作区允许选择的动态状态定义列表
  * @returns {Record<string,string>} 更新后的新映射
  */
-export function setTaskStatusInMap(map, taskName, statusKey) {
+export function setTaskStatusInMap(map, taskName, statusKey, taskStatuses) {
   // next 为入参的浅拷贝，保证不可变更新（便于 React/Zustand 触发重渲染）
   const next = { ...(map || {}) }
   // 任务名缺失直接原样返回，避免写入无效键
   if (!taskName) return next
+  // validStatusKeys 存储当前工作区可写入任务映射的全部状态 key。
+  const validStatusKeys = new Set(
+    getTaskStatuses(taskStatuses).map((status) => status.key)
+  )
   // 目标为空/未知/默认「未开始」时删除该键：未开始即默认态，无需占用存储（缺失即视为未开始）
   if (
     !statusKey ||
-    !STATUS_BY_KEY.has(statusKey) ||
+    !validStatusKeys.has(statusKey) ||
     statusKey === DEFAULT_TASK_STATUS
   ) {
     delete next[taskName]

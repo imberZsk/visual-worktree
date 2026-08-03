@@ -11,15 +11,19 @@ import {
   Tabs,
   App as AntApp,
   Typography,
-  theme,
   Tag,
   Modal,
   InputNumber,
+  Tooltip,
 } from 'antd'
 import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  DeleteOutlined,
   PlusOutlined,
   MinusCircleOutlined,
   EditOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { api } from '../api.ts'
 import { useStore } from '../store/useStore.ts'
@@ -35,6 +39,15 @@ import {
   normalizeTaskTitleBadges,
 } from '../visibilityLogic.ts'
 import { withConfirmDefaults } from '../modalDefaults.ts'
+import {
+  DEFAULT_TASK_STATUS,
+  TASK_STATUS_COLOR_SEQUENCE,
+  TASK_STATUS_KANBAN_COLUMNS,
+  TASK_STATUS_LABEL_MAX_LENGTH,
+  TASK_STATUS_MAX_COUNT,
+  normalizeTaskStatuses,
+} from '../../core/taskStatuses.js'
+import './SettingsModal.css'
 
 // 默认工作文档模板：设置页缺省时只配置会归档的 docs 目录，固定说明文件由核心层单独生成。
 const DEFAULT_WORK_DOCUMENT_TEMPLATES = [
@@ -55,14 +68,83 @@ const WORKFLOW_TASK_ARG_MODE_OPTIONS = [
   { label: '不追加', value: TASK_ARG_MODE_NONE },
   { label: '总是追加', value: TASK_ARG_MODE_APPEND_PATH },
 ]
+// AI_MODEL_OPTIONS 按官方模型家族组织常用选项，同时允许兼容接口输入自定义模型名称。
+const AI_MODEL_OPTIONS = [
+  {
+    label: 'GPT-5.6 系列',
+    options: [
+      { label: 'GPT-5.6 Sol（旗舰能力）', value: 'gpt-5.6-sol' },
+      { label: 'GPT-5.6（Sol 别名）', value: 'gpt-5.6' },
+      { label: 'GPT-5.6 Terra（能力与成本平衡）', value: 'gpt-5.6-terra' },
+      { label: 'GPT-5.6 Luna（低成本高吞吐）', value: 'gpt-5.6-luna' },
+    ],
+  },
+  {
+    label: 'GPT-5.5 系列',
+    options: [
+      { label: 'GPT-5.5（复杂专业任务）', value: 'gpt-5.5' },
+      {
+        label: 'GPT-5.5 Pro（当前流式聊天不可用）',
+        value: 'gpt-5.5-pro',
+        disabled: true,
+      },
+    ],
+  },
+  {
+    label: 'GPT-5.4 系列',
+    options: [
+      { label: 'GPT-5.4', value: 'gpt-5.4' },
+      { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
+      { label: 'GPT-5.4 Nano', value: 'gpt-5.4-nano' },
+    ],
+  },
+]
 
 // DISPLAY_BADGE_DESCRIPTIONS 存储「设置 → 展示」中每个任务标题徽标的用户友好说明。
 const DISPLAY_BADGE_DESCRIPTIONS = {
-  projectCount: '展示任务包含的项目数量，快速判断影响范围。',
-  taskStatus: '展示未开始、进行中、待发布等人工状态，方便按任务阶段扫视。',
-  taskLinks: '展示绑定的需求或工单链接，减少在任务和外部系统之间来回查找。',
-  envHealth: '展示自动环境检查结果，快速发现依赖、端口或服务问题。',
-  claudeUsage: '展示任务关联的 Token 与费用消耗，便于控制 AI 使用成本。',
+  projectCount: '任务包含的项目数。',
+  taskStatus: '任务当前状态。',
+  taskLinks: '任务关联的需求链接。',
+  envHealth: '任务环境检查结果。',
+  claudeUsage: '任务 Token 与费用。',
+}
+
+// SETTINGS_HELP_TEXT 存储设置页各字段与分组标题的问号说明，统一维护用户可见的配置含义。
+const SETTINGS_HELP_TEXT = {
+  currentPathProfile: '切换项目和 Worktree 使用的路径组合。',
+  mainBranches: '用于识别和切换仓库主分支，如 master、main。',
+  ignoredProjects: '扫描时跳过指定目录名。',
+  autoFetch: '同步远程引用，状态更准确但耗时更长。',
+  editorCommand: '编辑器启动命令，{path} 代表项目路径。',
+  terminalApp: '选择打开项目目录的终端应用。',
+  aiModel: '后端调用的模型名称。',
+  aiApiKey: 'Key 加密保存在本机，留空保留当前值。',
+  aiBaseUrl: '兼容 OpenAI 协议的接口地址；留空使用默认地址。',
+  workDocumentTemplates: '新建任务时创建、删除任务时归档；仅用于任务目录。',
+  workDocumentType: '目录归档整个目录；文件可预置内容。',
+  workDocumentPath: '相对任务根目录的路径，不支持绝对路径或 ..。',
+  workDocumentContent: '新建文件时写入的初始内容。',
+  workflowSteps: '任务流程步骤；命令支持 {path}、{task}、{branch}。',
+  workflowStepName: '流程中显示的步骤名称。',
+  workflowCommand: '步骤执行的命令，支持 {path}、{task}、{branch}。',
+  workflowTaskArgMode: '控制是否向命令追加任务目录。',
+  workflowAutoCheck: '命令成功后自动标记步骤完成。',
+  workflowStopOnFailure: '步骤失败时停止后续命令。',
+  aiUsageTool: '任务 Token 和费用统计的数据来源。',
+  customPricing: '为所选工具统一设置 Token 单价。',
+  tokenInputPrice: '每百万输入 Token 的美元单价。',
+  tokenOutputPrice: '每百万输出 Token 的美元单价。',
+  tokenCacheWritePrice: '每百万缓存写入 Token 的美元单价。',
+  tokenCacheReadPrice: '每百万缓存读取 Token 的美元单价。',
+  usdToCny: '费用换算使用的美元兑人民币汇率。',
+  displayPreferences: '选择任务标题显示的辅助信息。',
+  taskStatuses: '管理任务状态及其看板归类。',
+  taskStatusKanbanColumn: '该状态在看板中的归类。',
+  cicdLinks: '按项目配置 CI/CD 页面地址。',
+  pathProfileEntry: '一组项目根目录和 Worktree 根目录。',
+  pathProfileName: '路径组合的显示名称。',
+  sourceProjectsPath: '存放源 Git 项目的根目录。',
+  worktreesPath: '按“任务/项目”存放 Worktree 的根目录。',
 }
 
 // 编辑器打开命令的预置选项：覆盖常见编辑器；用 AutoComplete 既可下拉选择也可手动输入自定义命令。
@@ -89,32 +171,68 @@ const TERMINAL_OPTIONS_DARWIN = [
 ]
 // PATH_PROFILE_ID_PREFIX 存储设置页新建路径组合时使用的 id 前缀。
 const PATH_PROFILE_ID_PREFIX = 'path-profile'
-// ADD_LIST_BUTTON_HEIGHT 存储设置页全宽新增按钮的统一高度，给按钮文字保留更舒适的上下空间。
-const ADD_LIST_BUTTON_HEIGHT = 36
-// ADD_LIST_BUTTON_PADDING_BLOCK 存储设置页全宽新增按钮的统一上下内边距。
-const ADD_LIST_BUTTON_PADDING_BLOCK = 6
+// CUSTOM_TASK_STATUS_KEY_PREFIX 存储设置页新增状态生成稳定 key 时使用的前缀。
+const CUSTOM_TASK_STATUS_KEY_PREFIX = 'custom-status'
+// customTaskStatusSequence 存储当前进程新增状态的递增序号，与时间戳组合避免快速删加产生重复 key。
+let customTaskStatusSequence = 0
+
+/**
+ * 创建一条尚未命名的新任务状态表单数据。
+ * @param {number} index - 新状态加入列表前的状态数量，用于轮换语义颜色和生成唯一后缀。
+ * @returns {{key:string,label:string,color:string,kanbanColumn:string}} 可直接加入 Form.List 的状态草稿。
+ */
+function createTaskStatusDraft(index) {
+  customTaskStatusSequence += 1
+  // color 存储按当前状态数量轮换得到的 Ant Design 语义标签颜色。
+  const color =
+    TASK_STATUS_COLOR_SEQUENCE[index % TASK_STATUS_COLOR_SEQUENCE.length]
+  // key 存储不随标签重命名变化的状态标识；时间戳与进程序号组合避免连续新增冲突。
+  const key = `${CUSTOM_TASK_STATUS_KEY_PREFIX}-${Date.now()}-${customTaskStatusSequence}`
+  return { key, label: '', color, kanbanColumn: 'inProgress' }
+}
 
 /**
  * 渲染设置页列表底部的全宽新增按钮，统一工作文档、流程和路径组合的交互样式。
  * @param {object} props - 组件属性
  * @param {React.ReactNode} props.children - 按钮展示文案
  * @param {()=>void} props.onClick - 点击新增时执行的回调
+ * @param {boolean} [props.disabled] - 是否禁用新增操作
  * @returns {JSX.Element} 全宽虚线新增按钮
  */
-function AddListButton({ children, onClick }) {
+function AddListButton({ children, onClick, disabled = false }) {
   return (
     <Button
       block
       type="dashed"
       icon={<PlusOutlined />}
-      style={{
-        height: ADD_LIST_BUTTON_HEIGHT,
-        paddingBlock: ADD_LIST_BUTTON_PADDING_BLOCK,
-      }}
+      className="settings-add-list-button"
+      aria-label={typeof children === 'string' ? children : undefined}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
     </Button>
+  )
+}
+
+/**
+ * 渲染带统一问号说明的非表单小标题。
+ * @param {object} props - 组件属性
+ * @param {string} props.label - 小标题文案
+ * @param {string} props.help - 悬停问号时展示的说明
+ * @returns {JSX.Element} 带问号 Tooltip 的小标题
+ */
+function SettingTitleWithHelp({ label, help }) {
+  return (
+    <span className="settings-title-with-help">
+      <Text strong>{label}</Text>
+      <Tooltip title={help}>
+        <QuestionCircleOutlined
+          aria-label={`${label}说明`}
+          className="settings-title-help-icon"
+        />
+      </Tooltip>
+    </span>
   )
 }
 // DEFAULT_PATH_PROFILE_NAME 存储旧配置迁移到路径组合时使用的默认名称。
@@ -253,6 +371,27 @@ function getTerminalOptions(platform) {
 export default function SettingsModal({ open, config, onClose, onSaved }) {
   // antd 表单实例
   const [form] = Form.useForm()
+
+  /**
+   * 校验单个任务状态标签非空且不与其他状态重复，避免状态菜单出现无法区分的选项。
+   * @param {object} _rule - Ant Design 传入的当前校验规则，本校验无需读取。
+   * @param {string} value - 当前状态标签输入值。
+   * @returns {Promise<void>} 标签有效时完成，否则返回字段校验错误。
+   */
+  const validateTaskStatusLabel = async (_rule, value) => {
+    // normalizedLabel 存储去除首尾空白后的当前标签。
+    const normalizedLabel = typeof value === 'string' ? value.trim() : ''
+    if (!normalizedLabel) throw new Error('请输入状态标签')
+    // currentStatuses 存储表单中全部动态状态，用于检测清理空白后的重复文案。
+    const currentStatuses = form.getFieldValue('taskStatuses') || []
+    // duplicateCount 存储与当前标签相同的字段数量；大于 1 表示菜单会出现重复项。
+    const duplicateCount = currentStatuses.filter(
+      (status) =>
+        typeof status?.label === 'string' &&
+        status.label.trim() === normalizedLabel
+    ).length
+    if (duplicateCount > 1) throw new Error('状态标签不能重复')
+  }
   // fallbackPathProfileState 存储从配置推导出的路径组合，用于路径组合表单尚未挂载时给当前组合下拉兜底。
   const fallbackPathProfileState = useMemo(
     () => normalizePathProfilesForForm(config),
@@ -289,12 +428,14 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
   const [pickingPathField, setPickingPathField] = useState('')
   // saving 标记保存操作是否正在进行，防止重复提交并给按钮提供 loading 反馈。
   const [saving, setSaving] = useState(false)
+  // aiApiKeyConfigured 标记当前后端或本机加密存储是否已有 Key，不保存 Key 明文。
+  const [aiApiKeyConfigured, setAiApiKeyConfigured] = useState(false)
+  // aiApiKeyHint 存储由主进程生成的 Key 末四位掩码，不包含完整凭据。
+  const [aiApiKeyHint, setAiApiKeyHint] = useState('')
   // resetting 标记恢复默认设置是否正在进行，避免重复点击确认造成并发写配置。
   const [resetting, setResetting] = useState(false)
   // 从 AntApp 上下文取 message，使提示跟随明暗主题
   const { message, modal } = AntApp.useApp()
-  // token 当前主题设计变量，用于流程步骤卡片在明暗主题下保持合适对比度
-  const { token } = theme.useToken()
   // 已扫描到的项目列表，用于 CI/CD Tab 的"项目目录名"下拉选项
   const projects = useStore((s) => s.projects)
   // projectLoading 标记源项目扫描是否正在进行，用于 CI/CD 项目下拉显示 loading 状态。
@@ -342,6 +483,11 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       )
       // taskTitleBadges 为任务标题旁徽标展示开关；缺失字段默认全开。
       const taskTitleBadges = normalizeTaskTitleBadges(config.taskTitleBadges)
+      // taskStatuses 为当前工作区动态状态定义；兼容旧版只保存标签映射的配置。
+      const taskStatuses = normalizeTaskStatuses(
+        config.taskStatuses,
+        config.taskStatusLabels
+      )
       // pathProfileState 存储路径组合表单状态，兼容旧配置里的顶层路径字段。
       const pathProfileState = normalizePathProfilesForForm(config)
       form.setFieldsValue({
@@ -351,9 +497,46 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workflowSteps,
         workDocumentTemplates,
         taskTitleBadges,
+        taskStatuses,
       })
     }
   }, [open, config, form])
+
+  // 打开设置页时通过 IPC 读取安全投影；返回值只包含模型、地址和 Key 是否存在。
+  useEffect(() => {
+    if (!open) return
+    // canceled 标记组件关闭后的异步结果是否应忽略，避免给已关闭表单赋值。
+    let canceled = false
+    /**
+     * 从 Electron 主进程加载 AI 模型设置并填入表单。
+     * @returns {Promise<void>} 加载完成
+     */
+    const loadAiSettings = async () => {
+      // result 存储主进程返回的安全模型配置结果。
+      const result = await api.loadAiModelSettings()
+      if (canceled) return
+      if (!result?.success) {
+        message.error(result?.error || '读取 AI 模型配置失败')
+        return
+      }
+      // settings 存储不含 API Key 明文的模型设置。
+      const settings = result.settings || {}
+      setAiApiKeyConfigured(Boolean(settings.apiKeyConfigured))
+      setAiApiKeyHint(settings.apiKeyHint || '')
+      form.setFieldsValue({
+        aiModel: settings.model || 'gpt-5.6-sol',
+        aiBaseUrl: settings.baseUrl || '',
+        aiApiKey: '',
+        clearAiApiKey: false,
+      })
+    }
+    loadAiSettings().catch((error) => {
+      if (!canceled) message.error(`读取 AI 模型配置失败：${error.message}`)
+    })
+    return () => {
+      canceled = true
+    }
+  }, [open, form, message])
 
   /**
    * 校验并保存配置；将 Form.List 的数组形式转回对象再持久化
@@ -377,6 +560,12 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workflowSteps: rawSteps = [],
         workDocumentTemplates: rawWorkDocumentTemplates = [],
         taskTitleBadges: rawTaskTitleBadges = {},
+        taskStatuses: rawTaskStatuses = [],
+        taskStatusLabels: legacyTaskStatusLabels,
+        aiModel = 'gpt-5.6-sol',
+        aiBaseUrl = '',
+        aiApiKey = '',
+        clearAiApiKey = false,
         ...rest
       } = values
       // legacySourceProjectsPath/legacyWorktreesPath 存储旧表单残留顶层路径字段；新版统一由 activePathProfile 同步，避免双源状态。
@@ -410,10 +599,28 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       )
       // taskTitleBadges 规范化：老配置缺失字段时按默认全开展示。
       const taskTitleBadges = normalizeTaskTitleBadges(rawTaskTitleBadges)
+      // taskStatuses 规范化：保留用户顺序与稳定 key，并清理标签、颜色和看板归类异常值。
+      const taskStatuses = normalizeTaskStatuses(
+        rawTaskStatuses,
+        legacyTaskStatusLabels
+      )
       // envCheckRoles 为历史兼容字段：新 UI 改为自动识别前后端，不再要求用户维护角色映射
       const envCheckRoles = Array.isArray(config?.envCheckRoles)
         ? config.envCheckRoles
         : []
+      // aiSettingsResult 存储加密保存并同步后端后的安全状态，不包含 API Key。
+      const aiSettingsResult = await api.saveAiModelSettings({
+        model: aiModel,
+        baseUrl: aiBaseUrl,
+        apiKey: aiApiKey,
+        clearApiKey: clearAiApiKey,
+      })
+      if (!aiSettingsResult?.success)
+        throw new Error(aiSettingsResult?.error || '保存 AI 模型配置失败')
+      setAiApiKeyConfigured(
+        Boolean(aiSettingsResult.settings?.apiKeyConfigured)
+      )
+      setAiApiKeyHint(aiSettingsResult.settings?.apiKeyHint || '')
       const saved = await api.saveConfig({
         ...rest,
         onboardingCompleted: true,
@@ -425,6 +632,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workflowSteps,
         workDocumentTemplates,
         taskTitleBadges,
+        taskStatuses,
         envCheckRoles,
       })
       message.success('配置已保存')
@@ -618,16 +826,12 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       key: 'paths',
       label: '路径',
       children: (
-        <>
+        <div className="settings-form-stack">
           <Form.Item
             label="当前路径组合"
-            extra={
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                可用于切换工作和个人项目工作路径。
-              </Text>
-            }
+            tooltip={SETTINGS_HELP_TEXT.currentPathProfile}
           >
-            <Space.Compact style={{ width: '100%' }}>
+            <Space.Compact className="settings-full-width-compact">
               <Form.Item
                 name="activePathProfileId"
                 noStyle
@@ -646,14 +850,22 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
               </Button>
             </Space.Compact>
           </Form.Item>
-          <Form.Item label="主分支名（可多个）" name="mainBranches">
+          <Form.Item
+            label="主分支名（可多个）"
+            name="mainBranches"
+            tooltip={SETTINGS_HELP_TEXT.mainBranches}
+          >
             <Select
               mode="tags"
               placeholder="master, main"
               tokenSeparators={[',']}
             />
           </Form.Item>
-          <Form.Item label="忽略的项目目录" name="ignoredProjects">
+          <Form.Item
+            label="忽略的项目目录"
+            name="ignoredProjects"
+            tooltip={SETTINGS_HELP_TEXT.ignoredProjects}
+          >
             <Select
               mode="tags"
               placeholder="输入要忽略的目录名"
@@ -664,22 +876,23 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
             label="扫描时自动 fetch 远程（较慢，但能计算落后提交数）"
             name="autoFetch"
             valuePropName="checked"
+            tooltip={SETTINGS_HELP_TEXT.autoFetch}
           >
             <Switch />
           </Form.Item>
-        </>
+        </div>
       ),
     },
     {
       key: 'tools',
       label: '工具',
       children: (
-        <>
+        <div className="settings-form-stack">
           {/* 编辑器命令配置：AutoComplete 既可从预置编辑器下拉选择，也可手动输入自定义命令，{path} 占位符会被替换为实际路径 */}
           <Form.Item
             label="编辑器打开命令"
             name="vscodeCommand"
-            tooltip="可下拉选择常见编辑器，也可手动输入。使用 {path} 作为路径占位符。VSCode：code {path}（自动加 -n 新窗口打开）；Cursor：cursor {path}；Trae：trae {path}"
+            tooltip={SETTINGS_HELP_TEXT.editorCommand}
             rules={[{ required: true, message: '请选择或输入编辑器命令' }]}
           >
             <AutoComplete
@@ -695,11 +908,75 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
           <Form.Item
             label="终端应用"
             name="terminalApp"
-            tooltip="Windows：默认 Windows Terminal（Win11 自带），未安装时自动兜底 PowerShell/cmd。macOS：默认系统 Terminal，iTerm2/Ghostty 需先安装对应应用，未安装所选终端时自动兜底系统 Terminal。"
+            tooltip={SETTINGS_HELP_TEXT.terminalApp}
           >
             <Select options={getTerminalOptions(api.platform)} />
           </Form.Item>
-        </>
+        </div>
+      ),
+    },
+    {
+      key: 'ai-assistant',
+      label: 'AI 助手',
+      children: (
+        <div className="settings-form-stack">
+          <Form.Item
+            label="模型"
+            name="aiModel"
+            tooltip={SETTINGS_HELP_TEXT.aiModel}
+            rules={[{ required: true, message: '请选择或输入模型名称' }]}
+          >
+            <AutoComplete
+              options={AI_MODEL_OPTIONS}
+              placeholder="选择或输入模型名称"
+              filterOption={(input, option) =>
+                String(option?.value || option?.label || '')
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
+          <Form.Item
+            label="API Key"
+            name="aiApiKey"
+            tooltip={SETTINGS_HELP_TEXT.aiApiKey}
+            extra={
+              <Space size={8}>
+                <Tag color={aiApiKeyConfigured ? 'success' : 'default'}>
+                  {aiApiKeyConfigured ? '已配置' : '未配置'}
+                </Tag>
+                <Text type="secondary" className="settings-helper-text">
+                  {aiApiKeyHint || '留空保留当前 Key'}
+                </Text>
+              </Space>
+            }
+          >
+            <Input.Password
+              autoComplete="new-password"
+              placeholder={aiApiKeyHint || '输入新的 API Key'}
+            />
+          </Form.Item>
+          <Form.Item
+            label="Base URL"
+            name="aiBaseUrl"
+            tooltip={SETTINGS_HELP_TEXT.aiBaseUrl}
+            rules={[
+              {
+                pattern: /^(https?:\/\/.*)?$/i,
+                message: 'Base URL 必须以 http:// 或 https:// 开头',
+              },
+            ]}
+          >
+            <Input placeholder="留空使用 OpenAI 官方接口" />
+          </Form.Item>
+          <Form.Item
+            label="清除已保存的 API Key"
+            name="clearAiApiKey"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+        </div>
       ),
     },
     {
@@ -707,21 +984,14 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       label: '工作文档',
       children: (
         <Form.Item
+          className="settings-list-section"
           label="工作文档模板"
-          tooltip="新建任务时在任务目录按模板创建；删除任务前按同一模板归档到历史工作目录。CLAUDE.md 和 AGENTS.md 会固定生成，但不会归档。路径必须是相对路径。"
+          tooltip={SETTINGS_HELP_TEXT.workDocumentTemplates}
         >
           <Form.List name="workDocumentTemplates">
             {(fields, { add, remove, move }) => (
-              <Space orientation="vertical" style={{ width: '100%' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  默认工作文档为任务目录下的 docs 目录。项目 worktree
-                  不会按这里的模板创建目录或文件；任务删除时会收集这些工作文档到历史记录。
-                </Text>
-                <Space
-                  orientation="vertical"
-                  size={8}
-                  style={{ width: '100%' }}
-                >
+              <div className="settings-list-content">
+                <div className="settings-list-items">
                   {fields.map(({ key, name }, index) => (
                     <Form.Item key={key} noStyle shouldUpdate>
                       {() => {
@@ -746,52 +1016,36 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                               if (e.key === 'Enter')
                                 openWorkDocumentEditor(name)
                             }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 10,
-                              width: '100%',
-                              maxWidth: '100%',
-                              padding: '9px 10px',
-                              boxSizing: 'border-box',
-                              border: `1px solid ${token.colorBorderSecondary}`,
-                              borderRadius: token.borderRadius,
-                              background: token.colorFillQuaternary,
-                              cursor: 'pointer',
-                            }}
+                            className="settings-list-row settings-list-row-interactive"
                           >
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  minWidth: 0,
-                                }}
-                              >
+                            <div className="settings-list-main">
+                              <div className="settings-list-title">
                                 <Text
                                   type="secondary"
-                                  style={{ fontSize: 12, flexShrink: 0 }}
+                                  className="settings-list-kicker"
                                 >
                                   模板 {index + 1}
                                 </Text>
-                                <Text strong ellipsis style={{ minWidth: 0 }}>
+                                <Text
+                                  strong
+                                  ellipsis
+                                  className="settings-list-title-text"
+                                >
                                   {templatePath}
                                 </Text>
                               </div>
-                              <div style={{ marginTop: 4 }}>
+                              <div className="settings-list-meta">
                                 <Tag
                                   color={
                                     templateType === 'file' ? 'blue' : 'default'
                                   }
-                                  style={{ marginInlineEnd: 0 }}
+                                  className="settings-list-tag"
                                 >
                                   {templateType === 'file' ? '文件' : '目录'}
                                 </Tag>
                               </div>
                             </div>
-                            <Space size={4} style={{ flexShrink: 0 }}>
+                            <Space size={4} className="settings-list-actions">
                               <Button
                                 size="small"
                                 data-testid={`work-document-move-up-${index}`}
@@ -831,6 +1085,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                                 danger
                                 size="small"
                                 icon={<MinusCircleOutlined />}
+                                aria-label={`删除工作文档 ${index + 1}`}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   // 删除正在编辑的模板时同步关闭弹层，避免 Modal 继续指向已不存在的下标。
@@ -845,10 +1100,11 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                       }}
                     </Form.Item>
                   ))}
-                </Space>
+                </div>
                 <Modal
                   title="编辑工作文档"
                   open={workDocumentEditorIndex != null}
+                  rootClassName="settings-surface"
                   zIndex={WORK_DOCUMENT_EDITOR_Z_INDEX}
                   onCancel={closeWorkDocumentEditor}
                   footer={[
@@ -878,6 +1134,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                               label="类型"
                               name={[workDocumentEditorIndex, 'type']}
                               initialValue="directory"
+                              tooltip={SETTINGS_HELP_TEXT.workDocumentType}
                             >
                               <Select
                                 options={[
@@ -889,6 +1146,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                             <Form.Item
                               label="路径"
                               name={[workDocumentEditorIndex, 'path']}
+                              tooltip={SETTINGS_HELP_TEXT.workDocumentPath}
                               rules={[
                                 {
                                   required: true,
@@ -902,6 +1160,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                               <Form.Item
                                 label="文件默认内容"
                                 name={[workDocumentEditorIndex, 'content']}
+                                tooltip={SETTINGS_HELP_TEXT.workDocumentContent}
                               >
                                 <Input.TextArea
                                   placeholder="文件默认内容"
@@ -925,7 +1184,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                 >
                   添加工作文档
                 </AddListButton>
-              </Space>
+              </div>
             )}
           </Form.List>
         </Form.Item>
@@ -938,22 +1197,14 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         /* 需求流程步骤配置：每个任务在 worktree 视图中展示这组步骤，每步都可勾选标记完成；
            配置了「执行命令」的步骤还会额外提供「执行」按钮，点击在任务目录下跑该命令 */
         <Form.Item
+          className="settings-list-section"
           label="需求流程步骤"
-          tooltip="每一步都可打勾标记完成。可选给某步配一段 shell 命令：配了的步骤会多出「执行」按钮，点击在任务目录下运行。命令支持占位符：{path} 任务目录、{task} 任务名、{branch} 分支。改名不会丢失已勾选状态。"
+          tooltip={SETTINGS_HELP_TEXT.workflowSteps}
         >
           <Form.List name="workflowSteps">
             {(fields, { add, remove, move }) => (
-              <Space orientation="vertical" style={{ width: '100%' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  每个步骤都会显示在 Worktree
-                  任务的「流程」入口中；执行命令选填，支持 {'{path}'} /{' '}
-                  {'{task}'} / {'{branch}'}，也可通过参数模式自动传入任务目录。
-                </Text>
-                <Space
-                  orientation="vertical"
-                  size={8}
-                  style={{ width: '100%' }}
-                >
+              <div className="settings-list-content">
+                <div className="settings-list-items">
                   {fields.map(({ key, name }, index) => (
                     <React.Fragment key={key}>
                       {/* key 隐藏字段：保留步骤稳定标识，改名时沿用以免丢失各任务的勾选状态 */}
@@ -982,50 +1233,34 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                                 if (e.key === 'Enter')
                                   openWorkflowStepEditor(name)
                               }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 10,
-                                width: '100%',
-                                maxWidth: '100%',
-                                padding: '9px 10px',
-                                boxSizing: 'border-box',
-                                border: `1px solid ${token.colorBorderSecondary}`,
-                                borderRadius: token.borderRadius,
-                                background: token.colorFillQuaternary,
-                                cursor: 'pointer',
-                              }}
+                              className="settings-list-row settings-list-row-interactive"
                             >
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    minWidth: 0,
-                                  }}
-                                >
+                              <div className="settings-list-main">
+                                <div className="settings-list-title">
                                   <Text
                                     type="secondary"
-                                    style={{ fontSize: 12, flexShrink: 0 }}
+                                    className="settings-list-kicker"
                                   >
                                     步骤 {index + 1}
                                   </Text>
-                                  <Text strong ellipsis style={{ minWidth: 0 }}>
+                                  <Text
+                                    strong
+                                    ellipsis
+                                    className="settings-list-title-text"
+                                  >
                                     {label}
                                   </Text>
                                 </div>
-                                <div style={{ marginTop: 4 }}>
+                                <div className="settings-list-meta">
                                   <Tag
                                     color={hasCommand ? 'blue' : 'default'}
-                                    style={{ marginInlineEnd: 0 }}
+                                    className="settings-list-tag"
                                   >
                                     {hasCommand ? '已配置命令' : '仅勾选'}
                                   </Tag>
                                 </div>
                               </div>
-                              <Space size={4} style={{ flexShrink: 0 }}>
+                              <Space size={4} className="settings-list-actions">
                                 <Button
                                   size="small"
                                   data-testid={`workflow-step-move-up-${index}`}
@@ -1065,6 +1300,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                                   danger
                                   size="small"
                                   icon={<MinusCircleOutlined />}
+                                  aria-label={`删除流程步骤 ${index + 1}`}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     // 删除正在编辑的步骤时同步关闭弹层，避免 Modal 继续指向已不存在的下标。
@@ -1080,11 +1316,12 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                       </Form.Item>
                     </React.Fragment>
                   ))}
-                </Space>
+                </div>
                 {/* 当前选中步骤的详情编辑弹层：只在需要时展示名称和命令字段，主列表保持收敛。 */}
                 <Modal
                   title="编辑流程步骤"
                   open={workflowEditorIndex != null}
+                  rootClassName="settings-surface"
                   zIndex={WORKFLOW_STEP_EDITOR_Z_INDEX}
                   onCancel={closeWorkflowStepEditor}
                   footer={[
@@ -1103,6 +1340,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                       <Form.Item
                         label="步骤名称"
                         name={[workflowEditorIndex, 'label']}
+                        tooltip={SETTINGS_HELP_TEXT.workflowStepName}
                       >
                         <Input placeholder="步骤名称，如：需求确认" />
                       </Form.Item>
@@ -1112,7 +1350,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                       <Form.Item
                         label="执行命令（选填）"
                         name={[workflowEditorIndex, 'command']}
-                        tooltip="可手动输入，也可点击下方「选择文件」把文件路径追加到命令末尾"
+                        tooltip={SETTINGS_HELP_TEXT.workflowCommand}
                       >
                         <Input.TextArea
                           placeholder="执行命令（选填），如 ./deploy.sh {path}"
@@ -1124,7 +1362,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         label="任务目录参数"
                         name={[workflowEditorIndex, 'taskArgMode']}
                         initialValue={TASK_ARG_MODE_AUTO}
-                        tooltip="自动：脚本命令缺少占位符时追加任务目录；不追加：只注入环境变量；总是追加：命令未使用 {path} 时追加任务目录"
+                        tooltip={SETTINGS_HELP_TEXT.workflowTaskArgMode}
                       >
                         <Select options={WORKFLOW_TASK_ARG_MODE_OPTIONS} />
                       </Form.Item>
@@ -1138,7 +1376,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                           onClick={() =>
                             handlePickCommandFile(workflowEditorIndex)
                           }
-                          style={{ marginBottom: 24 }}
+                          className="settings-workflow-file-button"
                         >
                           选择文件
                         </Button>
@@ -1149,6 +1387,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         name={[workflowEditorIndex, 'autoCheckOnSuccess']}
                         valuePropName="checked"
                         initialValue
+                        tooltip={SETTINGS_HELP_TEXT.workflowAutoCheck}
                       >
                         <Switch checkedChildren="开" unCheckedChildren="关" />
                       </Form.Item>
@@ -1158,6 +1397,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         name={[workflowEditorIndex, 'stopOnFailure']}
                         valuePropName="checked"
                         initialValue
+                        tooltip={SETTINGS_HELP_TEXT.workflowStopOnFailure}
                       >
                         <Switch checkedChildren="开" unCheckedChildren="关" />
                       </Form.Item>
@@ -1179,7 +1419,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                 >
                   添加流程步骤
                 </AddListButton>
-              </Space>
+              </div>
             )}
           </Form.List>
         </Form.Item>
@@ -1194,6 +1434,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
             className="token-pricing-tool-field"
             label="统计工具"
             name="aiUsageTool"
+            tooltip={SETTINGS_HELP_TEXT.aiUsageTool}
             rules={[{ required: true, message: '请选择 Token 统计工具' }]}
           >
             <Select
@@ -1204,12 +1445,10 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
             />
           </Form.Item>
           <div className="token-pricing-rule-header">
-            <div className="token-pricing-rule-copy">
-              <Text strong>自定义计价</Text>
-              <Text type="secondary" className="token-pricing-rule-description">
-                所选工具的全部模型统一使用下列美元单价；关闭时未知模型使用默认回退价。单价单位为每百万 Token。
-              </Text>
-            </div>
+            <SettingTitleWithHelp
+              label="自定义计价"
+              help={SETTINGS_HELP_TEXT.customPricing}
+            />
             <Form.Item
               noStyle
               name={['tokenPricing', 'enabled']}
@@ -1221,13 +1460,30 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               // pricingEnabled 存储自定义计价开关状态，用于控制价格输入是否可编辑。
-              const pricingEnabled = getFieldValue(['tokenPricing', 'enabled']) === true
+              const pricingEnabled =
+                getFieldValue(['tokenPricing', 'enabled']) === true
               // pricingFields 存储四种 Token 类型对应的字段名和界面文案。
               const pricingFields = [
-                { key: 'input', label: 'Input 单价' },
-                { key: 'output', label: 'Output 单价' },
-                { key: 'cacheWrite', label: 'Cache write 单价' },
-                { key: 'cacheRead', label: 'Cache read 单价' },
+                {
+                  key: 'input',
+                  label: 'Input 单价',
+                  tooltip: SETTINGS_HELP_TEXT.tokenInputPrice,
+                },
+                {
+                  key: 'output',
+                  label: 'Output 单价',
+                  tooltip: SETTINGS_HELP_TEXT.tokenOutputPrice,
+                },
+                {
+                  key: 'cacheWrite',
+                  label: 'Cache write 单价',
+                  tooltip: SETTINGS_HELP_TEXT.tokenCacheWritePrice,
+                },
+                {
+                  key: 'cacheRead',
+                  label: 'Cache read 单价',
+                  tooltip: SETTINGS_HELP_TEXT.tokenCacheReadPrice,
+                },
               ]
               return (
                 <div className="token-pricing-fields-grid">
@@ -1237,14 +1493,20 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                       key={pricingField.key}
                       label={pricingField.label}
                       name={['tokenPricing', pricingField.key]}
-                      rules={[{ required: true, message: `请输入${pricingField.label}` }]}
+                      tooltip={pricingField.tooltip}
+                      rules={[
+                        {
+                          required: true,
+                          message: `请输入${pricingField.label}`,
+                        },
+                      ]}
                     >
                       <InputNumber
                         min={0}
                         precision={6}
                         disabled={!pricingEnabled}
                         prefix="$"
-                        style={{ width: '100%' }}
+                        className="settings-full-width-control"
                       />
                     </Form.Item>
                   ))}
@@ -1252,13 +1514,16 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     className="token-pricing-field token-pricing-exchange-field"
                     label="美元兑人民币汇率"
                     name={['tokenPricing', 'usdToCny']}
-                    rules={[{ required: true, message: '请输入美元兑人民币汇率' }]}
+                    tooltip={SETTINGS_HELP_TEXT.usdToCny}
+                    rules={[
+                      { required: true, message: '请输入美元兑人民币汇率' },
+                    ]}
                   >
                     <InputNumber
                       min={0.000001}
                       precision={6}
                       disabled={!pricingEnabled}
-                      style={{ width: '100%' }}
+                      className="settings-full-width-control"
                     />
                   </Form.Item>
                 </div>
@@ -1274,73 +1539,31 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       children: (
         <div
           data-testid="display-settings-panel"
-          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+          className="settings-display-panel"
         >
-          <div
-            style={{
-              padding: '14px 16px',
-              borderRadius: token.borderRadiusLG,
-              border: `1px solid ${token.colorBorderSecondary}`,
-              background: token.colorFillAlter,
-            }}
-          >
-            <Text strong>任务标题展示偏好</Text>
-            <div style={{ marginTop: 6 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                按需选择任务标题旁显示哪些辅助信息，让任务列表保持清爽但不丢关键状态。
-              </Text>
-            </div>
-          </div>
+          <SettingTitleWithHelp
+            label="任务标题展示偏好"
+            help={SETTINGS_HELP_TEXT.displayPreferences}
+          />
           <div
             data-testid="display-badge-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12,
-              alignItems: 'stretch',
-            }}
+            className="settings-display-grid"
           >
             {TASK_TITLE_BADGE_ITEMS.map((item) => (
               <div
                 key={item.key}
                 data-testid={`display-badge-card-${item.key}`}
-                style={{
-                  minHeight: 112,
-                  padding: 14,
-                  borderRadius: token.borderRadiusLG,
-                  border: `1px solid ${token.colorBorderSecondary}`,
-                  background: token.colorBgContainer,
-                  boxShadow: token.boxShadowTertiary,
-                  boxSizing: 'border-box',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
+                className="settings-display-card"
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <Text strong>{item.label}</Text>
-                    <div style={{ marginTop: 6 }}>
-                      <Text
-                        type="secondary"
-                        style={{ fontSize: 12, lineHeight: 1.6 }}
-                      >
-                        {DISPLAY_BADGE_DESCRIPTIONS[item.key]}
-                      </Text>
-                    </div>
-                  </div>
+                <div className="settings-display-card-header">
+                  <SettingTitleWithHelp
+                    label={item.label}
+                    help={DISPLAY_BADGE_DESCRIPTIONS[item.key]}
+                  />
                   <Form.Item
                     name={['taskTitleBadges', item.key]}
                     valuePropName="checked"
-                    style={{ marginBottom: 0, flex: '0 0 auto' }}
+                    className="settings-display-switch-field"
                   >
                     <Switch checkedChildren="展示" unCheckedChildren="隐藏" />
                   </Form.Item>
@@ -1348,6 +1571,131 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
               </div>
             ))}
           </div>
+          <Form.List name="taskStatuses">
+            {(fields, { add, remove, move }) => (
+              <div
+                data-testid="task-status-settings"
+                className="settings-status-label-section"
+              >
+                <div className="settings-status-label-header">
+                  <SettingTitleWithHelp
+                    label={`任务状态（${fields.length}/${TASK_STATUS_MAX_COUNT}）`}
+                    help={SETTINGS_HELP_TEXT.taskStatuses}
+                  />
+                </div>
+                <div className="settings-status-list">
+                  {fields.map(({ key, name }, index) => {
+                    // statusKey 存储当前行不随重命名变化的稳定状态标识。
+                    const statusKey = form.getFieldValue([
+                      'taskStatuses',
+                      name,
+                      'key',
+                    ])
+                    // statusColor 存储当前行用于菜单和任务标题标签的语义颜色。
+                    const statusColor = form.getFieldValue([
+                      'taskStatuses',
+                      name,
+                      'color',
+                    ])
+                    // isDefaultStatus 标记不可删除、不可移动的默认兜底状态。
+                    const isDefaultStatus = statusKey === DEFAULT_TASK_STATUS
+                    return (
+                      <div
+                        key={key}
+                        className="settings-status-row"
+                        data-testid={`task-status-row-${statusKey}`}
+                      >
+                        <Form.Item name={[name, 'key']} hidden>
+                          <Input />
+                        </Form.Item>
+                        <Form.Item name={[name, 'color']} hidden>
+                          <Input />
+                        </Form.Item>
+                        <Form.Item
+                          className="settings-status-field settings-status-name-field"
+                          label={
+                            <span className="settings-status-name-label">
+                              状态名称
+                              {isDefaultStatus && (
+                                <Tag
+                                  color={statusColor}
+                                  className="settings-status-default-tag"
+                                >
+                                  默认
+                                </Tag>
+                              )}
+                            </span>
+                          }
+                          name={[name, 'label']}
+                          rules={[
+                            { validator: validateTaskStatusLabel },
+                            {
+                              max: TASK_STATUS_LABEL_MAX_LENGTH,
+                              message: `最多 ${TASK_STATUS_LABEL_MAX_LENGTH} 个字符`,
+                            },
+                          ]}
+                        >
+                          <Input
+                            maxLength={TASK_STATUS_LABEL_MAX_LENGTH}
+                            aria-label="状态名称"
+                            placeholder="输入状态名称"
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          className="settings-status-field settings-status-column-field"
+                          label="看板归类"
+                          name={[name, 'kanbanColumn']}
+                          tooltip={SETTINGS_HELP_TEXT.taskStatusKanbanColumn}
+                          rules={[
+                            { required: true, message: '请选择看板归类' },
+                          ]}
+                        >
+                          <Select options={TASK_STATUS_KANBAN_COLUMNS} />
+                        </Form.Item>
+                        <div className="settings-status-row-actions">
+                          <Button
+                            type="text"
+                            icon={<ArrowUpOutlined />}
+                            aria-label="上移状态"
+                            title="上移"
+                            disabled={isDefaultStatus || index <= 1}
+                            onClick={() => move(index, index - 1)}
+                          />
+                          <Button
+                            type="text"
+                            icon={<ArrowDownOutlined />}
+                            aria-label="下移状态"
+                            title="下移"
+                            disabled={
+                              isDefaultStatus || index === fields.length - 1
+                            }
+                            onClick={() => move(index, index + 1)}
+                          />
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            aria-label="删除状态"
+                            title={
+                              isDefaultStatus ? '默认状态不可删除' : '删除状态'
+                            }
+                            disabled={isDefaultStatus}
+                            onClick={() => remove(index)}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <AddListButton
+                  disabled={fields.length >= TASK_STATUS_MAX_COUNT}
+                  onClick={() => add(createTaskStatusDraft(fields.length))}
+                >
+                  添加任务状态
+                </AddListButton>
+              </div>
+            )}
+          </Form.List>
         </div>
       ),
     },
@@ -1356,73 +1704,68 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       label: 'CI/CD',
       children: (
         /* CI/CD 流水线地址：按项目名配置，有则填写，任务视图中显示跳转按钮 */
-        <Form.Item label="CI/CD 流水线地址（按项目配置，选填）">
+        <Form.Item
+          className="settings-list-section"
+          label="CI/CD 流水线地址（按项目配置，选填）"
+          tooltip={SETTINGS_HELP_TEXT.cicdLinks}
+        >
           <Form.List name="cicdLinksArr">
             {(fields, { add, remove }) => (
-              <Space orientation="vertical" style={{ width: '100%' }}>
-                {/* 列表区限高滚动，避免条目过多时撑破抽屉内容区 */}
-                <div
-                  style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}
-                >
-                  <Space orientation="vertical" style={{ width: '100%' }}>
-                    {fields.map(({ key, name }) => (
-                      // 每行三栏：左侧 project 固定等宽、中间 url 弹性等宽、右侧删除按钮固定列宽，与流程 Tab 对齐风格一致
-                      <div
-                        key={key}
-                        style={{
-                          display: 'flex',
-                          gap: 8,
-                          alignItems: 'center',
-                          width: '100%',
-                        }}
-                      >
-                        {/* project 项目目录名：从已扫描项目中下拉选择，也支持手动输入。固定列宽 130px 与流程 Tab type 列等宽 */}
-                        <div style={{ flex: '0 0 130px' }}>
-                          <Form.Item name={[name, 'project']} noStyle>
-                            <Select
-                              showSearch
-                              allowClear
-                              placeholder="选择项目"
-                              style={{ width: '100%' }}
-                              options={projectOptions}
-                              loading={
-                                projectLoading && projectOptions.length === 0
-                              }
-                              filterOption={(input, opt) =>
-                                opt.value
-                                  .toLowerCase()
-                                  .includes(input.toLowerCase())
-                              }
-                            />
-                          </Form.Item>
+              <div className="settings-list-content">
+                {/* 空列表不渲染滚动容器，避免不可见子项仍触发 12px sibling gap。 */}
+                {fields.length > 0 && (
+                  <div className="settings-list-scroll">
+                    <div className="settings-list-items">
+                      {fields.map(({ key, name }, index) => (
+                        // 每行三栏：项目与 URL 按比例分配宽度，删除按钮保持稳定尺寸。
+                        <div key={key} className="settings-cicd-row">
+                          {/* project 项目目录名：从已扫描项目中下拉选择，也支持手动输入。 */}
+                          <div className="settings-cicd-project">
+                            <Form.Item name={[name, 'project']} noStyle>
+                              <Select
+                                showSearch
+                                allowClear
+                                placeholder="选择项目"
+                                className="settings-full-width-control"
+                                options={projectOptions}
+                                loading={
+                                  projectLoading && projectOptions.length === 0
+                                }
+                                filterOption={(input, opt) =>
+                                  opt.value
+                                    .toLowerCase()
+                                    .includes(input.toLowerCase())
+                                }
+                              />
+                            </Form.Item>
+                          </div>
+                          {/* url 对应项目的 CI/CD 流水线 URL，占满剩余弹性宽度。 */}
+                          <div className="settings-cicd-url">
+                            <Form.Item name={[name, 'url']} noStyle>
+                              <Input
+                                className="settings-full-width-control"
+                                placeholder="https://ci.example.com/pipeline/..."
+                              />
+                            </Form.Item>
+                          </div>
+                          {/* 删除按钮固定列宽，保证每行右侧对齐。 */}
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<MinusCircleOutlined />}
+                            aria-label={`删除 CI/CD 地址 ${index + 1}`}
+                            onClick={() => remove(name)}
+                          />
                         </div>
-                        {/* url 对应项目的 CI/CD 流水线 URL，占满剩余弹性宽度，显式 width:100% 填满外层 div 保证每行等宽 */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <Form.Item name={[name, 'url']} noStyle>
-                            <Input
-                              style={{ width: '100%' }}
-                              placeholder="https://ci.example.com/pipeline/..."
-                            />
-                          </Form.Item>
-                        </div>
-                        {/* 删除按钮固定列宽，保证每行右侧对齐 */}
-                        <MinusCircleOutlined
-                          style={{ flex: '0 0 16px', color: '#999' }}
-                          onClick={() => remove(name)}
-                        />
-                      </div>
-                    ))}
-                  </Space>
-                </div>
-                <Button
-                  type="dashed"
-                  onClick={() => add()}
-                  icon={<PlusOutlined />}
-                  size="small"
-                >
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <AddListButton onClick={() => add()}>
                   添加项目 CI/CD 地址
-                </Button>
-              </Space>
+                </AddListButton>
+              </div>
             )}
           </Form.List>
         </Form.Item>
@@ -1435,18 +1778,12 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       title="设置"
       open={open}
       onClose={onClose}
-      width={640}
+      size={640}
+      rootClassName="settings-surface settings-drawer"
       destroyOnHidden
       footer={
         // 底部操作按钮
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            width: '100%',
-          }}
-        >
+        <div className="settings-footer">
           <Button
             danger
             loading={resetting}
@@ -1476,147 +1813,143 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         <Modal
           title="管理路径组合"
           open={pathProfileEditorOpen}
+          rootClassName="settings-surface settings-path-profile-modal"
           zIndex={PATH_PROFILE_EDITOR_Z_INDEX}
           width={720}
           onOk={closePathProfileEditor}
           onCancel={closePathProfileEditor}
           okText="完成"
-          cancelButtonProps={{ style: { display: 'none' } }}
-          styles={{ body: { maxHeight: '62vh', overflowY: 'auto' } }}
+          cancelButtonProps={{ className: 'settings-hidden-action' }}
         >
           <Form.List name="pathProfiles">
             {(fields, { add, remove }) => (
-              <Space orientation="vertical" size={10} style={{ width: '100%' }}>
-                {fields.map(({ key, name }, index) => (
-                  <div
-                    key={key}
-                    data-testid={`path-profile-row-${index}`}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      boxSizing: 'border-box',
-                      border: `1px solid ${token.colorBorderSecondary}`,
-                      borderRadius: token.borderRadius,
-                      background: token.colorFillQuaternary,
-                    }}
-                  >
-                    <Form.Item name={[name, 'id']} hidden>
-                      <Input />
-                    </Form.Item>
+              <div className="settings-list-content">
+                <div className="settings-list-items">
+                  {fields.map(({ key, name }, index) => (
                     <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        marginBottom: 10,
-                      }}
+                      key={key}
+                      data-testid={`path-profile-row-${index}`}
+                      className="settings-path-profile-row"
                     >
-                      <Text strong>路径组合 {index + 1}</Text>
-                      <Button
-                        type="text"
-                        danger
-                        size="small"
-                        icon={<MinusCircleOutlined />}
-                        disabled={fields.length <= 1}
-                        aria-label={`删除路径组合 ${index + 1}`}
-                        onClick={() => handleRemovePathProfile(remove, name)}
-                      />
+                      <Form.Item name={[name, 'id']} hidden>
+                        <Input />
+                      </Form.Item>
+                      <div className="settings-path-profile-header">
+                        <SettingTitleWithHelp
+                          label={`路径组合 ${index + 1}`}
+                          help={SETTINGS_HELP_TEXT.pathProfileEntry}
+                        />
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
+                          icon={<MinusCircleOutlined />}
+                          disabled={fields.length <= 1}
+                          aria-label={`删除路径组合 ${index + 1}`}
+                          onClick={() => handleRemovePathProfile(remove, name)}
+                        />
+                      </div>
+                      <Form.Item
+                        label="组合名称"
+                        name={[name, 'name']}
+                        tooltip={SETTINGS_HELP_TEXT.pathProfileName}
+                        rules={[{ required: true, message: '请输入组合名称' }]}
+                      >
+                        <Input placeholder="例如：工作 / 个人" />
+                      </Form.Item>
+                      <Form.Item
+                        label="源项目根目录"
+                        required
+                        tooltip={SETTINGS_HELP_TEXT.sourceProjectsPath}
+                      >
+                        <Space.Compact className="settings-full-width-compact">
+                          <Form.Item
+                            name={[name, 'sourceProjectsPath']}
+                            rules={[
+                              { required: true, message: '请输入源项目根目录' },
+                            ]}
+                            noStyle
+                          >
+                            <Input
+                              className="settings-compact-flex-control"
+                              placeholder="/Users/you/Desktop/work/projects"
+                            />
+                          </Form.Item>
+                          <Button
+                            aria-label={`选择源项目根目录 ${index + 1}`}
+                            loading={
+                              pickingPathField ===
+                              getFormFieldKey([
+                                'pathProfiles',
+                                name,
+                                'sourceProjectsPath',
+                              ])
+                            }
+                            onClick={() =>
+                              handlePickDirectory([
+                                'pathProfiles',
+                                name,
+                                'sourceProjectsPath',
+                              ])
+                            }
+                          >
+                            选择
+                          </Button>
+                        </Space.Compact>
+                      </Form.Item>
+                      <Form.Item
+                        label="Worktree 根目录"
+                        required
+                        className="settings-path-profile-last-field"
+                        tooltip={SETTINGS_HELP_TEXT.worktreesPath}
+                      >
+                        <Space.Compact className="settings-full-width-compact">
+                          <Form.Item
+                            name={[name, 'worktreesPath']}
+                            rules={[
+                              {
+                                required: true,
+                                message: '请输入 Worktree 根目录',
+                              },
+                            ]}
+                            noStyle
+                          >
+                            <Input
+                              className="settings-compact-flex-control"
+                              placeholder="/Users/you/Desktop/work/worktrees"
+                            />
+                          </Form.Item>
+                          <Button
+                            aria-label={`选择 Worktree 根目录 ${index + 1}`}
+                            loading={
+                              pickingPathField ===
+                              getFormFieldKey([
+                                'pathProfiles',
+                                name,
+                                'worktreesPath',
+                              ])
+                            }
+                            onClick={() =>
+                              handlePickDirectory([
+                                'pathProfiles',
+                                name,
+                                'worktreesPath',
+                              ])
+                            }
+                          >
+                            选择
+                          </Button>
+                        </Space.Compact>
+                      </Form.Item>
                     </div>
-                    <Form.Item
-                      label="组合名称"
-                      name={[name, 'name']}
-                      rules={[{ required: true, message: '请输入组合名称' }]}
-                    >
-                      <Input placeholder="例如：工作 / 个人" />
-                    </Form.Item>
-                    <Form.Item label="源项目根目录" required>
-                      <Space.Compact style={{ width: '100%' }}>
-                        <Form.Item
-                          name={[name, 'sourceProjectsPath']}
-                          rules={[
-                            { required: true, message: '请输入源项目根目录' },
-                          ]}
-                          noStyle
-                        >
-                          <Input
-                            style={{ flex: 1, minWidth: 0 }}
-                            placeholder="/Users/you/Desktop/work/projects"
-                          />
-                        </Form.Item>
-                        <Button
-                          aria-label={`选择源项目根目录 ${index + 1}`}
-                          loading={
-                            pickingPathField ===
-                            getFormFieldKey([
-                              'pathProfiles',
-                              name,
-                              'sourceProjectsPath',
-                            ])
-                          }
-                          onClick={() =>
-                            handlePickDirectory([
-                              'pathProfiles',
-                              name,
-                              'sourceProjectsPath',
-                            ])
-                          }
-                        >
-                          选择
-                        </Button>
-                      </Space.Compact>
-                    </Form.Item>
-                    <Form.Item
-                      label="Worktree 根目录"
-                      required
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Space.Compact style={{ width: '100%' }}>
-                        <Form.Item
-                          name={[name, 'worktreesPath']}
-                          rules={[
-                            {
-                              required: true,
-                              message: '请输入 Worktree 根目录',
-                            },
-                          ]}
-                          noStyle
-                        >
-                          <Input
-                            style={{ flex: 1, minWidth: 0 }}
-                            placeholder="/Users/you/Desktop/work/worktrees"
-                          />
-                        </Form.Item>
-                        <Button
-                          aria-label={`选择 Worktree 根目录 ${index + 1}`}
-                          loading={
-                            pickingPathField ===
-                            getFormFieldKey([
-                              'pathProfiles',
-                              name,
-                              'worktreesPath',
-                            ])
-                          }
-                          onClick={() =>
-                            handlePickDirectory([
-                              'pathProfiles',
-                              name,
-                              'worktreesPath',
-                            ])
-                          }
-                        >
-                          选择
-                        </Button>
-                      </Space.Compact>
-                    </Form.Item>
-                  </div>
-                ))}
+                  ))}
+                </div>
                 <AddListButton
                   onClick={() => handleAddPathProfile(add, fields.length)}
                 >
                   添加路径组合
                 </AddListButton>
-              </Space>
+              </div>
             )}
           </Form.List>
         </Modal>

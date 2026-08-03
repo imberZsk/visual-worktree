@@ -8,6 +8,7 @@ import {
   Badge,
   Input,
   Button,
+  Spin,
   theme,
 } from 'antd'
 import {
@@ -25,18 +26,6 @@ import { getTaskStatusMeta, DEFAULT_TASK_STATUS } from '../worktreeLogic.ts'
 
 const { Text } = Typography
 
-// 人工状态 key → 看板列的映射：决定每个任务落在哪一列。
-// 「未开始」入「待启动」；「已发布」入「已完成」；其余研发阶段入「进行中」。
-const STATUS_TO_COLUMN = {
-  'not-started': 'pending',
-  developing: 'inProgress',
-  'self-testing': 'inProgress',
-  'pending-test': 'inProgress',
-  testing: 'inProgress',
-  'pending-release': 'inProgress',
-  released: 'completed',
-}
-
 /**
  * 任务进度看板视图：按人工状态分三列展示任务（待启动/进行中/已完成）。
  * 工作流勾选进度作为卡片上的辅助信息（进度条），不再用于分组。
@@ -44,8 +33,10 @@ const STATUS_TO_COLUMN = {
  * @param {Array<{key:string,label:string}>} workflowSteps - 全局工作流步骤清单（进度条的分母）
  * @param {Record<string,string[]>} taskWorkflowMap - 任务名 → 已勾选步骤 key 数组
  * @param {Record<string,string>} taskStatusMap - 任务名 → 人工状态 key（分组依据）
- * @param {Record<string,string>} taskBlockerMap - 任务名 → 卡点备注文本
- * @param {(taskName:string, text:string) => void} onBlockerChange - 保存卡点备注回调
+ * @param {Array<object>} taskStatuses - 当前工作区动态任务状态定义列表
+ * @param {Record<string,string>} taskBlockerMap - 任务名 → 备注文本（属性名沿用历史 blocker 标识）
+ * @param {boolean} loading - 是否正在首次加载看板任务数据
+ * @param {(taskName:string, text:string) => void} onBlockerChange - 保存备注回调
  * @param {(taskName:string) => void} onTaskClick - 点击任务卡片回调（跳转到 worktree 视图）
  */
 export default function KanbanView({
@@ -53,19 +44,29 @@ export default function KanbanView({
   workflowSteps = [],
   taskWorkflowMap = {},
   taskStatusMap = {},
+  taskStatuses = [],
   taskBlockerMap = {},
+  loading = false,
   onBlockerChange,
   onTaskClick,
 }) {
   // 取主题 token，替换写死颜色以适配明暗主题
   const { token } = theme.useToken()
-  // editingTask 当前正在编辑卡点的任务名；null 表示无
+  // editingTask 当前正在编辑备注的任务名；null 表示无
   const [editingTask, setEditingTask] = useState(null)
-  // editingText 卡点编辑框的当前输入值
+  // editingText 备注编辑框的当前输入值
   const [editingText, setEditingText] = useState('')
 
+  if (loading && tasks.length === 0) {
+    return (
+      <div className="task-view-state" role="status" aria-label="看板加载状态">
+        <Spin size="small" />
+      </div>
+    )
+  }
+
   /**
-   * 进入某任务的卡点编辑态，预填已有备注
+   * 进入某任务的备注编辑态，预填已有内容
    * @param {string} taskName - 任务名
    */
   const startEditBlocker = (taskName) => {
@@ -74,7 +75,7 @@ export default function KanbanView({
   }
 
   /**
-   * 保存当前编辑的卡点备注并退出编辑态
+   * 保存当前编辑的备注并退出编辑态
    */
   const saveBlocker = () => {
     if (editingTask != null) onBlockerChange?.(editingTask, editingText)
@@ -83,7 +84,7 @@ export default function KanbanView({
   }
 
   /**
-   * 取消当前卡点编辑并丢弃未保存输入
+   * 取消当前备注编辑并丢弃未保存输入
    */
   const cancelBlocker = () => {
     setEditingTask(null)
@@ -106,13 +107,15 @@ export default function KanbanView({
     return stats
   }
 
-  // 按人工状态分组：依据 taskStatusMap 查 STATUS_TO_COLUMN，未设置/未知状态归入「待启动」
+  // 按人工状态分组：状态定义携带看板归类，未设置或已删除状态由元信息函数回退「未开始」。
   const grouped = { pending: [], inProgress: [], completed: [] }
   for (const task of tasks) {
     // statusKey 该任务的人工状态 key，未设置时回退默认「未开始」
     const statusKey = taskStatusMap[task.task] || DEFAULT_TASK_STATUS
-    // column 该状态对应的列，未知状态兜底到待启动
-    const column = STATUS_TO_COLUMN[statusKey] || 'pending'
+    // statusMeta 存储当前状态的动态配置；未知状态安全回退当前工作区默认状态。
+    const statusMeta = getTaskStatusMeta(statusKey, taskStatuses)
+    // column 存储该状态配置的看板分组，损坏值兜底到待启动。
+    const column = statusMeta.kanbanColumn || 'pending'
     grouped[column].push(task)
   }
 
@@ -134,16 +137,22 @@ export default function KanbanView({
         ? Math.round((progress.done / progress.total) * 100)
         : 0
     // statusMeta 人工状态展示信息（label/color）
-    const statusMeta = getTaskStatusMeta(taskStatusMap[task.task])
+    const statusMeta = getTaskStatusMeta(taskStatusMap[task.task], taskStatuses)
     // stats 该任务下 worktree 的异常状态计数
     const stats = getWorktreeStats(task)
-    // blocker 该任务的卡点备注文本（可能为空）
+    // blocker 该任务的备注文本（变量名沿用历史存储概念，内容可能为空）
     const blocker = taskBlockerMap[task.task]
-    // isEditing 当前卡片是否处于卡点编辑态
+    // isEditing 当前卡片是否处于备注编辑态
     const isEditing = editingTask === task.task
 
     return (
-      <Card key={task.task} size="small" hoverable style={{ marginBottom: 12 }}>
+      <Card
+        key={task.task}
+        className="kanban-task-card"
+        size="small"
+        hoverable
+        style={{ marginBottom: 12 }}
+      >
         <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           {/* 标题行：任务名（点击跳转）+ 人工状态标签 */}
           <div
@@ -183,7 +192,7 @@ export default function KanbanView({
               {progress.done}/{progress.total}
             </Text>
           </div>
-          {/* 卡点备注区：编辑态显示输入框，否则显示已有备注/添加入口 */}
+          {/* 备注区：编辑态显示输入框，否则显示已有备注/添加入口 */}
           {isEditing ? (
             <div
               data-testid="kanban-blocker-editor"
@@ -201,7 +210,7 @@ export default function KanbanView({
               <Input.TextArea
                 value={editingText}
                 onChange={(e) => setEditingText(e.target.value)}
-                placeholder="记录当前卡点/阻塞点，如：等待后端联调、设计稿未定…"
+                placeholder="记录任务备注，如：等待后端联调、设计稿待确认…"
                 autoSize={{ minRows: 2, maxRows: 4 }}
                 autoFocus
                 style={{ width: '100%' }}
@@ -228,7 +237,7 @@ export default function KanbanView({
               </div>
             </div>
           ) : blocker ? (
-            // 已有卡点：黄色警示框展示，点击进入编辑
+            // 已有备注：提示框展示，点击进入编辑
             <div
               onClick={() => startEditBlocker(task.task)}
               style={{
@@ -262,7 +271,7 @@ export default function KanbanView({
                   type="secondary"
                   style={{ fontSize: 11, lineHeight: '16px' }}
                 >
-                  卡点
+                  备注
                 </Text>
                 <Text
                   style={{
@@ -276,7 +285,7 @@ export default function KanbanView({
               </div>
             </div>
           ) : (
-            // 无卡点：整行虚线入口与卡片内容宽度对齐，避免文字按钮悬空显得不齐。
+            // 无备注：整行虚线入口与卡片内容宽度对齐，避免文字按钮悬空显得不齐。
             <Button
               block
               type="dashed"
@@ -285,7 +294,7 @@ export default function KanbanView({
               onClick={() => startEditBlocker(task.task)}
               style={{ color: token.colorTextTertiary, fontSize: 12 }}
             >
-              添加卡点
+              添加备注
             </Button>
           )}
           {/* 底部：worktree 数量 + 异常状态计数 */}
@@ -325,9 +334,10 @@ export default function KanbanView({
    * @returns {JSX.Element} 列元素
    */
   const renderColumn = (title, list, icon, headerBg) => (
-    <div style={{ flex: 1, minWidth: 280 }}>
+    <div className="kanban-column" style={{ flex: 1, minWidth: 280 }}>
       {/* 列头：用 token 颜色 + 边框，适配暗黑模式（原硬编码 #f0f0f0 等在暗黑下看不清） */}
       <div
+        className="kanban-column-header"
         style={{
           padding: '8px 12px',
           background: headerBg,
@@ -343,10 +353,10 @@ export default function KanbanView({
         </Space>
       </div>
       <div
+        className="kanban-column-content"
         style={{
           maxHeight: 'calc(100vh - 220px)',
           overflowY: 'auto',
-          paddingRight: 8,
         }}
       >
         {list.length === 0 ? (
