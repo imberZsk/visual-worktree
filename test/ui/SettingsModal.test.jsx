@@ -169,6 +169,47 @@ describe('SettingsModal 流程配置布局', () => {
     expect(await screen.findByText('••••••••-key')).toBeTruthy()
   })
 
+  it('AI 后端离线时仍保存普通配置并关闭设置页', async () => {
+    // savedConfig 存储主进程完成普通设置持久化后返回的新配置。
+    const savedConfig = makeConfig()
+    // onSaved 存储设置页成功回调，用于验证离线警告不阻断外层状态更新。
+    const onSaved = vi.fn()
+    // onClose 存储关闭回调，用于验证保存流程正常结束。
+    const onClose = vi.fn()
+    mockApi.saveConfig.mockResolvedValueOnce(savedConfig)
+    mockApi.saveAiModelSettings.mockResolvedValueOnce({
+      success: true,
+      settings: {
+        model: 'gpt-5.6-sol',
+        baseUrl: '',
+        apiKeyConfigured: true,
+        apiKeyHint: '••••••••-key',
+      },
+      backendSynchronized: false,
+      warning: '配置已保存；AI 后端未连接，模型设置将在使用时同步',
+    })
+
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
+
+    await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByText(
+        '配置已保存；AI 后端未连接，模型设置将在使用时同步'
+      )
+    ).toBeTruthy()
+    expect(onSaved).toHaveBeenCalledWith(savedConfig)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('设置各 Tab 的字段和分组小标题均提供问号说明', async () => {
     renderWithApp(
       <SettingsModal

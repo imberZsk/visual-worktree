@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.1] - 待发布
+
+### 修复
+
+- 修复 GitHub 安装包未运行可选 FastAPI 服务时，打开设置显示 `fetch failed` 且普通配置无法保存的问题；AI 模型设置现在优先在本机安全读写，后端离线只显示简短提示，不再阻断其它设置保存。
+
 ## [1.8.0] - 2026-08-04
 
 ### 新增

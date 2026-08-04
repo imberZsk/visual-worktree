@@ -461,6 +461,18 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     return updateAiModelSettingsImpl(credentials)
   }
 
+  /**
+   * 生成只包含本机模型配置状态的安全投影，不读取或暴露 API Key 明文。
+   * @param {{model?:string,baseUrl?:string,apiKey?:string}|null} credentials - 本机解密后的模型配置
+   * @returns {{model:string,baseUrl:string,apiKeyConfigured:boolean,apiKeyHint:string}} 渲染进程可安全展示的设置
+   */
+  const getLocalAiModelSettings = (credentials) => ({
+    model: credentials?.model || DEFAULT_AI_MODEL,
+    baseUrl: credentials?.baseUrl || '',
+    apiKeyConfigured: Boolean(credentials?.apiKey),
+    apiKeyHint: maskAiModelApiKey(credentials?.apiKey),
+  })
+
   // 扫描项目：读取配置中的源路径与忽略列表
   ipcMain.handle(IPC.SCAN_PROJECTS, async (_e, opts = {}) => {
     const cfg = loadConfig(configBaseDir)
@@ -659,22 +671,17 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     }
   })
 
-  // 设置页只读取安全投影；若本机已有加密配置，会顺便恢复到当前后端进程。
+  // 设置页只读取本机安全投影，不访问可选的 FastAPI 服务，避免正式安装包离线时打开设置就报错。
   ipcMain.handle(IPC.LOAD_AI_MODEL_SETTINGS, async () => {
     try {
-      // credentials 存储本机加密配置，仅用于生成不可逆的 Key 掩码提示。
+      // credentials 存储本机加密配置，仅用于生成不含 Key 明文的安全投影。
       const credentials = loadAiModelCredentialsImpl({
         dataDir: aiCredentialsBaseDir,
         safeStorage,
       })
-      // settings 存储不含 Key 明文的当前模型设置状态。
-      const settings = await synchronizeAiModelSettings()
       return {
         success: true,
-        settings: {
-          ...settings,
-          apiKeyHint: maskAiModelApiKey(credentials?.apiKey),
-        },
+        settings: getLocalAiModelSettings(credentials),
       }
     } catch (error) {
       return { success: false, error: error?.message || '读取模型配置失败' }
@@ -703,16 +710,25 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
         dataDir: aiCredentialsBaseDir,
         safeStorage,
       })
-      // settings 存储后端同步后返回的不含 Key 的安全投影。
-      const settings = await updateAiModelSettingsImpl({
-        ...credentials,
-      })
+      // backendSynchronized 标记可选 FastAPI 服务是否已收到最新设置；离线不影响本机持久化和其它设置保存。
+      let backendSynchronized = true
+      try {
+        await updateAiModelSettingsImpl({ ...credentials })
+      } catch (error) {
+        backendSynchronized = false
+        // 正式安装包不内置后端；只记录不含凭据的连接错误，聊天时仍会重新尝试同步。
+        console.warn(
+          '[ai-assistant] 模型配置已保存到本机，后端同步暂不可用：',
+          error?.message || '未知错误'
+        )
+      }
       return {
         success: true,
-        settings: {
-          ...settings,
-          apiKeyHint: maskAiModelApiKey(credentials.apiKey),
-        },
+        settings: getLocalAiModelSettings(credentials),
+        backendSynchronized,
+        warning: backendSynchronized
+          ? ''
+          : '配置已保存；AI 后端未连接，模型设置将在使用时同步',
       }
     } catch (error) {
       return { success: false, error: error?.message || '保存模型配置失败' }

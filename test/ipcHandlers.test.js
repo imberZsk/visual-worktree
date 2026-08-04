@@ -178,6 +178,23 @@ describe('registerIpcHandlers', () => {
     expect(result).toEqual({ success: true, answer: '这是智能体回答' })
   })
 
+  it('LOAD_AI_MODEL_SETTINGS reads local credentials without connecting to FastAPI', async () => {
+    // result 存储设置页打开时读取到的本机安全投影。
+    const result = await mock.invoke(IPC.LOAD_AI_MODEL_SETTINGS)
+
+    expect(mock.getAiModelSettings).not.toHaveBeenCalled()
+    expect(mock.updateAiModelSettings).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      success: true,
+      settings: {
+        model: 'gpt-5.6-sol',
+        baseUrl: '',
+        apiKeyConfigured: true,
+        apiKeyHint: '••••••••-key',
+      },
+    })
+  })
+
   it('SAVE_AI_MODEL_SETTINGS encrypts and synchronizes model settings', async () => {
     // result 存储保存模型设置后的安全 IPC 响应。
     const result = await mock.invoke(IPC.SAVE_AI_MODEL_SETTINGS, {
@@ -198,13 +215,42 @@ describe('registerIpcHandlers', () => {
     expect(result).toEqual({
       success: true,
       settings: {
-        model: 'gpt-5.6-sol',
-        baseUrl: '',
+        model: 'custom-model',
+        baseUrl: 'https://gateway.example.com/v1',
         apiKeyConfigured: true,
         apiKeyHint: '••••••••-key',
       },
+      backendSynchronized: true,
+      warning: '',
     })
     expect(JSON.stringify(result)).not.toContain('new-key')
+  })
+
+  it('SAVE_AI_MODEL_SETTINGS keeps local save successful when FastAPI is offline', async () => {
+    mock.updateAiModelSettings.mockRejectedValueOnce(
+      new TypeError('fetch failed')
+    )
+    // warnSpy 屏蔽预期的离线诊断日志，并验证没有把失败升级为 IPC 错误。
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    // result 存储后端离线时仍返回成功的本机保存结果。
+    const result = await mock.invoke(IPC.SAVE_AI_MODEL_SETTINGS, {
+      model: 'gpt-5.6-sol',
+      baseUrl: '',
+      apiKey: 'offline-key',
+    })
+
+    expect(mock.saveAiModelCredentials).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({
+      success: true,
+      backendSynchronized: false,
+      warning: '配置已保存；AI 后端未连接，模型设置将在使用时同步',
+    })
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ai-assistant] 模型配置已保存到本机，后端同步暂不可用：',
+      'fetch failed'
+    )
+    warnSpy.mockRestore()
   })
 
   it('STREAM_AI_ASSISTANT_MESSAGE forwards identified text chunks', async () => {

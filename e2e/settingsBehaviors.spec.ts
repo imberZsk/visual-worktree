@@ -2,6 +2,34 @@ import { test, expect } from './fixtures/electronApp.ts'
 import { createTaskThroughUi } from './helpers/uiActions.ts'
 import { prepareWorkspace } from './helpers/workspaceFixture.ts'
 
+test('GitHub 安装包未启动 AI 后端时设置仍可打开并保存', async ({
+  appPage,
+  e2eHomePath,
+}) => {
+  await prepareWorkspace(appPage, e2eHomePath)
+  await appPage.getByRole('button', { name: '设置', exact: true }).click()
+  await expect(appPage.getByText(/fetch failed/i)).toHaveCount(0)
+  await appPage.getByRole('tab', { name: '展示' }).click()
+  // projectCountSwitch 存储项目数量徽标开关，用于验证普通配置在 AI 后端离线时仍能持久化。
+  const projectCountSwitch = appPage
+    .getByTestId('display-badge-card-projectCount')
+    .getByRole('switch')
+  await expect(projectCountSwitch).toBeChecked()
+  await projectCountSwitch.click()
+  await appPage.locator('.ant-drawer-footer button').last().click()
+
+  await expect(
+    appPage.getByText('配置已保存；AI 后端未连接，模型设置将在使用时同步')
+  ).toBeVisible()
+  await expect(appPage.locator('.ant-drawer-content')).toHaveCount(0)
+
+  await appPage.getByRole('button', { name: '设置', exact: true }).click()
+  await appPage.getByRole('tab', { name: '展示' }).click()
+  await expect(
+    appPage.getByTestId('display-badge-card-projectCount').getByRole('switch')
+  ).not.toBeChecked()
+})
+
 test('设置取消后不保存展示开关修改', async ({
   appPage,
   e2eHomePath,
