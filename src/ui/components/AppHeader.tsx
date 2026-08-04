@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Button,
   Layout,
@@ -75,9 +75,15 @@ export default function AppHeader({
   // canCreateWorktree 标记当前视图是否支持创建 Worktree。
   const canCreateWorktree =
     activeView === 'worktrees' || activeView === 'kanban'
+  // pathProfileOpen 标记路径组合下拉是否展开；展开时临时停用 Header 原生拖动，让空白区域点击能关闭弹层。
+  const [pathProfileOpen, setPathProfileOpen] = useState(false)
 
   return (
-    <Header className={`app-header${MACOS_HEADER_CLASS}`}>
+    <Header
+      className={`app-header${MACOS_HEADER_CLASS}${
+        pathProfileOpen ? ' app-header--select-open' : ''
+      }`}
+    >
       <div className="app-header__left">
         <span className="app-header__title">Visual Worktree</span>
         <Space size={8} className="app-header__interactive">
@@ -97,6 +103,7 @@ export default function AppHeader({
               popupMatchSelectWidth={false}
               loading={pathProfileSwitching}
               disabled={pathProfileSwitching}
+              onOpenChange={setPathProfileOpen}
               onChange={onPathProfileChange}
             />
           )}

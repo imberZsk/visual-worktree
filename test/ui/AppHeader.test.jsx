@@ -57,6 +57,10 @@ describe('AppHeader', () => {
     expect(STYLE_SOURCE).toMatch(
       /\.app-header__interactive[\s\S]*-webkit-app-region:\s*no-drag/
     )
+    expect(STYLE_SOURCE).toMatch(
+      /\.app-header--select-open\.ant-layout-header[\s\S]*-webkit-app-region:\s*no-drag/
+    )
+    expect(COMPONENT_SOURCE).toContain('onOpenChange={setPathProfileOpen}')
     expect(STYLE_SOURCE).toContain('env(titlebar-area-width, 100vw)')
     expect(STYLE_SOURCE).toMatch(
       /\.app-header--macos\.ant-layout-header\s*\{[\s\S]*padding-inline-start:\s*96px/

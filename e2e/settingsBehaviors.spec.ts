@@ -111,6 +111,15 @@ test('连续切换工作区时两条居中提示保持完整间距', async ({
 
   // profileSelect 存储顶部路径组合选择器，连续切换用于让两条成功提示同时存在。
   const profileSelect = appPage.locator('.app-header__path-profile')
+  // appHeader 存储原生窗口拖动 Header；路径下拉展开时应临时退出拖动区以接收外部点击。
+  const appHeader = appPage.locator('.app-header')
+  await profileSelect.click()
+  await expect(appPage.locator('.ant-select-dropdown')).toBeVisible()
+  await expect(appHeader).toHaveClass(/app-header--select-open/)
+  await appHeader.locator('.app-header__title').click()
+  await expect(appPage.locator('.ant-select-dropdown')).toBeHidden()
+  await expect(appHeader).not.toHaveClass(/app-header--select-open/)
+
   await profileSelect.click()
   await appPage.getByText('个人区', { exact: true }).last().click()
   await expect(appPage.getByText('已切换到「个人区」')).toBeVisible()

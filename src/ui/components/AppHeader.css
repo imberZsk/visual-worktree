@@ -23,6 +23,11 @@
   padding-inline-start: 96px;
 }
 
+/* Select 展开时让 Header 空白区接收外部点击以关闭弹层；关闭后恢复原生窗口拖动。 */
+.app-header--select-open.ant-layout-header {
+  -webkit-app-region: no-drag;
+}
+
 /* 左侧标题和导航使用稳定横向布局，窄窗口时允许导航区域收缩。 */
 .app-header__left {
   align-items: center;
