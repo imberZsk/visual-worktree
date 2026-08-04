@@ -635,7 +635,9 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         taskStatuses,
         envCheckRoles,
       })
-      message.success('配置已保存')
+      // AI 后端是正式安装包之外的可选服务；离线时本地与普通设置均已保存，只提示同步状态而不判定失败。
+      if (aiSettingsResult.warning) message.warning(aiSettingsResult.warning)
+      else message.success('配置已保存')
       onSaved(saved)
       onClose()
     } catch (e) {

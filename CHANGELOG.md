@@ -4,6 +4,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.1] - 待发布
+
+### 修复
+
+- 修复 GitHub 安装包未运行可选 FastAPI 服务时，打开设置显示 `fetch failed` 且普通配置无法保存的问题；AI 模型设置现在优先在本机安全读写，后端离线只显示简短提示，不再阻断其它设置保存。
+- 修复路径组合 Select 展开后，点击 Header 拖动区域无法关闭下拉菜单的问题；下拉展开期间 Header 会临时接收外部点击，关闭后恢复窗口拖动。
+- 修复 macOS Dock 图标因透明留白过大而显示浅灰色外圈的问题；在保持原图比例和内容不变的前提下放大有效图形，并同步重建 macOS、Windows、应用与启动图标资源。
+- 修复 PR 合并后由 `GITHUB_TOKEN` 自动推送 tag 无法继续触发 Release workflow、从而产生孤立 tag 的问题；正式版本改为在 main 校验通过后由已认证用户直接推送 tag。
+
 ## [1.8.0] - 2026-08-04
 
 ### 新增

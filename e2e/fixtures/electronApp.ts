@@ -11,6 +11,8 @@ import { join } from 'node:path'
 
 // E2E_ENV_FLAG 存储仅供自动化测试识别当前 Electron 进程的环境变量。
 const E2E_ENV_FLAG = 'VISUAL_WORKTREE_E2E'
+// OFFLINE_AI_ASSISTANT_API_URL 存储测试专用的不可达后端，确保 E2E 不会误用开发机上偶然运行的 FastAPI 服务。
+const OFFLINE_AI_ASSISTANT_API_URL = 'http://127.0.0.1:1'
 
 type ElectronFixtures = {
   electronApp: ElectronApplication
@@ -32,6 +34,7 @@ async function launchIsolatedElectron(
     HOME: e2eHomePath,
     USERPROFILE: e2eHomePath,
     NODE_ENV: 'production',
+    AI_ASSISTANT_API_URL: OFFLINE_AI_ASSISTANT_API_URL,
     [E2E_ENV_FLAG]: '1',
   }
   // isolatedUserDataPath 存储 Chromium localStorage 等渲染进程数据；macOS 不保证仅靠 HOME 改写默认 userData 路径。
