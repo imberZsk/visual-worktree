@@ -17,3 +17,16 @@ minimumReleaseAgeExclude:
   - typescript-eslint@8.64.0
 overrides:
   '@electron/get': 5.0.0
+  # 传递依赖的上游约束尚未全部包含安全补丁，统一解析到对应主版本的已修复版本。
+  'brace-expansion@^1.0.0': 1.1.18
+  'brace-expansion@^2.0.0': 2.1.4
+  'brace-expansion@^5.0.0': 5.0.9
+  'ejs@^3.0.0': 3.1.10
+  'fast-uri@^3.0.0': 3.1.5
+  'js-yaml@^4.0.0': 4.3.1
+  'postcss@^8.0.0': 8.5.26
+  'semver@^5.0.0': 5.7.2
+  'shell-quote@^1.0.0': 1.9.0
+  'tar@^7.0.0': 7.5.22
+  'undici@^6.0.0': 6.28.0
+  'undici@^7.0.0': 7.29.0
