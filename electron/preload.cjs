@@ -192,10 +192,10 @@ contextBridge.exposeInMainWorld('api', {
   // 按当前工作区历史列表下标删除一条记录。
   removeTaskHistory: (idx, workspaceId) =>
     ipcRenderer.invoke(IPC.REMOVE_TASK_HISTORY, idx, workspaceId),
-  // 获取任务关联的 Claude Code 会话列表及 token 用量
+  // 获取任务关联的已选 AI 工具会话列表及 Token 用量
   getClaudeSessionsByTask: (taskName) =>
     ipcRenderer.invoke(IPC.GET_CLAUDE_SESSIONS_BY_TASK, taskName),
-  // 获取所有任务的 Claude Code 用量汇总
+  // 获取所有任务的已选 AI 工具用量明细与合计
   getClaudeTasksSummary: (taskNames) =>
     ipcRenderer.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, taskNames),
   // 获取可安全删除的 worktree 列表

@@ -77,15 +77,55 @@ function makeConfig() {
       claudeUsage: true,
     },
     taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
+    kanbanSettings: {
+      hiddenStatusKeys: [],
+    },
     tokenPricing: {
       enabled: true,
       input: 1,
       output: 2,
       cacheWrite: 3,
       cacheRead: 4,
+      multiplier: 1,
+      models: [],
       usdToCny: 8,
+      directCnyDisplay: false,
+    },
+    tokenPricingByTool: {
+      'claude-code': {
+        enabled: false,
+        input: 3,
+        output: 15,
+        cacheWrite: 3.75,
+        cacheRead: 0.3,
+        multiplier: 1,
+        models: [],
+        usdToCny: 7.2,
+        directCnyDisplay: false,
+      },
+      codex: {
+        enabled: true,
+        input: 1,
+        output: 2,
+        cacheWrite: 3,
+        cacheRead: 4,
+        multiplier: 1,
+        models: [
+          {
+            model: 'gpt-5.6-sol',
+            input: 5,
+            output: 30,
+            cacheWrite: 0,
+            cacheRead: 0.5,
+            multiplier: 0.3,
+          },
+        ],
+        usdToCny: 8,
+        directCnyDisplay: false,
+      },
     },
     aiUsageTool: 'codex',
+    aiUsageTools: ['codex'],
     cicdLinks: {},
     envCheckRoles: [],
   }
@@ -98,10 +138,14 @@ function makeConfig() {
  * @returns {HTMLElement} 问号 Tooltip 触发节点
  */
 function expectFormLabelHasHelp(labelText, container = document.body) {
-  // labelTextNode 存储表单标题文字节点，用于向上定位 Ant Design 标签容器。
-  const labelTextNode = within(container).getByText(labelText, { exact: true })
-  // formLabel 存储 Ant Design 表单标题容器，问号触发节点应位于其中。
-  const formLabel = labelTextNode.closest('.ant-form-item-label')
+  // labelTextNodes 存储所有同名表单标题；模型专属价格可能与默认价格复用标题。
+  const labelTextNodes = within(container).getAllByText(labelText, {
+    exact: true,
+  })
+  // formLabel 存储带问号提示的同名标题容器，避免模型明细中的紧凑标题干扰断言。
+  const formLabel = labelTextNodes
+    .map((labelTextNode) => labelTextNode.closest('.ant-form-item-label'))
+    .find((label) => label?.querySelector('.ant-form-item-tooltip'))
   expect(formLabel).toBeTruthy()
   // helpTrigger 存储 Ant Design Form.Item tooltip 生成的问号节点。
   const helpTrigger = formLabel.querySelector('.ant-form-item-tooltip')
@@ -284,15 +328,23 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByRole('tab', { name: 'Token 费用' }))
+    ;['统计工具', '美元兑人民币汇率'].forEach((label) =>
+      expectFormLabelHasHelp(label)
+    )
+    fireEvent.click(screen.getByRole('button', { name: /价格配置/ }))
+    // pricingDialog 存储 Codex 模型价格管理弹层，用于校验价格字段说明均在弹层内。
+    const pricingDialog = await findDialogByTitle('Codex 价格配置')
     ;[
-      '统计工具',
       'Input 单价',
       'Output 单价',
       'Cache write 单价',
       'Cache read 单价',
-      '美元兑人民币汇率',
-    ].forEach((label) => expectFormLabelHasHelp(label))
-    expect(screen.getByLabelText('自定义计价说明')).toBeTruthy()
+      '计费倍率',
+    ].forEach((label) => expectFormLabelHasHelp(label, pricingDialog))
+    expect(within(pricingDialog).getByLabelText('自定义计价说明')).toBeTruthy()
+    fireEvent.click(
+      within(pricingDialog).getByRole('button', { name: /完\s*成/ })
+    )
 
     fireEvent.click(screen.getByRole('tab', { name: '展示' }))
     ;[
@@ -302,7 +354,6 @@ describe('SettingsModal 流程配置布局', () => {
       '需求链接',
       '环境状态',
       'Token 消耗',
-      '任务状态（7/20）',
     ].forEach((label) =>
       expect(screen.getByLabelText(`${label}说明`)).toBeTruthy()
     )
@@ -311,8 +362,11 @@ describe('SettingsModal 流程配置布局', () => {
     ).toBeNull()
     fireEvent.mouseEnter(screen.getByLabelText('项目数量说明'))
     expect(await screen.findByText('任务包含的项目数。')).toBeTruthy()
-    // statusSettings 存储状态配置区，用于确认界面不再显示无意义的行序号。
-    const statusSettings = screen.getByTestId('task-status-settings')
+    expect(screen.queryByTestId('task-status-settings')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '配置任务状态' }))
+    // statusSettings 存储弹层中的状态配置区，用于确认界面不再显示无意义的行序号。
+    const statusSettings = await screen.findByTestId('task-status-settings')
+    expect(screen.getByText('任务状态（7/20）')).toBeTruthy()
     expect(within(statusSettings).queryByText('状态 2')).toBeNull()
     // defaultStatusRow 存储默认状态配置行，用于验证状态名称不再重复展示问号。
     const defaultStatusRow = screen.getByTestId('task-status-row-not-started')
@@ -321,7 +375,7 @@ describe('SettingsModal 流程配置布局', () => {
       .getByText('状态名称', { exact: true })
       .closest('.ant-form-item-label')
     expect(statusNameLabel?.querySelector('.ant-form-item-tooltip')).toBeNull()
-    expectFormLabelHasHelp('看板归类', defaultStatusRow)
+    expect(within(defaultStatusRow).queryByText('看板归类')).toBeNull()
 
     fireEvent.click(screen.getByRole('tab', { name: 'CI/CD' }))
     expectFormLabelHasHelp('CI/CD 流水线地址（按项目配置，选填）')
@@ -659,7 +713,8 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByText('展示'))
-    // statusSettings 存储任务状态标签设置区，用于确认配置没有混入徽标开关卡片。
+    fireEvent.click(screen.getByRole('button', { name: '配置任务状态' }))
+    // statusSettings 存储任务状态标签设置弹层，用于限定状态编辑操作。
     const statusSettings = await screen.findByTestId('task-status-settings')
     // developingRow 存储“开发中”稳定状态所在行，避免依赖可变的列表序号。
     const developingRow = within(statusSettings).getByTestId(
@@ -671,6 +726,12 @@ describe('SettingsModal 流程配置布局', () => {
     })
     expect(developingInput.value).toBe('开发中')
     fireEvent.change(developingInput, { target: { value: '处理中' } })
+    fireEvent.click(
+      within(statusSettings).getByRole('checkbox', {
+        name: '看板展示 待提测',
+      })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /完\s*成/ }))
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
 
     await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
@@ -681,6 +742,9 @@ describe('SettingsModal 流程配置布局', () => {
       savedConfig.taskStatuses.find((status) => status.key === 'developing')
         ?.label
     ).toBe('处理中')
+    expect(savedConfig.kanbanSettings).toEqual({
+      hiddenStatusKeys: ['pending-test'],
+    })
   })
 
   it('任务状态标签重复时阻止保存并在对应字段展示错误', async () => {
@@ -694,6 +758,7 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByText('展示'))
+    fireEvent.click(screen.getByRole('button', { name: '配置任务状态' }))
     // developingRow 存储待改成重复文案的“开发中”状态行。
     const developingRow = await screen.findByTestId(
       'task-status-row-developing'
@@ -721,13 +786,14 @@ describe('SettingsModal 流程配置布局', () => {
     )
 
     fireEvent.click(screen.getByText('展示'))
-    // statusSettings 存储动态状态设置区，用于限定新增和删除操作的查询范围。
+    fireEvent.click(screen.getByRole('button', { name: '配置任务状态' }))
+    // statusSettings 存储弹层中的动态状态设置区，用于限定新增和删除操作的查询范围。
     const statusSettings = await screen.findByTestId('task-status-settings')
-    expect(within(statusSettings).getByText('任务状态（7/20）')).toBeTruthy()
+    expect(screen.getByText('任务状态（7/20）')).toBeTruthy()
     fireEvent.click(
       within(statusSettings).getByRole('button', { name: '添加任务状态' })
     )
-    expect(within(statusSettings).getByText('任务状态（8/20）')).toBeTruthy()
+    expect(screen.getByText('任务状态（8/20）')).toBeTruthy()
     // customStatusRow 存储新增在列表末尾的状态行。
     const customStatusRow = within(statusSettings)
       .getAllByTestId(/^task-status-row-/)
@@ -744,7 +810,7 @@ describe('SettingsModal 流程配置布局', () => {
     fireEvent.click(
       within(selfTestingRow).getByRole('button', { name: '删除状态' })
     )
-    expect(within(statusSettings).getByText('任务状态（7/20）')).toBeTruthy()
+    expect(screen.getByText('任务状态（7/20）')).toBeTruthy()
     fireEvent.click(
       within(customStatusRow).getByRole('button', { name: '上移状态' })
     )
@@ -1226,18 +1292,35 @@ describe('SettingsModal 流程配置布局', () => {
     // pricingPanel 存储 Token 费用设置容器，不应再叠加额外 flex gap。
     const pricingPanel = screen.getByTestId('token-pricing-settings-panel')
     expect(pricingPanel.style.gap).toBe('')
+    expect(pricingPanel.querySelector('.token-pricing-tool-row')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /价格配置/ }))
+    // pricingDialog 存储当前 Codex 价格弹层，价格字段不再占用主设置页空间。
+    const pricingDialog = await findDialogByTitle('Codex 价格配置')
     expect(
-      pricingPanel.querySelector('.token-pricing-fields-grid')
+      Number(within(pricingDialog).getAllByLabelText('Input 单价')[0].value)
+    ).toBe(1)
+    expect(
+      within(pricingDialog).getByText('GPT-5.6 Sol', { exact: true })
     ).toBeTruthy()
-    expect(pricingPanel.querySelectorAll('.token-pricing-field')).toHaveLength(
-      5
+    fireEvent.click(
+      within(pricingDialog).getByRole('button', { name: /完\s*成/ })
     )
-    expect(Number(screen.getByLabelText('Input 单价').value)).toBe(1)
+    fireEvent.click(screen.getByRole('switch', { name: '直接人民币显示' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('美元兑人民币汇率').disabled).toBe(true)
+    )
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
     await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
     // savedConfig 存储设置页提交给主进程的完整配置。
     const savedConfig = mockApi.saveConfig.mock.calls[0][0]
-    expect(savedConfig.tokenPricing).toEqual(makeConfig().tokenPricing)
+    expect(savedConfig.tokenPricing).toEqual({
+      ...makeConfig().tokenPricing,
+      directCnyDisplay: true,
+    })
+    expect(savedConfig.tokenPricingByTool).toEqual(
+      makeConfig().tokenPricingByTool
+    )
     expect(savedConfig.aiUsageTool).toBe('codex')
+    expect(savedConfig.aiUsageTools).toEqual(['codex'])
   })
 })

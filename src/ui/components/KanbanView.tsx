@@ -9,35 +9,46 @@ import {
   Input,
   Button,
   Spin,
+  Tooltip,
   theme,
 } from 'antd'
 import {
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  PauseCircleOutlined,
   EditOutlined,
   WarningOutlined,
   CloseOutlined,
   CheckOutlined,
+  PushpinOutlined,
+  PushpinFilled,
 } from '@ant-design/icons'
 import { useState } from 'react'
 import { computeWorkflowProgress } from '../workflowLogic.ts'
-import { getTaskStatusMeta, DEFAULT_TASK_STATUS } from '../worktreeLogic.ts'
+import {
+  getTaskStatusMeta,
+  getTaskStatuses,
+  DEFAULT_TASK_STATUS,
+} from '../worktreeLogic.ts'
+import { normalizeKanbanSettings } from '../../core/kanbanSettings.js'
+import { VscodeIcon } from '../icons.tsx'
+import './KanbanView.css'
 
 const { Text } = Typography
 
 /**
- * 任务进度看板视图：按人工状态分三列展示任务（待启动/进行中/已完成）。
+ * 任务进度看板视图：按当前工作区的动态人工状态逐列展示任务。
  * 工作流勾选进度作为卡片上的辅助信息（进度条），不再用于分组。
  * @param {Array<{task:string, worktrees:Array}>} tasks - 任务分组列表（每项含 task 任务名、worktrees 列表）
  * @param {Array<{key:string,label:string}>} workflowSteps - 全局工作流步骤清单（进度条的分母）
  * @param {Record<string,string[]>} taskWorkflowMap - 任务名 → 已勾选步骤 key 数组
  * @param {Record<string,string>} taskStatusMap - 任务名 → 人工状态 key（分组依据）
  * @param {Array<object>} taskStatuses - 当前工作区动态任务状态定义列表
+ * @param {{hiddenStatusKeys?:string[]}} kanbanSettings - 当前工作区看板列显示偏好
+ * @param {string[]} pinnedTaskKeys - 已置顶任务名列表
  * @param {Record<string,string>} taskBlockerMap - 任务名 → 备注文本（属性名沿用历史 blocker 标识）
  * @param {boolean} loading - 是否正在首次加载看板任务数据
  * @param {(taskName:string, text:string) => void} onBlockerChange - 保存备注回调
  * @param {(taskName:string) => void} onTaskClick - 点击任务卡片回调（跳转到 worktree 视图）
+ * @param {(taskName:string,pinned:boolean) => void} onTaskPinnedChange - 置顶或取消置顶任务回调
+ * @param {(path:string) => void} onOpenVscode - 使用 VSCode 打开任务目录回调
  */
 export default function KanbanView({
   tasks = [],
@@ -45,10 +56,14 @@ export default function KanbanView({
   taskWorkflowMap = {},
   taskStatusMap = {},
   taskStatuses = [],
+  kanbanSettings = {},
+  pinnedTaskKeys = [],
   taskBlockerMap = {},
   loading = false,
   onBlockerChange,
   onTaskClick,
+  onTaskPinnedChange,
+  onOpenVscode,
 }) {
   // 取主题 token，替换写死颜色以适配明暗主题
   const { token } = theme.useToken()
@@ -107,16 +122,31 @@ export default function KanbanView({
     return stats
   }
 
-  // 按人工状态分组：状态定义携带看板归类，未设置或已删除状态由元信息函数回退「未开始」。
-  const grouped = { pending: [], inProgress: [], completed: [] }
+  // normalizedTaskStatuses 存储按设置顺序清洗后的动态状态，每个状态直接对应一列。
+  const normalizedTaskStatuses = getTaskStatuses(taskStatuses)
+  // normalizedKanbanSettings 存储清理失效状态后的当前列偏好。
+  const normalizedKanbanSettings = normalizeKanbanSettings(
+    kanbanSettings,
+    normalizedTaskStatuses
+  )
+  // hiddenStatusKeySet 存储当前不在看板展示的状态 key，供列派生快速判断。
+  const hiddenStatusKeySet = new Set(normalizedKanbanSettings.hiddenStatusKeys)
+  // visibleTaskStatuses 存储设置顺序下实际展示的看板状态列。
+  const visibleTaskStatuses = normalizedTaskStatuses.filter(
+    (status) => !hiddenStatusKeySet.has(status.key)
+  )
+  // pinnedTaskKeySet 存储已置顶任务名，用于列内排序和卡片按钮状态判断。
+  const pinnedTaskKeySet = new Set(pinnedTaskKeys)
+  // groupedTasks 存储状态 key 到任务列表的映射，状态被隐藏时其任务也随对应列隐藏。
+  const groupedTasks = Object.fromEntries(
+    normalizedTaskStatuses.map((status) => [status.key, []])
+  )
   for (const task of tasks) {
     // statusKey 该任务的人工状态 key，未设置时回退默认「未开始」
     const statusKey = taskStatusMap[task.task] || DEFAULT_TASK_STATUS
     // statusMeta 存储当前状态的动态配置；未知状态安全回退当前工作区默认状态。
     const statusMeta = getTaskStatusMeta(statusKey, taskStatuses)
-    // column 存储该状态配置的看板分组，损坏值兜底到待启动。
-    const column = statusMeta.kanbanColumn || 'pending'
-    grouped[column].push(task)
+    groupedTasks[statusMeta.key]?.push(task)
   }
 
   /**
@@ -144,6 +174,10 @@ export default function KanbanView({
     const blocker = taskBlockerMap[task.task]
     // isEditing 当前卡片是否处于备注编辑态
     const isEditing = editingTask === task.task
+    // taskPinned 标记当前任务是否已置顶，状态与 Worktree Tab 共用同一份持久化偏好。
+    const taskPinned = pinnedTaskKeySet.has(task.task)
+    // taskPath 存储任务目录路径；缺失时禁用 VSCode 操作。
+    const taskPath = typeof task.path === 'string' ? task.path : ''
 
     return (
       <Card
@@ -169,17 +203,42 @@ export default function KanbanView({
                 fontSize: 14,
                 wordBreak: 'break-all',
                 cursor: 'pointer',
+                flex: 1,
+                minWidth: 0,
               }}
               onClick={() => onTaskClick?.(task.task)}
             >
               {task.task}
             </Text>
-            <Tag
-              color={statusMeta.color}
-              style={{ marginInlineEnd: 0, flexShrink: 0 }}
-            >
-              {statusMeta.label}
-            </Tag>
+            <Space size={4} style={{ flexShrink: 0 }}>
+              <Tag
+                color={statusMeta.color}
+                style={{ marginInlineEnd: 0, flexShrink: 0 }}
+              >
+                {statusMeta.label}
+              </Tag>
+              <Tooltip title={taskPinned ? '取消置顶任务' : '置顶任务'}>
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={`${taskPinned ? '取消置顶任务' : '置顶任务'} ${task.task}`}
+                  icon={taskPinned ? <PushpinFilled /> : <PushpinOutlined />}
+                  onClick={() => onTaskPinnedChange?.(task.task, !taskPinned)}
+                />
+              </Tooltip>
+              <Tooltip title={taskPath ? '在 VSCode 中打开' : '任务目录不可用'}>
+                <span>
+                  <Button
+                    type="text"
+                    size="small"
+                    disabled={!taskPath}
+                    aria-label={`在 VSCode 中打开任务 ${task.task}`}
+                    icon={<VscodeIcon />}
+                    onClick={() => onOpenVscode?.(taskPath)}
+                  />
+                </span>
+              </Tooltip>
+            </Space>
           </div>
           {/* 工作流进度条 + N/M 文字（辅助信息，非分组依据） */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -327,68 +386,54 @@ export default function KanbanView({
 
   /**
    * 渲染单列
-   * @param {string} title - 列标题
+   * @param {{key:string,label:string,color:string}} status - 当前列对应的任务状态
    * @param {Array} list - 该列的任务列表
-   * @param {JSX.Element} icon - 列图标
-   * @param {string} headerBg - 列头背景色（用 theme token 适配明暗主题）
    * @returns {JSX.Element} 列元素
    */
-  const renderColumn = (title, list, icon, headerBg) => (
-    <div className="kanban-column" style={{ flex: 1, minWidth: 280 }}>
-      {/* 列头：用 token 颜色 + 边框，适配暗黑模式（原硬编码 #f0f0f0 等在暗黑下看不清） */}
+  const renderColumn = (status, list) => {
+    // sortedList 存储列内任务顺序：置顶任务在前，其余任务保持原扫描顺序。
+    const sortedList = [...list].sort((firstTask, secondTask) => {
+      // firstPinned 标记第一项是否已置顶。
+      const firstPinned = pinnedTaskKeySet.has(firstTask.task)
+      // secondPinned 标记第二项是否已置顶。
+      const secondPinned = pinnedTaskKeySet.has(secondTask.task)
+      if (firstPinned === secondPinned) return 0
+      return firstPinned ? -1 : 1
+    })
+    return (
       <div
-        className="kanban-column-header"
-        style={{
-          padding: '8px 12px',
-          background: headerBg,
-          border: `1px solid ${token.colorBorderSecondary}`,
-          borderRadius: token.borderRadius,
-          marginBottom: 12,
-        }}
+        key={status.key}
+        className="kanban-column"
+        data-status-key={status.key}
       >
-        <Space>
-          {icon}
-          <Text strong>{title}</Text>
-          <Tag style={{ marginInlineEnd: 0 }}>{list.length}</Tag>
-        </Space>
+        <div className="kanban-column-header">
+          <Space>
+            <Tag color={status.color} className="kanban-column-status-tag">
+              {status.label}
+            </Tag>
+            <Tag className="kanban-column-count-tag">{list.length}</Tag>
+          </Space>
+        </div>
+        <div className="kanban-column-content">
+          {list.length === 0 ? (
+            <Empty description="无任务" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            sortedList.map(renderCard)
+          )}
+        </div>
       </div>
-      <div
-        className="kanban-column-content"
-        style={{
-          maxHeight: 'calc(100vh - 220px)',
-          overflowY: 'auto',
-        }}
-      >
-        {list.length === 0 ? (
-          <Empty description="无任务" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        ) : (
-          list.map(renderCard)
-        )}
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
-    <div style={{ display: 'flex', gap: 16, padding: '8px 0' }}>
-      {/* 三列背景用 token 派生色，明暗主题下都有恰当对比度 */}
-      {renderColumn(
-        '待启动',
-        grouped.pending,
-        <PauseCircleOutlined style={{ color: token.colorTextSecondary }} />,
-        token.colorFillQuaternary
-      )}
-      {renderColumn(
-        '进行中',
-        grouped.inProgress,
-        <ClockCircleOutlined style={{ color: token.colorPrimary }} />,
-        token.colorPrimaryBg
-      )}
-      {renderColumn(
-        '已完成',
-        grouped.completed,
-        <CheckCircleOutlined style={{ color: token.colorSuccess }} />,
-        token.colorSuccessBg
-      )}
+    <div className="kanban-view">
+      <div className="kanban-board-scroll">
+        <div className="kanban-board">
+          {visibleTaskStatuses.map((status) =>
+            renderColumn(status, groupedTasks[status.key] || [])
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -15,6 +15,11 @@
   max-width: 100vw;
 }
 
+/* 设置抽屉会覆盖应用 Header；显式退出原生拖动区，避免 Electron 吞掉顶部关闭按钮的点击。 */
+.settings-drawer {
+  -webkit-app-region: no-drag;
+}
+
 /* 普通表单项使用统一的 24px 同级字段间距，不再叠加 Form.Item 默认外边距。 */
 .settings-surface .settings-form-stack {
   display: flex;
@@ -225,55 +230,88 @@
   margin-bottom: 0;
 }
 
-/* 状态标签配置是展示设置的独立子区块，不套卡片，避免与上方重复偏好卡片形成嵌套层级。 */
-.settings-surface .settings-status-label-section {
-  border-top: 1px solid var(--ant-color-border-secondary);
+/* 任务状态卡的设置操作和展示开关保持紧凑同行。 */
+.settings-surface .settings-display-card-actions {
+  align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: var(--settings-space-sm);
-  padding-block-start: var(--settings-space-md);
-}
-
-/* 状态标题与列表保持紧密关联。 */
-.settings-surface .settings-status-label-header {
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
   gap: var(--settings-space-2xs);
 }
 
+.settings-surface .settings-display-card-actions .ant-btn {
+  height: 28px;
+  padding: 0;
+  width: 28px;
+}
+
+/* 状态标签配置放入独立弹层，避免展示页被长列表撑高。 */
+.settings-task-status-modal {
+  --settings-space-2xs: 4px;
+  --settings-space-xs: 8px;
+  --settings-space-sm: 12px;
+  --settings-list-radius: 6px;
+}
+
+.settings-task-status-modal .settings-status-label-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-space-sm);
+}
+
+.settings-task-status-modal .settings-helper-text {
+  display: block;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.settings-task-status-modal .settings-add-list-button {
+  width: 100%;
+}
+
+/* 状态较多时只滚动弹层内容，标题和底部完成按钮保持可见。 */
+.settings-task-status-modal .ant-modal-body {
+  max-height: min(64vh, 560px);
+  overflow-y: auto;
+}
+
 /* 动态状态按列表组织，顺序即任务菜单和任务排序顺序。 */
-.settings-surface .settings-status-list {
+.settings-task-status-modal .settings-status-list {
   display: flex;
   flex-direction: column;
   gap: var(--settings-space-xs);
 }
 
-/* 单行明确分为名称、看板归类和操作区，新增与内置状态使用相同布局。 */
-.settings-surface .settings-status-row {
+/* 单行明确分为状态名称和操作区；状态顺序同时作为看板列顺序。 */
+.settings-task-status-modal .settings-status-row {
   align-items: end;
   background: var(--ant-color-fill-quaternary);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: var(--settings-list-radius);
   display: grid;
   gap: var(--settings-space-sm);
-  grid-template-columns: minmax(0, 1fr) 144px 92px;
+  grid-template-columns: minmax(180px, 1fr) 160px;
   padding: var(--settings-space-sm);
 }
 
-.settings-surface .settings-status-field {
+.settings-task-status-modal .settings-status-field {
   margin-bottom: 0;
   min-width: 0;
 }
 
 /* 图标操作区保持稳定宽度，避免按钮状态变化导致输入框抖动。 */
-.settings-surface .settings-status-row-actions {
+.settings-task-status-modal .settings-status-row-actions {
   align-items: center;
   display: flex;
   gap: var(--settings-space-2xs);
   min-height: 32px;
 }
 
-.settings-surface .settings-status-row-actions .ant-btn {
+.settings-task-status-modal .settings-status-row-actions .ant-checkbox-wrapper {
+  flex: 0 0 auto;
+  margin-inline-end: var(--settings-space-2xs);
+}
+
+.settings-task-status-modal .settings-status-row-actions .ant-btn {
   flex: 0 0 28px;
   height: 28px;
   padding: 0;
@@ -281,14 +319,14 @@
 }
 
 /* 状态名称与默认标记保持同一行，避免重新引入无意义的顺序编号。 */
-.settings-surface .settings-status-name-label {
+.settings-task-status-modal .settings-status-name-label {
   align-items: center;
   display: inline-flex;
   gap: var(--settings-space-2xs);
 }
 
 /* 默认标签仅用于标识对应状态，清除 Tag 默认尾部外边距避免表单标签错位。 */
-.settings-surface .settings-status-default-tag {
+.settings-task-status-modal .settings-status-default-tag {
   margin-inline-end: 0;
 }
 
@@ -352,6 +390,31 @@
   padding-bottom: var(--settings-space-sm);
 }
 
+/* 工具价格入口使用紧凑横排，详细字段统一收进管理弹层。 */
+.settings-surface .token-pricing-tool-list {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  margin-bottom: var(--settings-space-lg);
+}
+
+.settings-surface .token-pricing-tool-row {
+  align-items: center;
+  display: flex;
+  gap: var(--settings-space-md);
+  justify-content: space-between;
+  padding: var(--settings-space-sm) 0;
+}
+
+.settings-surface .token-pricing-tool-row + .token-pricing-tool-row {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+/* 工具名称与计价状态纵向排列，双选时也能快速扫读。 */
+.settings-surface .token-pricing-tool-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* 四类 Token 单价采用两列紧凑网格；窄屏自动回落为单列。 */
 .settings-surface .token-pricing-fields-grid {
   display: grid;
@@ -362,6 +425,58 @@
 /* 汇率占满网格整行，避免最后一项悬空。 */
 .settings-surface .token-pricing-exchange-field {
   grid-column: 1 / -1;
+}
+
+/* 币种设置与工具价格列表分段展示，避免两组配置在视觉上粘连。 */
+.settings-surface .token-pricing-currency-header {
+  align-items: center;
+  margin-top: var(--settings-space-xs);
+}
+
+/* 价格弹层参考历史任务弹层限制内容高度，模型较多时仅滚动内容区。 */
+.token-pricing-modal .ant-modal-body {
+  max-height: min(64vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 模型价格弹层使用独立纵向节奏，避免依赖设置抽屉的页面间距。 */
+.token-pricing-editor {
+  --settings-space-sm: 12px;
+  --settings-space-md: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-space-md);
+}
+
+/* 多个模型价格之间保留清晰分组。 */
+.token-model-pricing-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-space-md);
+}
+
+/* 单模型配置采用两列网格，避免价格标签和输入框在窄弹层中被压缩。 */
+.token-model-pricing-row {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: grid;
+  gap: var(--settings-space-sm);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-bottom: var(--settings-space-md);
+}
+
+/* 模型名称和删除操作共享标题行，价格字段从下一行开始。 */
+.token-model-pricing-header {
+  align-items: center;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+/* 弹层内表单项由网格控制间距。 */
+.token-pricing-editor .ant-form-item {
+  margin-bottom: 0;
 }
 
 @media (max-width: 520px) {
@@ -413,5 +528,14 @@
 
   .settings-surface .token-pricing-exchange-field {
     grid-column: auto;
+  }
+
+  .token-model-pricing-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .token-model-pricing-header,
+  .token-model-pricing-row .token-pricing-field {
+    grid-column: 1;
   }
 }

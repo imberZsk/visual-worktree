@@ -1,0 +1,49 @@
+/* 看板根布局只承载可滚动列，不再为列设置额外占用一行。 */
+.kanban-view {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 96px);
+}
+
+/* 横向滚动层撑满看板可用高度，任务较少时下方空白区域仍可响应触控板左右滑动。 */
+.kanban-board-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block-end: 8px;
+}
+
+.kanban-board {
+  align-items: flex-start;
+  box-sizing: border-box;
+  display: flex;
+  gap: 16px;
+  min-height: 100%;
+  min-width: 100%;
+  padding-block: 8px;
+  width: max-content;
+}
+
+.kanban-column {
+  flex: 1 0 280px;
+  min-width: 280px;
+}
+
+.kanban-column-header {
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius);
+  margin-block-end: 12px;
+  padding: 8px 12px;
+}
+
+.kanban-column-status-tag,
+.kanban-column-count-tag {
+  margin-inline-end: 0;
+}
+
+.kanban-column-content {
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}

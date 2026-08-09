@@ -1,7 +1,7 @@
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { existsSync, readFileSync, readdirSync } from 'fs'
-import { calculateCost, usdToCny } from './claudeService.js'
+import { calculateCost, tokenCostToCny } from './claudeService.js'
 
 // CODEX_SESSIONS_RELATIVE_PATH 存储 Codex 本地会话相对用户目录的位置。
 const CODEX_SESSIONS_RELATIVE_PATH = ['.codex', 'sessions']
@@ -91,7 +91,7 @@ function parseCodexSession(filePath, deps) {
     createdAt: sessionMeta.timestamp || '',
     model,
     usage,
-    cost: { usd, cny: usdToCny(usd, deps.tokenPricing?.usdToCny) },
+    cost: { usd, cny: tokenCostToCny(usd, deps.tokenPricing) },
   }
 }
 
@@ -192,7 +192,7 @@ export function getCodexTasksSummary(taskNames, worktreesRoot, deps = {}) {
     summary[taskName] = {
       sessionCount: matchedSessions.length,
       usage,
-      cost: { usd, cny: usdToCny(usd, deps.tokenPricing?.usdToCny) },
+      cost: { usd, cny: tokenCostToCny(usd, deps.tokenPricing) },
     }
   }
   return summary

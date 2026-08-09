@@ -98,6 +98,10 @@ describe('registerIpcHandlers', () => {
         options.onChunk('流式回答')
         return '这是流式回答'
       })
+    // getTasksSummary 模拟 Claude 任务用量汇总。
+    mock.getTasksSummary = vi.fn().mockReturnValue({})
+    // getCodexTasksSummary 模拟 Codex 任务用量汇总。
+    mock.getCodexTasksSummary = vi.fn().mockReturnValue({})
     registerIpcHandlers(mock.ipcMain, {
       getWindow: () => fakeWindow,
       shell: { openPath: () => {} },
@@ -111,6 +115,8 @@ describe('registerIpcHandlers', () => {
       dialog: mock.dialog,
       sendAiAssistantMessage: mock.sendAiAssistantMessage,
       streamAiAssistantMessage: mock.streamAiAssistantMessage,
+      getTasksSummary: mock.getTasksSummary,
+      getCodexTasksSummary: mock.getCodexTasksSummary,
       loadAiModelCredentials: mock.loadAiModelCredentials,
       saveAiModelCredentials: mock.saveAiModelCredentials,
       getAiModelSettings: mock.getAiModelSettings,
@@ -150,6 +156,56 @@ describe('registerIpcHandlers', () => {
         continue
       expect(typeof mock.handlers[ch]).toBe('function')
     }
+  })
+
+  it('双选统计工具时返回 Claude、Codex 明细和费用合计', async () => {
+    // claudeSummary 存储模拟的 Claude 任务汇总。
+    const claudeSummary = {
+      TASK: {
+        sessionCount: 1,
+        usage: { input: 10, output: 2, cacheWrite: 0, cacheRead: 0 },
+        cost: { usd: 1, cny: 1 },
+      },
+    }
+    // codexSummary 存储模拟的 Codex 任务汇总。
+    const codexSummary = {
+      TASK: {
+        sessionCount: 2,
+        usage: { input: 20, output: 3, cacheWrite: 4, cacheRead: 5 },
+        cost: { usd: 2, cny: 2 },
+      },
+    }
+    mock.getTasksSummary.mockReturnValue(claudeSummary)
+    mock.getCodexTasksSummary.mockReturnValue(codexSummary)
+    saveConfig(
+      {
+        aiUsageTools: ['claude-code', 'codex'],
+        tokenPricing: { usdToCny: 1, directCnyDisplay: true },
+        tokenPricingByTool: {
+          'claude-code': { enabled: true, input: 1 },
+          codex: { enabled: true, input: 2 },
+        },
+      },
+      dataDir
+    )
+
+    // result 存储主进程合并后的任务 Token 明细和总计。
+    const result = await mock.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, ['TASK'])
+
+    expect(result.TASK.tools).toEqual({
+      'claude-code': claudeSummary.TASK,
+      codex: codexSummary.TASK,
+    })
+    expect(result.TASK.sessionCount).toBe(3)
+    expect(result.TASK.usage).toEqual({
+      input: 30,
+      output: 5,
+      cacheWrite: 4,
+      cacheRead: 5,
+    })
+    expect(result.TASK.cost).toEqual({ usd: 3, cny: 3 })
+    expect(mock.getTasksSummary).toHaveBeenCalledTimes(1)
+    expect(mock.getCodexTasksSummary).toHaveBeenCalledTimes(1)
   })
 
   it('SET_WINDOW_THEME updates the native window controls overlay', async () => {

@@ -14,4 +14,22 @@ describe('历史任务弹层样式', () => {
     expect(shellRule).toMatch(/max-height:\s*min\(68vh,\s*640px\)/)
     expect(shellRule).not.toMatch(/(?:^|\n)\s*height:/)
   })
+
+  it('分页状态使用稳定高度且仅列表滚动，分页器固定在滚动区外', () => {
+    // css 存储历史任务弹层样式，用于防止分页再次参与列表高度测量。
+    const css = readFileSync(join(process.cwd(), 'src/ui/styles.css'), 'utf8')
+    // paginatedShellRule 存储分页状态外壳规则，翻页前后必须保持稳定高度。
+    const paginatedShellRule =
+      css.match(/\.history-task-list-shell--paginated\s*\{(?<body>[\s\S]*?)\}/)
+        ?.groups?.body || ''
+    // listRule 存储实际滚动列表规则，分页器不应共享该 overflow。
+    const listRule =
+      css.match(/\.history-task-list\s*\{(?<body>[\s\S]*?)\}/)?.groups?.body ||
+      ''
+
+    expect(paginatedShellRule).toMatch(/height:\s*min\(68vh,\s*640px\)/)
+    expect(listRule).toMatch(/flex:\s*1 1 auto/)
+    expect(listRule).toMatch(/overflow-y:\s*auto/)
+    expect(listRule).toMatch(/min-height:\s*0/)
+  })
 })

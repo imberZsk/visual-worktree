@@ -103,6 +103,26 @@ describe('getProjectStatus', () => {
     expect(status.fetchFailed).toBe(false)
   })
 
+  it('功能分支误跟踪远程主分支时不展示领先落后', async () => {
+    // base 存储带远程仓库的测试目录。
+    const base = join(ctx.root, 'mismatched-upstream')
+    // local 存储误跟踪 origin/master 的功能分支仓库，seed 用于推进远程主分支。
+    const { local, seed } = makeRemoteAndClone(base, 'master')
+    git(local, 'checkout -q -b feat/legacy origin/master')
+    commitFile(seed, 'remote.txt', 'remote', 'advance remote master')
+    git(seed, 'push -q origin master')
+
+    // status 存储刷新远程引用后的功能分支状态。
+    const status = await getProjectStatus(local, { fetch: true })
+
+    expect(status.currentBranch).toBe('feat/legacy')
+    expect(status.tracking).toBe('origin/master')
+    expect(status.ahead).toBe(0)
+    expect(status.behind).toBe(0)
+    expect(status.hasUnpushedCommits).toBe(false)
+    expect(status.canPull).toBe(false)
+  })
+
   // Windows 上 git 对 HTTP 连接失败的处理与 macOS/Linux 不同（可能立即返回成功或不抛出异常），
   // 导致 fetchFailed 无法可靠被设为 true；核心属性「不挂起」在 Windows 上仍满足，跳过该用例。
   it.skipIf(process.platform === 'win32')(

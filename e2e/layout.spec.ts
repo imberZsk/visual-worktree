@@ -91,7 +91,7 @@ test('首次任务视图切换使用局部 loading，刷新无悬停文字且 He
     path: kanbanLoadingScreenshotPath,
     contentType: 'image/png',
   })
-  await expect(appPage.getByText('待启动', { exact: true })).toBeVisible()
+  await expect(appPage.getByText('未开始', { exact: true })).toBeVisible()
 
   // headerTitleBounds 存储 macOS 标题相对窗口左侧的位置，用于锁定交通灯后的安全间距。
   const headerTitleBounds = await appPage
@@ -109,6 +109,18 @@ test('首次任务视图切换使用局部 loading，刷新无悬停文字且 He
     animations: 'disabled',
   })
   await expect(appPage.getByRole('tooltip', { name: '刷新' })).toHaveCount(0)
+  // createWorktreeButton 存储含有明确文字的创建操作，悬停后不应显示重复说明。
+  const createWorktreeButton = appPage.getByRole('button', {
+    name: '创建 Worktree',
+  })
+  await createWorktreeButton.hover()
+  await expect(
+    appPage.getByRole('tooltip', { name: '按任务创建 Worktree' })
+  ).toHaveCount(0)
+  // settingsButton 存储含有明确文字的设置操作，悬停后不应显示重复说明。
+  const settingsButton = appPage.getByRole('button', { name: '设置' })
+  await settingsButton.hover()
+  await expect(appPage.getByRole('tooltip', { name: '设置' })).toHaveCount(0)
   await testInfo.attach('custom-app-header', {
     path: headerScreenshotPath,
     contentType: 'image/png',

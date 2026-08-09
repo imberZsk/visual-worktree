@@ -4,6 +4,10 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { DEFAULT_WORKFLOW_STEPS } from './workflowSteps.js'
 import { DEFAULT_WORK_DOCUMENT_TEMPLATES } from './taskDocsService.js'
 import { DEFAULT_TASK_STATUSES, normalizeTaskStatuses } from './taskStatuses.js'
+import {
+  DEFAULT_KANBAN_SETTINGS,
+  normalizeKanbanSettings,
+} from './kanbanSettings.js'
 
 // 配置文件只全局保存当前工作区 id；路径与全部系统设置均归属于各自工作区。
 
@@ -29,10 +33,19 @@ const DEFAULT_TOKEN_PRICING = {
   output: 15,
   cacheWrite: 3.75,
   cacheRead: 0.3,
+  multiplier: 1,
+  models: [],
   usdToCny: 7.2,
+  directCnyDisplay: false,
 }
+// AI_USAGE_TOOL_IDS 存储支持参与 Token 统计的工具标识。
+export const AI_USAGE_TOOL_IDS = ['claude-code', 'codex']
 // DEFAULT_AI_USAGE_TOOL 存储默认参与 Token 统计的本地 AI 工具。
 const DEFAULT_AI_USAGE_TOOL = 'claude-code'
+// DEFAULT_TOKEN_PRICING_BY_TOOL 存储每个统计工具独立的默认 Token 单价。
+const DEFAULT_TOKEN_PRICING_BY_TOOL = Object.fromEntries(
+  AI_USAGE_TOOL_IDS.map((toolId) => [toolId, { ...DEFAULT_TOKEN_PRICING }])
+)
 
 // DEFAULT_WORKSPACE_SETTINGS 存储每个工作区独立拥有的系统设置默认值。
 const DEFAULT_WORKSPACE_SETTINGS = {
@@ -57,8 +70,11 @@ const DEFAULT_WORKSPACE_SETTINGS = {
     claudeUsage: true,
   },
   taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
+  kanbanSettings: { ...DEFAULT_KANBAN_SETTINGS },
   tokenPricing: { ...DEFAULT_TOKEN_PRICING },
+  tokenPricingByTool: cloneJson(DEFAULT_TOKEN_PRICING_BY_TOOL),
   aiUsageTool: DEFAULT_AI_USAGE_TOOL,
+  aiUsageTools: [DEFAULT_AI_USAGE_TOOL],
 }
 // WORKSPACE_SETTING_KEYS 存储允许写入单个工作区 settings 的字段，阻止运行时字段混入磁盘。
 const WORKSPACE_SETTING_KEYS = Object.keys(DEFAULT_WORKSPACE_SETTINGS)
@@ -83,7 +99,13 @@ function normalizeTokenPricing(pricing) {
   // normalizedPricing 存储合并默认值后的计价配置。
   const normalizedPricing = { ...DEFAULT_TOKEN_PRICING, ...(pricing || {}) }
   // numericKeys 存储必须为非负有限数的单价字段。
-  const numericKeys = ['input', 'output', 'cacheWrite', 'cacheRead']
+  const numericKeys = [
+    'input',
+    'output',
+    'cacheWrite',
+    'cacheRead',
+    'multiplier',
+  ]
   for (const key of numericKeys) {
     // numericValue 存储当前字段转换后的数值。
     const numericValue = Number(normalizedPricing[key])
@@ -99,6 +121,37 @@ function normalizeTokenPricing(pricing) {
       ? exchangeRate
       : DEFAULT_TOKEN_PRICING.usdToCny
   normalizedPricing.enabled = normalizedPricing.enabled === true
+  normalizedPricing.directCnyDisplay =
+    normalizedPricing.directCnyDisplay === true
+  // configuredModels 存储按模型维护的自定义价格；空模型名不会参与匹配。
+  const configuredModels = Array.isArray(pricing?.models) ? pricing.models : []
+  // normalizedModels 存储清洗后的模型价格，保留用户顺序便于设置页管理。
+  const normalizedModels = configuredModels
+    .map((modelPricing) => {
+      // model 存储日志中用于精确匹配价格的模型标识。
+      const model = String(modelPricing?.model || '').trim()
+      // normalizedModelPricing 存储当前模型合并默认兜底后的有效价格。
+      const normalizedModelPricing = {
+        ...DEFAULT_TOKEN_PRICING,
+        ...(modelPricing || {}),
+        model,
+      }
+      for (const key of numericKeys) {
+        // numericValue 存储当前模型价格字段转换后的数值。
+        const numericValue = Number(normalizedModelPricing[key])
+        normalizedModelPricing[key] =
+          Number.isFinite(numericValue) && numericValue >= 0
+            ? numericValue
+            : DEFAULT_TOKEN_PRICING[key]
+      }
+      delete normalizedModelPricing.enabled
+      delete normalizedModelPricing.models
+      delete normalizedModelPricing.usdToCny
+      delete normalizedModelPricing.directCnyDisplay
+      return normalizedModelPricing
+    })
+    .filter((modelPricing) => modelPricing.model)
+  normalizedPricing.models = normalizedModels
   return normalizedPricing
 }
 
@@ -116,6 +169,42 @@ function normalizeWorkspaceSettings(settings) {
   normalizedSettings.tokenPricing = normalizeTokenPricing(
     normalizedSettings.tokenPricing
   )
+  // legacyUsageTool 存储旧版单选配置，用于把既有单价迁移到原来选中的工具。
+  const legacyUsageTool =
+    settings?.aiUsageTool === 'codex' ? 'codex' : DEFAULT_AI_USAGE_TOOL
+  // requestedUsageTools 存储新版多选值；旧配置缺失时回退原单选工具。
+  const requestedUsageTools = Array.isArray(settings?.aiUsageTools)
+    ? settings.aiUsageTools
+    : [legacyUsageTool]
+  // normalizedUsageTools 存储去重且受支持的统计工具，空选择回退 Claude Code。
+  const normalizedUsageTools = [
+    ...new Set(
+      requestedUsageTools.filter((toolId) => AI_USAGE_TOOL_IDS.includes(toolId))
+    ),
+  ]
+  normalizedSettings.aiUsageTools =
+    normalizedUsageTools.length > 0
+      ? normalizedUsageTools
+      : [DEFAULT_AI_USAGE_TOOL]
+  // 保留旧字段供尚未迁移的调用方读取，值始终为当前第一个统计工具。
+  normalizedSettings.aiUsageTool = normalizedSettings.aiUsageTools[0]
+  // configuredPricingByTool 存储新版每工具单价配置；不存在时只把旧单价迁移给旧版所选工具。
+  const configuredPricingByTool = settings?.tokenPricingByTool || {}
+  normalizedSettings.tokenPricingByTool = Object.fromEntries(
+    AI_USAGE_TOOL_IDS.map((toolId) => {
+      // fallbackPricing 存储当前工具的迁移回退值，避免旧配置被复制到两个工具。
+      const fallbackPricing =
+        toolId === legacyUsageTool
+          ? normalizedSettings.tokenPricing
+          : DEFAULT_TOKEN_PRICING_BY_TOOL[toolId]
+      return [
+        toolId,
+        normalizeTokenPricing(
+          configuredPricingByTool[toolId] || fallbackPricing
+        ),
+      ]
+    })
+  )
   // rawTaskStatuses 存储磁盘中显式保存的动态状态列表；旧版配置缺失时交由标签映射迁移。
   const rawTaskStatuses = Array.isArray(settings?.taskStatuses)
     ? settings.taskStatuses
@@ -124,10 +213,12 @@ function normalizeWorkspaceSettings(settings) {
     rawTaskStatuses,
     settings?.taskStatusLabels
   )
+  normalizedSettings.kanbanSettings = normalizeKanbanSettings(
+    normalizedSettings.kanbanSettings,
+    normalizedSettings.taskStatuses
+  )
   // 旧版标签映射完成迁移后不再向运行时和磁盘配置继续扩散。
   delete normalizedSettings.taskStatusLabels
-  normalizedSettings.aiUsageTool =
-    normalizedSettings.aiUsageTool === 'codex' ? 'codex' : DEFAULT_AI_USAGE_TOOL
   normalizedSettings.onboardingCompleted =
     normalizedSettings.onboardingCompleted === true
   return normalizedSettings
@@ -137,15 +228,43 @@ function normalizeWorkspaceSettings(settings) {
  * 从运行时扁平配置提取当前工作区允许持久化的系统设置。
  * @param {object} config - 渲染层提交的当前工作区配置
  * @param {object} fallbackSettings - 缺省字段使用的已有设置
+ * @param {object} [submittedConfig] - 用户本次实际提交的字段，用于识别旧版调用
  * @returns {object} 当前工作区完整设置
  */
-function extractWorkspaceSettings(config, fallbackSettings) {
+function extractWorkspaceSettings(
+  config,
+  fallbackSettings,
+  submittedConfig = config
+) {
   // mergedSettings 存储已有设置与本次提交字段合并后的结果。
   const mergedSettings = { ...fallbackSettings }
   for (const key of WORKSPACE_SETTING_KEYS) {
     if (Object.prototype.hasOwnProperty.call(config || {}, key)) {
       mergedSettings[key] = config[key]
     }
+  }
+  // 旧版调用只提交单选字段时移除新版默认数组，确保迁移逻辑采用用户原来的工具。
+  if (
+    Object.prototype.hasOwnProperty.call(
+      submittedConfig || {},
+      'aiUsageTool'
+    ) &&
+    !Object.prototype.hasOwnProperty.call(submittedConfig || {}, 'aiUsageTools')
+  ) {
+    delete mergedSettings.aiUsageTools
+  }
+  // 旧版调用只提交统一单价时移除新版默认分工具配置，确保单价迁移到原工具。
+  if (
+    Object.prototype.hasOwnProperty.call(
+      submittedConfig || {},
+      'tokenPricing'
+    ) &&
+    !Object.prototype.hasOwnProperty.call(
+      submittedConfig || {},
+      'tokenPricingByTool'
+    )
+  ) {
+    delete mergedSettings.tokenPricingByTool
   }
   return normalizeWorkspaceSettings(mergedSettings)
 }
@@ -435,7 +554,8 @@ export function saveConfig(config, baseDir) {
     const settingsFallback = activeProfile.settings
     activeProfile.settings = extractWorkspaceSettings(
       incomingConfig,
-      settingsFallback
+      settingsFallback,
+      config
     )
   }
   // persistedConfig 存储最终写入磁盘的新结构。

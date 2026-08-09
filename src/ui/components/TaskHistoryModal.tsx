@@ -25,7 +25,7 @@ import HistorySingleLineText from './HistorySingleLineText.tsx'
  * @param {number} props.page - 当前页码
  * @param {number} props.pageSize - 当前每页条数
  * @param {Array<object>} [props.taskStatuses] - 当前工作区动态任务状态定义列表
- * @param {React.RefObject<HTMLDivElement>} props.listShellRef - 历史列表高度测量容器
+ * @param {React.RefObject<HTMLDivElement>} props.listShellRef - 历史列表可滚动视口的高度测量引用
  * @param {() => void} props.onClose - 关闭弹窗回调
  * @param {(path:string) => void} props.onOpenFinder - Finder 打开回调
  * @param {(path:string) => void} props.onOpenVscode - VSCode 打开回调
@@ -59,8 +59,12 @@ export default function TaskHistoryModal({
       footer={null}
       width={560}
     >
-      <div ref={listShellRef} className="history-task-list-shell">
-        <div className="history-task-list" role="list">
+      <div
+        className={`history-task-list-shell${
+          pagination ? ' history-task-list-shell--paginated' : ''
+        }`}
+      >
+        <div ref={listShellRef} className="history-task-list" role="list">
           {loading ? (
             <div className="history-task-loading">
               <Spin size="small" description="正在加载历史记录..." />
@@ -198,14 +202,14 @@ export default function TaskHistoryModal({
               )
             })
           )}
-          {pagination && (
-            <Pagination
-              className="history-task-pagination"
-              {...pagination}
-              total={history.length}
-            />
-          )}
         </div>
+        {pagination && (
+          <Pagination
+            className="history-task-pagination"
+            {...pagination}
+            total={history.length}
+          />
+        )}
       </div>
     </Modal>
   )

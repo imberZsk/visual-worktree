@@ -8,9 +8,15 @@ body,
   height: 100%;
 }
 
-/* 滚动条稳定：内容高度变化导致滚动条出现/消失时，预留出滚动条宽度，避免内容区宽度横向跳动（CLS） */
-.ant-layout-content {
-  scrollbar-gutter: stable;
+/* 全局隐藏原生滚动条外观，保留滚轮、触控板、键盘和程序滚动能力。 */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 /* AntD 消息容器占满视口后居中整个消息组，避免负位移把并发 Toast 推出 overflow 可视区。 */
@@ -21,12 +27,6 @@ body,
 /* 视图切换时的淡入 + 轻微上移；固定最小高度避免数据加载前后内容区塌陷。 */
 .view-fade {
   animation: viewFadeIn 0.22s ease-out;
-  min-height: calc(100vh - 96px);
-}
-
-/* 工作区切换遮罩占满内容区，避免不同 Tab 的空列表闪烁；Header 在遮罩外仍保持清晰可见。 */
-.workspace-switch-spin,
-.workspace-switch-spin > .ant-spin-container {
   min-height: calc(100vh - 96px);
 }
 
@@ -345,15 +345,31 @@ html[data-theme='dark'] .env-health-refresh-overlay {
   }
 }
 
-/* 历史任务弹层列表容器提供稳定测量边界，pageSize 由该容器高度动态推导 */
+/* 历史任务弹层外壳分隔滚动列表与分页底栏，避免分页器被列表内容裁切。 */
 .history-task-list-shell {
+  display: flex;
+  flex-direction: column;
   max-height: min(68vh, 640px);
+  overflow: hidden;
+}
+
+/* 需要分页时固定可用高度，防止翻页内容高度变化反向触发 pageSize 重算和界面抖动。 */
+.history-task-list-shell--paginated {
+  height: min(68vh, 640px);
+}
+
+/* 只有任务列表承担滚动，ResizeObserver 测量的高度不包含固定分页底栏。 */
+.history-task-list {
+  /* 修复翻页后内容较少时列表收缩、分页器上移造成的抖动。 */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
 }
 
-/* 历史任务分页贴合列表底部，不额外撑出一段空白 */
+/* 历史任务分页固定在弹层底部，不随当前页内容滚动或改变测量高度。 */
 .history-task-pagination {
+  flex: 0 0 auto;
   margin-block-end: 0;
   margin-block-start: 16px;
 }

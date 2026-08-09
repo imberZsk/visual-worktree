@@ -1,7 +1,12 @@
 import { IPC } from './ipcChannels.js'
 import { getTitleBarOverlayOptions } from '../src/core/windowBehavior.js'
 import * as gitService from '../src/core/gitService.js'
-import { loadConfig, resetConfig, saveConfig } from '../src/core/config.js'
+import {
+  AI_USAGE_TOOL_IDS,
+  loadConfig,
+  resetConfig,
+  saveConfig,
+} from '../src/core/config.js'
 import {
   buildTerminalCommand,
   resolveTerminalKind,
@@ -47,6 +52,42 @@ import { dirname, join, resolve } from 'path'
 import { existsSync, rmSync, readdirSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { homedir } from 'os'
+
+/**
+ * 获取当前配置中有效且至少包含一项的 Token 统计工具。
+ * @param {object} config - 当前工作区配置
+ * @returns {string[]} 已去重的统计工具标识
+ */
+function getConfiguredUsageTools(config) {
+  // requestedTools 存储新版多选配置，缺失时兼容旧版单选字段。
+  const requestedTools = Array.isArray(config?.aiUsageTools)
+    ? config.aiUsageTools
+    : [config?.aiUsageTool]
+  // configuredTools 存储受支持且去重后的工具列表。
+  const configuredTools = [
+    ...new Set(
+      requestedTools.filter((toolId) => AI_USAGE_TOOL_IDS.includes(toolId))
+    ),
+  ]
+  return configuredTools.length > 0 ? configuredTools : [AI_USAGE_TOOL_IDS[0]]
+}
+
+/**
+ * 合并指定工具的独立单价与全局人民币展示配置。
+ * @param {object} config - 当前工作区配置
+ * @param {string} toolId - 统计工具标识
+ * @returns {object} 传给会话统计服务的完整计价配置
+ */
+function getToolTokenPricing(config, toolId) {
+  // toolPricing 存储该工具独立的自定义单价，旧配置回退统一单价。
+  const toolPricing =
+    config?.tokenPricingByTool?.[toolId] || config?.tokenPricing
+  return {
+    ...(toolPricing || {}),
+    usdToCny: config?.tokenPricing?.usdToCny,
+    directCnyDisplay: config?.tokenPricing?.directCnyDisplay === true,
+  }
+}
 
 // IPC handler 注册：把核心 gitService/config 能力暴露给渲染进程。
 // 抽成独立函数并注入 ipcMain，便于用 mock 做接口测试（无需启动 Electron）。
@@ -440,6 +481,10 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     sendAiAssistantMessage: sendAiAssistantMessageImpl = sendAiAssistantMessage,
     streamAiAssistantMessage:
       streamAiAssistantMessageImpl = streamAiAssistantMessage,
+    getSessionsByTask: getSessionsByTaskImpl = getSessionsByTask,
+    getTasksSummary: getTasksSummaryImpl = getTasksSummary,
+    getCodexSessionsByTask: getCodexSessionsByTaskImpl = getCodexSessionsByTask,
+    getCodexTasksSummary: getCodexTasksSummaryImpl = getCodexTasksSummary,
     platform = process.platform,
   } = deps
   // configBaseDir 存储配置文件目录；生产环境为空时使用默认 ~/.visualWorktree，测试时复用 dataDir 隔离真实用户配置。
@@ -1113,30 +1158,92 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     }
   })
 
-  // 获取任务关联的当前 AI 工具会话列表及 Token 用量。
+  // 获取任务关联的全部已选 AI 工具会话列表及 Token 用量。
   ipcMain.handle(IPC.GET_CLAUDE_SESSIONS_BY_TASK, async (_e, taskName) => {
+    // cfg 存储当前工作区 Token 统计设置。
     const cfg = loadConfig(configBaseDir)
-    if (cfg.aiUsageTool === 'codex') {
-      return getCodexSessionsByTask(taskName, cfg.worktreesPath, {
-        tokenPricing: cfg.tokenPricing,
-      })
+    // usageTools 存储本次需要合并读取的工具列表。
+    const usageTools = getConfiguredUsageTools(cfg)
+    // sessions 存储各工具会话，并标注来源供前端分组展示。
+    const sessions = []
+    for (const toolId of usageTools) {
+      // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
+      const tokenPricing = getToolTokenPricing(cfg, toolId)
+      // toolSessions 存储当前工具命中该任务的会话。
+      const toolSessions =
+        toolId === 'codex'
+          ? getCodexSessionsByTaskImpl(taskName, cfg.worktreesPath, {
+              tokenPricing,
+            })
+          : getSessionsByTaskImpl(taskName, cfg.worktreesPath, { tokenPricing })
+      sessions.push(
+        ...toolSessions.map((session) => ({ ...session, usageTool: toolId }))
+      )
     }
-    return getSessionsByTask(taskName, cfg.worktreesPath, {
-      tokenPricing: cfg.tokenPricing,
-    })
+    return sessions
   })
 
-  // 获取当前 AI 工具的全部任务 Token 用量汇总。
+  // 获取全部已选 AI 工具的任务 Token 用量明细与合计。
   ipcMain.handle(IPC.GET_CLAUDE_TASKS_SUMMARY, async (_e, taskNames) => {
+    // cfg 存储当前工作区 Token 统计设置。
     const cfg = loadConfig(configBaseDir)
-    if (cfg.aiUsageTool === 'codex') {
-      return getCodexTasksSummary(taskNames, cfg.worktreesPath, {
-        tokenPricing: cfg.tokenPricing,
-      })
+    // usageTools 存储本次需要分别扫描并合并的工具列表。
+    const usageTools = getConfiguredUsageTools(cfg)
+    // summariesByTool 存储工具标识到任务汇总映射。
+    const summariesByTool = {}
+    for (const toolId of usageTools) {
+      // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
+      const tokenPricing = getToolTokenPricing(cfg, toolId)
+      summariesByTool[toolId] =
+        toolId === 'codex'
+          ? getCodexTasksSummaryImpl(taskNames, cfg.worktreesPath, {
+              tokenPricing,
+            })
+          : getTasksSummaryImpl(taskNames, cfg.worktreesPath, { tokenPricing })
     }
-    return getTasksSummary(taskNames, cfg.worktreesPath, {
-      tokenPricing: cfg.tokenPricing,
-    })
+    // combinedSummary 存储每个任务的各工具明细和合计。
+    const combinedSummary = {}
+    for (const taskName of taskNames) {
+      // tools 存储当前任务按工具拆分的统计结果。
+      const tools = Object.fromEntries(
+        usageTools.map((toolId) => [
+          toolId,
+          summariesByTool[toolId]?.[taskName] || {
+            sessionCount: 0,
+            usage: {},
+            cost: {},
+          },
+        ])
+      )
+      // combinedUsage 存储当前任务全部工具四类 Token 的合计。
+      const combinedUsage = Object.values(tools).reduce(
+        (total, toolSummary) => ({
+          input: total.input + (toolSummary?.usage?.input || 0),
+          output: total.output + (toolSummary?.usage?.output || 0),
+          cacheWrite: total.cacheWrite + (toolSummary?.usage?.cacheWrite || 0),
+          cacheRead: total.cacheRead + (toolSummary?.usage?.cacheRead || 0),
+        }),
+        { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+      )
+      // combinedCost 存储当前任务全部工具美元与人民币费用合计。
+      const combinedCost = Object.values(tools).reduce(
+        (total, toolSummary) => ({
+          usd: total.usd + (toolSummary?.cost?.usd || 0),
+          cny: total.cny + (toolSummary?.cost?.cny || 0),
+        }),
+        { usd: 0, cny: 0 }
+      )
+      combinedSummary[taskName] = {
+        sessionCount: Object.values(tools).reduce(
+          (total, toolSummary) => total + (toolSummary?.sessionCount || 0),
+          0
+        ),
+        usage: combinedUsage,
+        cost: combinedCost,
+        tools,
+      }
+    }
+    return combinedSummary
   })
 
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）

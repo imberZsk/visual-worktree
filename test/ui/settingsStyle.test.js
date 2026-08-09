@@ -41,6 +41,18 @@ describe('设置页 UI 样式规范', () => {
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i)
   })
 
+  it('设置抽屉退出 Electron 窗口拖动区域', () => {
+    // css 存储设置页局部样式，用于防止顶部关闭按钮再次被 Header 拖动区域阻断。
+    const css = readFileSync(
+      join(process.cwd(), 'src/ui/components/SettingsModal.css'),
+      'utf8'
+    )
+
+    expect(css).toMatch(
+      /\.settings-drawer\s*\{[\s\S]*-webkit-app-region:\s*no-drag/
+    )
+  })
+
   it('设置页专用样式不残留在全局样式文件', () => {
     // globalCss 存储跨页全局样式，用于防止设置页规则再次回流到全局作用域。
     const globalCss = readFileSync(

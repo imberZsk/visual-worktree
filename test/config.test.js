@@ -14,6 +14,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { DEFAULT_TASK_STATUSES } from '../src/core/taskStatuses.js'
+import { DEFAULT_KANBAN_SETTINGS } from '../src/core/kanbanSettings.js'
 
 // 配置读写测试，使用临时目录避免污染真实用户配置
 
@@ -61,6 +62,25 @@ describe('config', () => {
     // cfg 存储没有用户配置时的工作区默认设置。
     const cfg = loadConfig(join(ctx.root, 'task-status-label-defaults'))
     expect(cfg.taskStatuses).toEqual(DEFAULT_TASK_STATUSES)
+    expect(cfg.kanbanSettings).toEqual(DEFAULT_KANBAN_SETTINGS)
+  })
+
+  it('persists workspace-specific kanban column visibility and removes legacy pinned column', () => {
+    // dir 存储看板设置持久化测试使用的隔离配置目录。
+    const dir = join(ctx.root, 'kanban-settings')
+    saveConfig(
+      {
+        kanbanSettings: {
+          hiddenStatusKeys: ['testing'],
+          pinnedStatusKey: 'developing',
+        },
+      },
+      dir
+    )
+
+    expect(loadConfig(dir).kanbanSettings).toEqual({
+      hiddenStatusKeys: ['testing'],
+    })
   })
 
   it('migrates persisted legacy task status labels into dynamic statuses', () => {
@@ -526,10 +546,58 @@ describe('config', () => {
       output: 6.5,
       cacheWrite: 2,
       cacheRead: 0.2,
+      multiplier: 1,
+      models: [
+        {
+          model: 'gpt-5.6-sol',
+          input: 5,
+          output: 30,
+          cacheWrite: 0,
+          cacheRead: 0.5,
+          multiplier: 0.3,
+        },
+      ],
       usdToCny: 7.35,
+      directCnyDisplay: true,
     }
-    saveConfig({ tokenPricing, aiUsageTool: 'codex' }, dir)
+    saveConfig(
+      {
+        tokenPricing,
+        tokenPricingByTool: { codex: tokenPricing },
+        aiUsageTool: 'codex',
+        aiUsageTools: ['codex'],
+      },
+      dir
+    )
     expect(loadConfig(dir).tokenPricing).toEqual(tokenPricing)
     expect(loadConfig(dir).aiUsageTool).toBe('codex')
+    expect(loadConfig(dir).aiUsageTools).toEqual(['codex'])
+    expect(loadConfig(dir).tokenPricingByTool.codex).toEqual(tokenPricing)
+  })
+
+  it('旧版单选统计工具和统一单价迁移到原工具', () => {
+    // dir 存储旧版配置迁移测试的独立目录。
+    const dir = join(ctx.root, 'legacy-token-pricing-config')
+    // legacyPricing 存储旧版 Codex 单套计价配置。
+    const legacyPricing = {
+      enabled: true,
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      usdToCny: 1,
+      directCnyDisplay: true,
+    }
+
+    saveConfig({ tokenPricing: legacyPricing, aiUsageTool: 'codex' }, dir)
+    // migratedConfig 存储重新加载并完成兼容迁移后的配置。
+    const migratedConfig = loadConfig(dir)
+
+    expect(migratedConfig.aiUsageTools).toEqual(['codex'])
+    expect(migratedConfig.tokenPricingByTool.codex).toEqual({
+      ...legacyPricing,
+      multiplier: 1,
+      models: [],
+    })
   })
 })

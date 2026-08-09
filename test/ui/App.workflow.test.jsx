@@ -133,9 +133,8 @@ function mockHistoryListPaginationLayout({
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
     get() {
-      // className 存储当前元素类名，用于只给历史任务分页容器返回可用高度。
-      const className = String(this.className || '')
-      if (className.includes('history-task-list-shell')) return shellHeight
+      // classList 用于只给不含分页器的历史任务滚动视口返回稳定可用高度。
+      if (this.classList?.contains('history-task-list')) return shellHeight
       return originalClientHeight?.get ? originalClientHeight.get.call(this) : 0
     },
   })
@@ -597,6 +596,16 @@ describe('App worktree 流程执行', () => {
       // pageTwo 存储 antd Pagination 的第二页按钮，用于验证仍由 antd 控制翻页。
       const pageTwo = document.querySelector('.ant-pagination-item-2')
       expect(pageTwo).toBeTruthy()
+      // paginationElement 存储分页组件根元素，应作为滚动列表的兄弟节点固定在弹层底部。
+      const paginationElement = document.querySelector(
+        '.history-task-pagination'
+      )
+      expect(paginationElement?.parentElement?.classList).toContain(
+        'history-task-list-shell'
+      )
+      expect(paginationElement?.previousElementSibling?.classList).toContain(
+        'history-task-list'
+      )
       fireEvent.click(pageTwo)
 
       await waitFor(() => expect(screen.getByText('HISTORY-5')).toBeTruthy())

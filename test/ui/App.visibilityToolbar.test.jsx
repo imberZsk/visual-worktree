@@ -277,7 +277,7 @@ describe('App 显示隐藏项工具栏', () => {
     })
   })
 
-  it('切换工作区时持续展示内容区 loading，直到当前 Worktree 数据加载完成', async () => {
+  it('切换工作区时仅刷新数据区域且立即恢复窗口拖动', async () => {
     // currentConfig 存储包含两个可切换工作区的初始配置。
     const currentConfig = makeMultiWorkspaceConfig()
     // resolveWorkspaceScan 延迟目标工作区扫描完成，用于断言切换期间的 loading 状态。
@@ -307,16 +307,25 @@ describe('App 显示隐藏项工具栏', () => {
     fireEvent.click(screen.getByTitle('个人区'))
 
     await waitFor(() => {
-      expect(screen.getByText('正在切换工作区...')).toBeTruthy()
       expect(workspaceSelect.className).toContain('ant-select-disabled')
     })
+    // appHeader 存储窗口拖动标题栏；下拉选择后必须立即退出 select-open，不能等待扫描完成。
+    const appHeader = document.querySelector('.app-header')
+    expect(appHeader.className).not.toContain('app-header--select-open')
+    expect(screen.queryByText('正在切换工作区...')).toBeNull()
+    // projectViewOption 存储项目视图分段选项，工作区扫描期间仍应允许用户切换视图。
+    const projectViewOption = screen
+      .getByText('项目', { exact: true })
+      .closest('.ant-segmented-item')
+    expect(projectViewOption.className).not.toContain(
+      'ant-segmented-item-disabled'
+    )
     expect(mockApi.scanWorktreesByTask).toHaveBeenCalledTimes(2)
 
     await act(async () => {
       resolveWorkspaceScan([])
     })
     await waitFor(() => {
-      expect(screen.queryByText('正在切换工作区...')).toBeNull()
       expect(workspaceSelect.className).not.toContain('ant-select-disabled')
     })
   })
