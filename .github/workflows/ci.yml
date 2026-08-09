@@ -79,6 +79,8 @@ jobs:
       # 在同一 runner 内重试可复用前一次已下载的 Electron/electron-builder 缓存，
       # 避免临时网络错误导致换 runner 后从零下载仍反复失败。
       - name: Build package
+        # main 已在 PR 阶段完成安装包验证，合并后只保留同一 job 内的 lint、测试和 UI 构建。
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           # max_attempts 存储单次 CI job 允许的最大打包次数。
@@ -103,6 +105,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload package
+        # 仅在实际执行打包的 PR 或手动运行中上传产物，避免 main 重复占用 Artifact 存储。
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
