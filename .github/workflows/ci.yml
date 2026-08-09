@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
   # 保留手动触发入口，便于按需重新验证并下载双平台安装包。
   workflow_dispatch:
 
