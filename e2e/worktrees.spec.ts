@@ -63,7 +63,11 @@ test('按任务为多个项目创建真实 Worktree 并展示任务', async ({
   await expect(
     appPage.getByText('feat-e2e-flow', { exact: true })
   ).toBeVisible()
-  await expect(appPage.getByText('开发中', { exact: true })).toBeVisible()
+  // taskCard 存储目标任务的看板卡片，避免动态列标题与卡片状态同名时定位歧义。
+  const taskCard = appPage
+    .locator('.kanban-task-card')
+    .filter({ hasText: 'feat-e2e-flow' })
+  await expect(taskCard.getByText('开发中', { exact: true })).toBeVisible()
   await appPage.getByRole('button', { name: /添加备注/ }).click()
   await appPage.getByPlaceholder(/记录任务备注/).fill('等待 E2E 联调完成')
   await appPage

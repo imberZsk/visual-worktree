@@ -554,6 +554,16 @@ export async function getProjectStatus(projectPath, opts = {}) {
   }
   // current 为空时（detached HEAD）回退为 HEAD 短哈希
   const currentBranch = status.current || ''
+  // expectedTrackingSuffix 存储当前分支对应的远程同名分支后缀，兼容 origin 之外的远程名称。
+  const expectedTrackingSuffix = currentBranch ? `/${currentBranch}` : ''
+  // tracksCurrentBranch 标记 upstream 是否确实指向远程同名分支；旧功能分支误跟踪主分支时不展示领先/落后。
+  const tracksCurrentBranch = Boolean(
+    expectedTrackingSuffix && status.tracking?.endsWith(expectedTrackingSuffix)
+  )
+  // ahead 存储相对远程同名分支的领先提交数；无匹配 upstream 时不展示。
+  const ahead = tracksCurrentBranch ? status.ahead : 0
+  // behind 存储相对远程同名分支的落后提交数；无匹配 upstream 时不展示。
+  const behind = tracksCurrentBranch ? status.behind : 0
   return {
     name,
     path: projectPath,
@@ -564,10 +574,10 @@ export async function getProjectStatus(projectPath, opts = {}) {
     hasTrackedChanges: trackedFiles.length > 0,
     hasUntrackedChanges: untrackedFiles.length > 0,
     untrackedFilesCount: untrackedFiles.length,
-    hasUnpushedCommits: status.ahead > 0,
-    canPull: status.behind > 0,
-    ahead: status.ahead,
-    behind: status.behind,
+    hasUnpushedCommits: ahead > 0,
+    canPull: behind > 0,
+    ahead,
+    behind,
     tracking: status.tracking || '',
     changedFiles,
     worktrees,

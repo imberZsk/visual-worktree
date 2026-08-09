@@ -87,9 +87,9 @@ export const IPC = {
   APPEND_TASK_HISTORY: 'append-task-history',
   // 按下标删除一条历史记录
   REMOVE_TASK_HISTORY: 'remove-task-history',
-  // 获取任务关联的 Claude Code 会话列表及用量
+  // 获取任务关联的已选 AI 工具会话列表及用量
   GET_CLAUDE_SESSIONS_BY_TASK: 'get-claude-sessions-by-task',
-  // 获取所有任务的 Claude Code 用量汇总
+  // 获取所有任务的已选 AI 工具用量汇总
   GET_CLAUDE_TASKS_SUMMARY: 'get-claude-tasks-summary',
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）
   GET_SAFE_TO_REMOVE_WORKTREES: 'get-safe-to-remove-worktrees',

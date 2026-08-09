@@ -860,7 +860,8 @@ function wtStatusTags(wt) {
  * @param {Record<string,object>} props.envHealthMap - 任务名 → 环境检查状态 的映射
  * @param {Record<string,string>} props.cicdLinks - 项目名 → CI/CD 流水线 URL 的映射（从全局配置读取）
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
- * @param {'claude-code'|'codex'} props.aiUsageTool - 当前参与 Token 统计的 AI 工具
+ * @param {Array<'claude-code'|'codex'>} props.aiUsageTools - 当前参与 Token 统计的 AI 工具
+ * @param {boolean} props.directCnyDisplay - 是否按人民币 1:1 单币种展示费用
  * @param {Array<{key:string,label:string,type:string}>} props.workflowSteps - 工作流（需求流程）步骤清单（从全局配置读取）
  * @param {Record<string,Array<object>>} props.projectWorkflowSteps - 项目绝对路径到私有流程步骤的映射
  * @param {(projectPath:string,steps:Array<object>)=>Promise<void>} props.onSaveProjectWorkflowSteps - 保存项目私有流程
@@ -901,7 +902,8 @@ export default function WorktreePanel({
   envHealthMap = {},
   cicdLinks = {},
   claudeUsageMap = {},
-  aiUsageTool = 'claude-code',
+  aiUsageTools = ['claude-code'],
+  directCnyDisplay = false,
   workflowSteps = [],
   projectWorkflowSteps = {},
   onSaveProjectWorkflowSteps,
@@ -1158,7 +1160,8 @@ export default function WorktreePanel({
                 <ClaudeUsageTag
                   taskName={t.task}
                   summary={claudeUsageMap[t.task]}
-                  usageTool={aiUsageTool}
+                  usageTools={aiUsageTools}
+                  directCnyDisplay={directCnyDisplay}
                 />
               </span>
             )}

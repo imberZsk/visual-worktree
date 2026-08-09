@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import AppHeader from '../../src/ui/components/AppHeader.tsx'
 
-// COMPONENT_SOURCE 存储 Header 组件源码，用于阻止固定行内视觉规则和重复刷新 Tooltip 回归。
+// COMPONENT_SOURCE 存储 Header 组件源码，用于阻止固定行内视觉规则和重复文字按钮 Tooltip 回归。
 const COMPONENT_SOURCE = readFileSync(
   resolve(process.cwd(), 'src/ui/components/AppHeader.tsx'),
   'utf8'
@@ -47,6 +47,30 @@ describe('AppHeader', () => {
 
     expect(onRefresh).toHaveBeenCalledTimes(1)
     expect(COMPONENT_SOURCE).not.toContain('<Tooltip title="刷新">')
+  })
+
+  it('文字操作按钮保留点击行为，但不再包裹重复 Tooltip', () => {
+    // onCreateWorktree 存储创建 Worktree 按钮点击回调调用记录。
+    const onCreateWorktree = vi.fn()
+    // onOpenSettings 存储设置按钮点击回调调用记录。
+    const onOpenSettings = vi.fn()
+    render(
+      <AppHeader
+        {...BASE_PROPS}
+        onCreateWorktree={onCreateWorktree}
+        onOpenSettings={onOpenSettings}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '创建 Worktree' }))
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+
+    expect(onCreateWorktree).toHaveBeenCalledTimes(1)
+    expect(onOpenSettings).toHaveBeenCalledTimes(1)
+    expect(COMPONENT_SOURCE).not.toContain(
+      '<Tooltip title="按任务创建 Worktree">'
+    )
+    expect(COMPONENT_SOURCE).not.toContain('<Tooltip title="设置">')
   })
 
   it('固定视觉规则位于相邻 CSS，Header 可拖动且控件保持可交互', () => {

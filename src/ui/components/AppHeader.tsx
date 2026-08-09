@@ -78,6 +78,15 @@ export default function AppHeader({
   // pathProfileOpen 标记路径组合下拉是否展开；展开时临时停用 Header 原生拖动，让空白区域点击能关闭弹层。
   const [pathProfileOpen, setPathProfileOpen] = useState(false)
 
+  /**
+   * 关闭工作区下拉后再触发异步切换，避免 Select 被 loading 禁用时丢失关闭事件并让 Header 残留 no-drag。
+   * @param {string} profileId - 用户选择的目标工作区 id
+   */
+  const handlePathProfileChange = (profileId) => {
+    setPathProfileOpen(false)
+    onPathProfileChange(profileId)
+  }
+
   return (
     <Header
       className={`app-header${MACOS_HEADER_CLASS}${
@@ -91,7 +100,6 @@ export default function AppHeader({
             value={activeView}
             onChange={onViewChange}
             options={MAIN_VIEW_OPTIONS}
-            disabled={pathProfileSwitching}
           />
           {pathProfileOptions.length > 1 && (
             <Select
@@ -104,7 +112,7 @@ export default function AppHeader({
               loading={pathProfileSwitching}
               disabled={pathProfileSwitching}
               onOpenChange={setPathProfileOpen}
-              onChange={onPathProfileChange}
+              onChange={handlePathProfileChange}
             />
           )}
         </Space>
@@ -130,16 +138,14 @@ export default function AppHeader({
           </Tooltip>
         )}
         {canCreateWorktree && (
-          <Tooltip title="按任务创建 Worktree">
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              aria-label="创建 Worktree"
-              onClick={onCreateWorktree}
-            >
-              {isNarrow ? '' : '创建 Worktree'}
-            </Button>
-          </Tooltip>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            aria-label="创建 Worktree"
+            onClick={onCreateWorktree}
+          >
+            {isNarrow ? '' : '创建 Worktree'}
+          </Button>
         )}
         {activeView !== 'workflow' && (
           <Button
@@ -158,15 +164,13 @@ export default function AppHeader({
             onClick={onToggleTheme}
           />
         </Tooltip>
-        <Tooltip title="设置">
-          <Button
-            icon={<SettingOutlined />}
-            aria-label="设置"
-            onClick={onOpenSettings}
-          >
-            {isNarrow ? '' : '设置'}
-          </Button>
-        </Tooltip>
+        <Button
+          icon={<SettingOutlined />}
+          aria-label="设置"
+          onClick={onOpenSettings}
+        >
+          {isNarrow ? '' : '设置'}
+        </Button>
       </Space>
     </Header>
   )

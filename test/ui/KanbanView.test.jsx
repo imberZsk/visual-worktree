@@ -4,7 +4,7 @@ import KanbanView from '../../src/ui/components/KanbanView.tsx'
 import { DEFAULT_TASK_STATUSES } from '../../src/core/taskStatuses.js'
 
 // KanbanView 组件测试：跑在 happy-dom 环境。
-// 验证按「人工状态」分三列（不是工作流进度）、任务名渲染、备注编辑/展示、点击跳转。
+// 验证每个动态人工状态直接对应看板列、列偏好、任务名渲染、备注编辑/展示和点击跳转。
 
 afterEach(() => cleanup())
 
@@ -15,7 +15,7 @@ const steps = [
   { key: 's3', label: 'Jira评论' },
 ]
 
-// makeTasks 构造三个任务，分别对应「待启动/进行中/已完成」三种人工状态
+// makeTasks 构造三个任务，分别对应未开始、开发中和已发布状态。
 function makeTasks() {
   return [
     {
@@ -47,7 +47,7 @@ function makeTasks() {
 const statusMap = {
   'TASK-DOING': 'developing',
   'TASK-DONE': 'released',
-  // TASK-PENDING 不设置，应回退「未开始」入待启动列
+  // TASK-PENDING 不设置，应回退“未开始”状态列。
 }
 
 describe('KanbanView', () => {
@@ -58,7 +58,7 @@ describe('KanbanView', () => {
     expect(screen.getByRole('status', { name: '看板加载状态' })).toBeTruthy()
     expect(container.querySelector('.ant-spin')).toBeTruthy()
     expect(screen.queryByText('正在加载看板...')).toBeNull()
-    expect(screen.queryByText('待启动')).toBeNull()
+    expect(screen.queryByText('未开始')).toBeNull()
   })
 
   it('renders task names (uses task.task, not task.taskName)', () => {
@@ -91,9 +91,9 @@ describe('KanbanView', () => {
       />
     )
 
-    // pendingCard 存储待启动列的任务卡片，用于找到对应列容器。
+    // pendingCard 存储“未开始”列的任务卡片，用于找到对应列容器。
     const pendingCard = screen.getByText('TASK-PENDING').closest('.ant-card')
-    // pendingColumn 存储待启动列，标题和内容必须共享同一水平边界。
+    // pendingColumn 存储“未开始”列，标题和内容必须共享同一水平边界。
     const pendingColumn = pendingCard?.closest('.kanban-column')
     // columnContent 存储卡片列表容器，不应再用固定右内边距缩窄任务卡片。
     const columnContent = pendingColumn?.querySelector('.kanban-column-content')
@@ -101,9 +101,8 @@ describe('KanbanView', () => {
     expect(columnContent?.style.paddingRight).toBe('')
   })
 
-  it('groups tasks by manual status, not workflow progress', () => {
-    // 即便完全没勾选任何工作流步骤（taskWorkflowMap 为空），
-    // 已发布任务也应进「已完成」、开发中进「进行中」——验证分组依据是人工状态。
+  it('按动态人工状态直接分列而不使用旧三组看板归类', () => {
+    // 即便完全没勾选任何工作流步骤，已发布与开发中任务也应进入各自人工状态列。
     const { container } = render(
       <KanbanView
         tasks={makeTasks()}
@@ -115,19 +114,23 @@ describe('KanbanView', () => {
         onTaskClick={() => {}}
       />
     )
-    expect(screen.getByText('待启动')).toBeTruthy()
-    expect(screen.getByText('进行中')).toBeTruthy()
-    expect(screen.getByText('已完成')).toBeTruthy()
-    // 三列的任务名应分别落位：用 DOM 顺序断言列计数标签为 1/1/1
+    expect(
+      container.querySelector('[data-status-key="not-started"]')
+    ).toBeTruthy()
+    expect(
+      container.querySelector('[data-status-key="developing"]')
+    ).toBeTruthy()
+    expect(container.querySelector('[data-status-key="released"]')).toBeTruthy()
+    // 三个有任务状态列的计数均为 1。
     const counts = Array.from(container.querySelectorAll('.ant-tag')).map(
       (el) => el.textContent
     )
-    // 三列各 1 个任务
+    // 三个有任务的状态列各有一个计数标签 1。
     expect(counts.filter((t) => t === '1').length).toBeGreaterThanOrEqual(3)
   })
 
-  it('shows workspace-specific labels without changing kanban grouping', () => {
-    render(
+  it('状态重命名后同步更新对应看板列标题', () => {
+    const { container } = render(
       <KanbanView
         tasks={makeTasks()}
         workflowSteps={steps}
@@ -148,20 +151,16 @@ describe('KanbanView', () => {
       />
     )
 
-    // developingCard 存储使用自定义“处理中”标签的任务卡片。
-    const developingCard = screen.getByText('处理中').closest('.ant-card')
-    // releasedCard 存储使用自定义“已上线”标签的任务卡片。
-    const releasedCard = screen.getByText('已上线').closest('.ant-card')
-    expect(developingCard?.parentElement?.parentElement?.textContent).toContain(
-      '进行中'
-    )
-    expect(releasedCard?.parentElement?.parentElement?.textContent).toContain(
-      '已完成'
-    )
+    expect(
+      container.querySelector('[data-status-key="developing"]')?.textContent
+    ).toContain('处理中')
+    expect(
+      container.querySelector('[data-status-key="released"]')?.textContent
+    ).toContain('已上线')
   })
 
-  it('uses a custom status kanban group', () => {
-    // taskStatuses 存储新增“已验收”并明确归入已完成列的动态状态配置。
+  it('新增任务状态后直接生成独立看板列', () => {
+    // taskStatuses 存储新增“已验收”状态的动态配置。
     const taskStatuses = [
       ...DEFAULT_TASK_STATUSES,
       {
@@ -171,7 +170,7 @@ describe('KanbanView', () => {
         kanbanColumn: 'completed',
       },
     ]
-    render(
+    const { container } = render(
       <KanbanView
         tasks={[makeTasks()[0]]}
         workflowSteps={steps}
@@ -184,16 +183,15 @@ describe('KanbanView', () => {
       />
     )
 
-    // customStatusCard 存储使用自定义完成态的任务卡片。
-    const customStatusCard = screen.getByText('已验收').closest('.ant-card')
-    expect(
-      customStatusCard?.parentElement?.parentElement?.textContent
-    ).toContain('已完成')
+    // acceptedColumn 存储自定义状态生成的独立看板列。
+    const acceptedColumn = container.querySelector(
+      '[data-status-key="accepted"]'
+    )
+    expect(acceptedColumn?.textContent).toContain('已验收')
+    expect(acceptedColumn?.textContent).toContain('TASK-PENDING')
   })
 
-  it('all tasks fall into 待启动 when no status set', () => {
-    // 不传 statusMap：全部回退「未开始」→ 全进待启动。这本是用户报告的「全在待启动」场景，
-    // 此时确实应全在待启动（因为都没标状态），符合预期。
+  it('未设置状态的任务全部进入未开始列', () => {
     render(
       <KanbanView
         tasks={makeTasks()}
@@ -205,8 +203,80 @@ describe('KanbanView', () => {
         onTaskClick={() => {}}
       />
     )
-    // 进行中/已完成两列应都为空态
-    expect(screen.getAllByText('无任务').length).toBe(2)
+    // 七个默认状态中只有“未开始”有任务，其余六列显示空态。
+    expect(screen.getAllByText('无任务').length).toBe(6)
+  })
+
+  it('按设置中的隐藏状态过滤看板列且不再展示顶部设置工具栏', () => {
+    // hiddenSettings 存储由设置页持久化的隐藏列偏好。
+    const hiddenSettings = {
+      hiddenStatusKeys: ['developing'],
+    }
+    const { container } = render(
+      <KanbanView
+        tasks={makeTasks()}
+        workflowSteps={steps}
+        taskStatusMap={statusMap}
+        taskStatuses={DEFAULT_TASK_STATUSES}
+        kanbanSettings={hiddenSettings}
+      />
+    )
+
+    expect(container.querySelector('[data-status-key="developing"]')).toBeNull()
+    expect(screen.queryByText('TASK-DOING')).toBeNull()
+    expect(screen.queryByRole('button', { name: '设置看板列' })).toBeNull()
+  })
+
+  it('列内置顶任务排在前面并可取消置顶', () => {
+    // sameStatusTasks 存储两个同状态任务，用于验证列内置顶排序。
+    const sameStatusTasks = [
+      { task: 'TASK-NORMAL', worktrees: [] },
+      { task: 'TASK-PINNED', worktrees: [] },
+    ]
+    // pinnedChanges 存储置顶按钮触发的任务名和目标状态。
+    const pinnedChanges = []
+    const { container } = render(
+      <KanbanView
+        tasks={sameStatusTasks}
+        taskStatusMap={{
+          'TASK-NORMAL': 'developing',
+          'TASK-PINNED': 'developing',
+        }}
+        taskStatuses={DEFAULT_TASK_STATUSES}
+        pinnedTaskKeys={['TASK-PINNED']}
+        onTaskPinnedChange={(taskName, pinned) => {
+          pinnedChanges.push({ taskName, pinned })
+        }}
+      />
+    )
+
+    // developingCards 存储开发中列的任务卡片，置顶任务应排在第一张。
+    const developingCards = container.querySelectorAll(
+      '[data-status-key="developing"] .kanban-task-card'
+    )
+    expect(developingCards.item(0).textContent).toContain('TASK-PINNED')
+    fireEvent.click(
+      screen.getByRole('button', { name: '取消置顶任务 TASK-PINNED' })
+    )
+    expect(pinnedChanges).toEqual([{ taskName: 'TASK-PINNED', pinned: false }])
+  })
+
+  it('任务卡片支持用 VSCode 打开任务目录', () => {
+    // openedPaths 存储 VSCode 打开回调收到的任务目录。
+    const openedPaths = []
+    render(
+      <KanbanView
+        tasks={[makeTasks()[0]]}
+        onOpenVscode={(taskPath) => openedPaths.push(taskPath)}
+      />
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '在 VSCode 中打开任务 TASK-PENDING',
+      })
+    )
+    expect(openedPaths).toEqual(['/wt/TASK-PENDING'])
   })
 
   it('shows existing blocker note and allows editing', () => {
@@ -315,6 +385,8 @@ describe('KanbanView', () => {
         onTaskClick={() => {}}
       />
     )
-    expect(screen.getAllByText('无任务').length).toBe(3)
+    expect(screen.getAllByText('无任务').length).toBe(
+      DEFAULT_TASK_STATUSES.length
+    )
   })
 })

@@ -2,6 +2,20 @@ import { test, expect } from './fixtures/electronApp.ts'
 import { createTaskThroughUi } from './helpers/uiActions.ts'
 import { prepareWorkspace } from './helpers/workspaceFixture.ts'
 
+test('设置抽屉右上角关闭按钮不受窗口拖动区域阻断', async ({
+  appPage,
+  e2eHomePath,
+}) => {
+  await prepareWorkspace(appPage, e2eHomePath)
+  await appPage.getByRole('button', { name: '设置', exact: true }).click()
+
+  // settingsDialog 存储设置抽屉对应的可访问弹层，用于限定右上角关闭按钮并验证关闭结果。
+  const settingsDialog = appPage.getByRole('dialog', { name: '设置' })
+  await expect(settingsDialog).toBeVisible()
+  await settingsDialog.getByRole('button', { name: '关闭' }).click()
+  await expect(settingsDialog).toBeHidden()
+})
+
 test('GitHub 安装包未启动 AI 后端时设置仍可打开并保存', async ({
   appPage,
   e2eHomePath,
@@ -122,6 +136,8 @@ test('连续切换工作区时两条居中提示保持完整间距', async ({
 
   await profileSelect.click()
   await appPage.getByText('个人区', { exact: true }).last().click()
+  await expect(appHeader).not.toHaveClass(/app-header--select-open/)
+  await expect(appPage.getByText('项目', { exact: true })).toBeEnabled()
   await expect(appPage.getByText('已切换到「个人区」')).toBeVisible()
   await expect(profileSelect).toBeEnabled()
   await profileSelect.click()
@@ -160,41 +176,115 @@ test('连续切换工作区时两条居中提示保持完整间距', async ({
   })
 })
 
-test('Token 计价开关控制输入可编辑并保存统计工具', async ({
+test('Token 统计工具支持多选、独立计价并持久化', async ({
   appPage,
   e2eHomePath,
-}) => {
+}, testInfo) => {
   await prepareWorkspace(appPage, e2eHomePath)
   await appPage.getByRole('button', { name: '设置', exact: true }).click()
   await appPage.getByRole('tab', { name: 'Token 费用' }).click()
   // pricingPanel 存储 Token 计价设置区域。
   const pricingPanel = appPage.getByTestId('token-pricing-settings-panel')
-  // pricingSwitch 存储自定义 Token 计价启用开关。
-  const pricingSwitch = pricingPanel.getByRole('switch', {
+  await pricingPanel.getByRole('button', { name: /价格配置/ }).click()
+  // pricingDialog 存储 Claude Code 模型价格管理弹层。
+  const pricingDialog = appPage.getByRole('dialog', {
+    name: 'Claude Code 价格配置',
+  })
+  // pricingSwitch 存储弹层中的自定义 Token 计价启用开关。
+  const pricingSwitch = pricingDialog.getByRole('switch', {
     name: '启用自定义计价',
   })
   await expect(pricingSwitch).not.toBeChecked()
-  await expect(pricingPanel.getByRole('spinbutton').first()).toBeDisabled()
+  await expect(pricingDialog.getByRole('spinbutton').first()).toBeDisabled()
   await pricingSwitch.click()
-  await expect(pricingPanel.getByRole('spinbutton').first()).toBeEnabled()
+  await expect(pricingDialog.getByRole('spinbutton').first()).toBeEnabled()
+  await pricingDialog.getByRole('spinbutton').first().fill('4.5')
+  await pricingDialog.getByRole('combobox').click()
+  await appPage.getByText('Claude Opus 4.8', { exact: true }).last().click()
+  await appPage.getByText('Claude Sonnet 5', { exact: true }).last().click()
+  await expect(
+    pricingDialog.getByRole('spinbutton', { name: 'Output 单价' }).nth(1)
+  ).toHaveValue('25.000000')
+  await pricingDialog
+    .getByRole('spinbutton', { name: 'Input 单价' })
+    .nth(1)
+    .fill('5')
+  await pricingDialog
+    .getByRole('spinbutton', { name: 'Output 单价' })
+    .nth(1)
+    .fill('30')
+  await pricingDialog
+    .getByRole('spinbutton', { name: 'Cache write 单价' })
+    .nth(1)
+    .fill('0')
+  await pricingDialog
+    .getByRole('spinbutton', { name: 'Cache read 单价' })
+    .nth(1)
+    .fill('0.5')
+  await pricingDialog.locator('input[id$="models_0_multiplier"]').fill('0.3')
+  // pricingScreenshotPath 存储多模型价格弹层的真实 Electron 截图。
+  const pricingScreenshotPath = testInfo.outputPath(
+    'token-pricing-model-dialog.png'
+  )
+  await appPage.screenshot({
+    path: pricingScreenshotPath,
+    animations: 'disabled',
+  })
+  await testInfo.attach('token-pricing-model-dialog', {
+    path: pricingScreenshotPath,
+    contentType: 'image/png',
+  })
+  await pricingDialog.getByRole('button', { name: /完\s*成/ }).click()
   await pricingPanel.getByRole('combobox').click()
   await appPage.getByText('Codex', { exact: true }).last().click()
-  await pricingPanel.getByRole('spinbutton').first().fill('4.5')
+  await expect(
+    pricingPanel.getByRole('button', { name: /价格配置/ })
+  ).toHaveCount(2)
+  await appPage.getByRole('tab', { name: '展示' }).click()
+  await appPage.getByRole('tab', { name: 'Token 费用' }).click()
+  // directCnyDisplaySwitch 存储人民币 1:1 单币种展示开关。
+  const directCnyDisplaySwitch = pricingPanel.getByRole('switch', {
+    name: '直接人民币显示',
+  })
+  await directCnyDisplaySwitch.click()
+  await expect(
+    pricingPanel.getByRole('spinbutton', { name: '美元兑人民币汇率' })
+  ).toBeDisabled()
   await appPage.locator('.ant-drawer-footer button').last().click()
 
   await appPage.getByRole('button', { name: '设置', exact: true }).click()
   await appPage.getByRole('tab', { name: 'Token 费用' }).click()
+  // reopenedPricingPanel 存储保存后重新打开的 Token 费用设置区域。
+  const reopenedPricingPanel = appPage.getByTestId(
+    'token-pricing-settings-panel'
+  )
   await expect(
-    appPage
-      .getByTestId('token-pricing-settings-panel')
-      .getByText('Codex', { exact: true })
+    reopenedPricingPanel.getByText('自定义计价 · 2 个模型')
+  ).toBeVisible()
+  await expect(reopenedPricingPanel.getByText('使用内置价格')).toBeVisible()
+  await reopenedPricingPanel
+    .getByRole('button', { name: /价格配置/ })
+    .first()
+    .click()
+  // reopenedPricingDialog 存储重新打开后的 Claude Code 价格弹层。
+  const reopenedPricingDialog = appPage.getByRole('dialog', {
+    name: 'Claude Code 价格配置',
+  })
+  await expect(
+    reopenedPricingDialog.getByText('Claude Opus 4.8', { exact: true })
   ).toBeVisible()
   await expect(
-    appPage
-      .getByTestId('token-pricing-settings-panel')
-      .getByRole('spinbutton')
-      .first()
+    reopenedPricingDialog.getByText('Claude Sonnet 5', { exact: true })
+  ).toBeVisible()
+  await expect(
+    reopenedPricingDialog.getByRole('spinbutton').first()
   ).toHaveValue('4.500000')
+  await expect(
+    reopenedPricingDialog.locator('input[id$="models_0_multiplier"]')
+  ).toHaveValue('0.300000')
+  await expect(
+    reopenedPricingPanel.getByRole('switch', { name: '直接人民币显示' })
+  ).toBeChecked()
 })
 
 test('CI/CD 空态保持标签到新增按钮的标准间距', async ({
@@ -245,8 +335,12 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
   await prepareWorkspace(appPage, e2eHomePath, ['status-label-source'])
   await appPage.getByRole('button', { name: '设置', exact: true }).click()
   await appPage.getByRole('tab', { name: '展示' }).click()
+  await expect(appPage.getByTestId('task-status-settings')).toHaveCount(0)
+  await appPage.getByRole('button', { name: '配置任务状态' }).click()
+  // statusDialog 存储任务状态编辑弹层，用于限定标题、内容和底部操作的定位范围。
+  const statusDialog = appPage.getByRole('dialog', { name: /任务状态（/ })
   // developingRow 存储稳定“开发中”状态所在行，避免依赖可变的列表序号。
-  const developingRow = appPage.getByTestId('task-status-row-developing')
+  const developingRow = statusDialog.getByTestId('task-status-row-developing')
   // developingInput 存储稳定“开发中”状态对应的名称输入框。
   const developingInput = developingRow.getByRole('textbox', {
     name: '状态名称',
@@ -255,8 +349,8 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
   await developingInput.fill('处理中')
 
   // statusSettings 存储完整动态状态配置区，数量标题应随增删即时更新。
-  const statusSettings = appPage.getByTestId('task-status-settings')
-  await expect(statusSettings.getByText('任务状态（7/20）')).toBeVisible()
+  const statusSettings = statusDialog.getByTestId('task-status-settings')
+  await expect(statusDialog.getByText('任务状态（7/20）')).toBeVisible()
   await expect(
     statusSettings.locator('.settings-status-name-field .ant-form-item-tooltip')
   ).toHaveCount(0)
@@ -264,21 +358,19 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
     0
   )
   await statusSettings.getByRole('button', { name: '添加任务状态' }).click()
-  await expect(statusSettings.getByText('任务状态（8/20）')).toBeVisible()
-  // customStatusRow 存储新增在列表末尾的状态行，默认归入进行中看板列。
+  await expect(statusDialog.getByText('任务状态（8/20）')).toBeVisible()
+  // customStatusRow 存储新增在列表末尾的状态行；状态本身会直接成为看板列。
   const customStatusRow = statusSettings.locator('.settings-status-row').last()
   await customStatusRow
     .getByRole('textbox', { name: '状态名称' })
     .fill('联调中')
-  await expect(
-    customStatusRow.getByText('进行中', { exact: true })
-  ).toBeVisible()
+  await expect(customStatusRow.getByText('看板归类')).toHaveCount(0)
   // selfTestingRow 存储要删除的内置“自测中”状态行，删除只影响状态定义，不删除任务数据。
   const selfTestingRow = statusSettings.getByTestId(
     'task-status-row-self-testing'
   )
   await selfTestingRow.getByRole('button', { name: '删除状态' }).click()
-  await expect(statusSettings.getByText('任务状态（7/20）')).toBeVisible()
+  await expect(statusDialog.getByText('任务状态（7/20）')).toBeVisible()
 
   // statusInputs 存储删除和新增完成后的七个状态名称输入框，用于验证列表数量与横向布局。
   const statusInputs = statusSettings.locator('input[aria-label="状态名称"]')
@@ -292,7 +384,7 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
   await expect(appPage.locator('.ant-message-notice')).toHaveCount(0, {
     timeout: 5000,
   })
-  // 截图状态设置区顶部，人工验收标题、名称、看板归类和图标操作的节奏。
+  // 截图状态设置区顶部，人工验收标题、名称和图标操作的节奏。
   await statusSettings.evaluate((element) =>
     element.scrollIntoView({ block: 'start' })
   )
@@ -309,14 +401,16 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
     contentType: 'image/png',
   })
 
-  // addStatusButton 存储列表末尾新增操作；滚入视口后必须完整位于固定保存栏上方。
+  // addStatusButton 存储列表末尾新增操作；滚入视口后必须完整位于弹层底栏上方。
   const addStatusButton = statusSettings.getByRole('button', {
     name: '添加任务状态',
   })
   await addStatusButton.scrollIntoViewIfNeeded()
-  // addButtonBox 与 footerBox 存储新增按钮和固定保存栏边界，用于防止底部操作被遮挡。
+  // addButtonBox 与 footerBox 存储新增按钮和弹层底栏边界，用于防止底部操作被遮挡。
   const addButtonBox = await addStatusButton.boundingBox()
-  const footerBox = await appPage.locator('.ant-drawer-footer').boundingBox()
+  const footerBox = await statusDialog
+    .locator('.ant-modal-footer')
+    .boundingBox()
   expect(addButtonBox).not.toBeNull()
   expect(footerBox).not.toBeNull()
   expect(
@@ -335,6 +429,7 @@ test('任务状态新增删除和数量更新后在任务与看板中持久生�
     contentType: 'image/png',
   })
 
+  await statusDialog.getByRole('button', { name: /完\s*成/ }).click()
   await appPage.locator('.ant-drawer-footer button').last().click()
   await expect(appPage.getByRole('dialog', { name: '设置' })).toBeHidden()
   await createTaskThroughUi(appPage, 'feat-custom-status-label')

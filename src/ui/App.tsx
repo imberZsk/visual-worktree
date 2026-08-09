@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Layout, App as AntApp, Grid, Spin } from 'antd'
+import { Layout, App as AntApp, Grid } from 'antd'
 import { api } from './api.ts'
 import { useStore } from './store/useStore.ts'
 import {
@@ -217,7 +217,7 @@ export default function App() {
   // aiUsage 管理可见任务的 AI 用量加载和工具栏总计。
   const aiUsage = useAiUsageSummary({
     tasks: workspaceViewData.visibleTasks,
-    usageTool: config?.aiUsageTool,
+    usageTools: config?.aiUsageTools,
     tokenPricing: config?.tokenPricing,
   })
 
@@ -286,146 +286,147 @@ export default function App() {
           overflow: activeView === 'projects' && loading ? 'hidden' : 'auto',
         }}
       >
-        {/* 工作区切换覆盖配置保存与当前视图扫描；遮罩仅限内容区，顶部导航保持可见。 */}
-        <Spin
-          spinning={workspaceConfig.switching}
-          description="正在切换工作区..."
-          size="small"
-          className="workspace-switch-spin"
-        >
-          {/* 视图切换保留淡入；普通刷新仍由各数据区域自行承担。 */}
-          <div key={activeView} className="view-fade">
-            {/* worktree 视图：排序栏 + 按任务分组面板 */}
-            {activeView === 'worktrees' ? (
-              <>
-                <WorktreeToolbar
-                  aiUsageTotal={aiUsage.total}
-                  hasHiddenTasks={workspaceViewData.hasHiddenTasks}
-                  showHiddenTasks={visibilityTransitions.showHiddenTasks}
-                  sortOrder={workspaceViewData.taskSortOrder}
-                  keyword={worktreeKeyword}
-                  onOpenHistory={taskHistory.show}
-                  onOpenCleanup={() => setCleanupOpen(true)}
-                  onToggleHiddenTasks={
-                    visibilityTransitions.toggleShowHiddenTasks
-                  }
-                  onSortOrderChange={workspaceViewData.setTaskSortOrder}
-                  onKeywordChange={setWorktreeKeyword}
-                />
-                <WorktreePanel
-                  tasks={workspaceViewData.filteredTasks}
-                  loading={workspaceNavigation.loading}
-                  emptyDescription={
-                    worktreeKeyword.trim()
-                      ? '未找到匹配的任务或项目'
-                      : undefined
-                  }
-                  activeKeys={worktreeActiveKeys}
-                  onActiveKeysChange={setWorktreeActiveKeys}
-                  onOpenFinder={projectActions.openFinder}
-                  onOpenVscode={projectActions.openVscode}
-                  onOpenTerminal={projectActions.openTerminal}
-                  onCopyPath={projectActions.copyPath}
-                  onRemove={projectActions.removeWorktree}
-                  onRemoveTask={taskLifecycle.removeTask}
-                  onPrune={projectActions.pruneWorktree}
-                  taskStatusMap={taskStatusMap}
-                  taskStatuses={config?.taskStatuses ?? []}
-                  onTaskStatusChange={setTaskStatus}
-                  taskLinkMap={taskLinkMap}
-                  onTaskLinkChange={setTaskLink}
-                  onOpenUrl={projectActions.openUrl}
-                  onAddWorktree={taskLifecycle.addWorktreeToTask}
-                  onEnvCheck={envHealth.showDetails}
-                  envHealthMap={envHealth.healthMap}
-                  cicdLinks={config?.cicdLinks ?? {}}
-                  claudeUsageMap={aiUsage.usageMap}
-                  aiUsageTool={config?.aiUsageTool || 'claude-code'}
-                  workflowSteps={workflowSteps}
-                  projectWorkflowSteps={config?.projectWorkflowSteps ?? {}}
-                  onSaveProjectWorkflowSteps={saveProjectWorkflowSteps}
-                  workflowMap={taskWorkflowMap}
-                  hiddenTaskKeys={taskVisibility.hidden}
-                  pinnedTaskKeys={taskVisibility.pinned}
-                  hidingTaskKeys={visibilityTransitions.hidingTaskKeys}
-                  showHiddenTasks={visibilityTransitions.showHiddenTasks}
-                  onTaskHiddenChange={visibilityTransitions.changeTaskHidden}
-                  onTaskPinnedChange={setTaskPinned}
-                  taskTitleBadges={workspaceViewData.taskTitleBadges}
-                  onToggleStep={toggleWorkflowStep}
-                  onRunStepAction={workflowExecution.runStep}
-                  onRunWorkflowSteps={workflowExecution.runSteps}
-                  runningSteps={runningSteps}
-                  lastStepOutputs={workflowExecution.lastStepOutputs}
-                  lastOutputVersion={workflowExecution.lastOutputVersion}
-                  onViewLastOutput={workflowExecution.viewLastOutput}
-                  onViewCurrentOutput={workflowExecution.viewCurrentOutput}
-                />
-              </>
-            ) : activeView === 'kanban' ? (
-              <KanbanView
-                tasks={workspaceViewData.visibleTasks}
+        {/* 工作区切换异步刷新当前数据区域，不使用全内容遮罩；视图切换和窗口拖动始终可用。 */}
+        <div key={activeView} className="view-fade">
+          {/* worktree 视图：排序栏 + 按任务分组面板 */}
+          {activeView === 'worktrees' ? (
+            <>
+              <WorktreeToolbar
+                aiUsageTotal={aiUsage.total}
+                aiUsageTools={config?.aiUsageTools ?? ['claude-code']}
+                directCnyDisplay={
+                  config?.tokenPricing?.directCnyDisplay === true
+                }
+                hasHiddenTasks={workspaceViewData.hasHiddenTasks}
+                showHiddenTasks={visibilityTransitions.showHiddenTasks}
+                sortOrder={workspaceViewData.taskSortOrder}
+                keyword={worktreeKeyword}
+                onOpenHistory={taskHistory.show}
+                onOpenCleanup={() => setCleanupOpen(true)}
+                onToggleHiddenTasks={
+                  visibilityTransitions.toggleShowHiddenTasks
+                }
+                onSortOrderChange={workspaceViewData.setTaskSortOrder}
+                onKeywordChange={setWorktreeKeyword}
+              />
+              <WorktreePanel
+                tasks={workspaceViewData.filteredTasks}
                 loading={workspaceNavigation.loading}
-                workflowSteps={workflowSteps}
-                taskWorkflowMap={taskWorkflowMap}
+                emptyDescription={
+                  worktreeKeyword.trim() ? '未找到匹配的任务或项目' : undefined
+                }
+                activeKeys={worktreeActiveKeys}
+                onActiveKeysChange={setWorktreeActiveKeys}
+                onOpenFinder={projectActions.openFinder}
+                onOpenVscode={projectActions.openVscode}
+                onOpenTerminal={projectActions.openTerminal}
+                onCopyPath={projectActions.copyPath}
+                onRemove={projectActions.removeWorktree}
+                onRemoveTask={taskLifecycle.removeTask}
+                onPrune={projectActions.pruneWorktree}
                 taskStatusMap={taskStatusMap}
                 taskStatuses={config?.taskStatuses ?? []}
-                taskBlockerMap={taskBlockerMap}
-                onBlockerChange={setTaskBlocker}
-                onTaskClick={(taskName) => {
-                  workspaceNavigation.changeView('worktrees')
-                  setWorktreeActiveKeys([taskName])
-                }}
+                onTaskStatusChange={setTaskStatus}
+                taskLinkMap={taskLinkMap}
+                onTaskLinkChange={setTaskLink}
+                onOpenUrl={projectActions.openUrl}
+                onAddWorktree={taskLifecycle.addWorktreeToTask}
+                onEnvCheck={envHealth.showDetails}
+                envHealthMap={envHealth.healthMap}
+                cicdLinks={config?.cicdLinks ?? {}}
+                claudeUsageMap={aiUsage.usageMap}
+                aiUsageTools={config?.aiUsageTools ?? ['claude-code']}
+                directCnyDisplay={
+                  config?.tokenPricing?.directCnyDisplay === true
+                }
+                workflowSteps={workflowSteps}
+                projectWorkflowSteps={config?.projectWorkflowSteps ?? {}}
+                onSaveProjectWorkflowSteps={saveProjectWorkflowSteps}
+                workflowMap={taskWorkflowMap}
+                hiddenTaskKeys={taskVisibility.hidden}
+                pinnedTaskKeys={taskVisibility.pinned}
+                hidingTaskKeys={visibilityTransitions.hidingTaskKeys}
+                showHiddenTasks={visibilityTransitions.showHiddenTasks}
+                onTaskHiddenChange={visibilityTransitions.changeTaskHidden}
+                onTaskPinnedChange={setTaskPinned}
+                taskTitleBadges={workspaceViewData.taskTitleBadges}
+                onToggleStep={toggleWorkflowStep}
+                onRunStepAction={workflowExecution.runStep}
+                onRunWorkflowSteps={workflowExecution.runSteps}
+                runningSteps={runningSteps}
+                lastStepOutputs={workflowExecution.lastStepOutputs}
+                lastOutputVersion={workflowExecution.lastOutputVersion}
+                onViewLastOutput={workflowExecution.viewLastOutput}
+                onViewCurrentOutput={workflowExecution.viewCurrentOutput}
               />
-            ) : activeView === 'workflow' ? (
-              <WorkflowTabView />
-            ) : (
-              <>
-                <ProjectOverviewControls
-                  stats={workspaceViewData.projectStats}
-                  filter={filter}
-                  keyword={keyword}
-                  isNarrow={isNarrow}
-                  hasHiddenProjects={workspaceViewData.hasHiddenProjects}
-                  showHiddenProjects={visibilityTransitions.showHiddenProjects}
-                  selectedPaths={workspaceViewData.visibleSelectedPaths}
-                  batchMenuItems={batchOperations.menuItems}
-                  onFilterChange={setFilter}
-                  onKeywordChange={setKeyword}
-                  onToggleHiddenProjects={
-                    visibilityTransitions.toggleShowHiddenProjects
-                  }
-                  onBatchMenuClick={batchOperations.handleMenuClick}
-                />
+            </>
+          ) : activeView === 'kanban' ? (
+            <KanbanView
+              tasks={workspaceViewData.visibleTasks}
+              loading={workspaceNavigation.loading}
+              workflowSteps={workflowSteps}
+              taskWorkflowMap={taskWorkflowMap}
+              taskStatusMap={taskStatusMap}
+              taskStatuses={config?.taskStatuses ?? []}
+              kanbanSettings={config?.kanbanSettings ?? {}}
+              pinnedTaskKeys={taskVisibility.pinned}
+              taskBlockerMap={taskBlockerMap}
+              onBlockerChange={setTaskBlocker}
+              onTaskPinnedChange={setTaskPinned}
+              onOpenVscode={projectActions.openVscode}
+              onTaskClick={(taskName) => {
+                workspaceNavigation.changeView('worktrees')
+                setWorktreeActiveKeys([taskName])
+              }}
+            />
+          ) : activeView === 'workflow' ? (
+            <WorkflowTabView />
+          ) : (
+            <>
+              <ProjectOverviewControls
+                stats={workspaceViewData.projectStats}
+                filter={filter}
+                keyword={keyword}
+                isNarrow={isNarrow}
+                hasHiddenProjects={workspaceViewData.hasHiddenProjects}
+                showHiddenProjects={visibilityTransitions.showHiddenProjects}
+                selectedPaths={workspaceViewData.visibleSelectedPaths}
+                batchMenuItems={batchOperations.menuItems}
+                onFilterChange={setFilter}
+                onKeywordChange={setKeyword}
+                onToggleHiddenProjects={
+                  visibilityTransitions.toggleShowHiddenProjects
+                }
+                onBatchMenuClick={batchOperations.handleMenuClick}
+              />
 
-                {/* 项目扫描只遮罩表格区域，顶部导航、路径切换和筛选工具仍可操作。 */}
-                <ProjectTable
-                  data={workspaceViewData.filteredProjects}
-                  loading={loading}
-                  selectedPaths={workspaceViewData.visibleSelectedPaths}
-                  onSelectChange={setSelectedPaths}
-                  onDetail={setDetailProject}
-                  onCheckoutMain={projectActions.checkoutMain}
-                  onPull={projectActions.pull}
-                  onOpenFinder={projectActions.openFinder}
-                  onOpenVscode={projectActions.openVscode}
-                  onOpenUrl={projectActions.openUrl}
-                  onOpenTerminal={projectActions.openTerminal}
-                  onCopyPath={projectActions.copyPath}
-                  hiddenProjectKeys={projectVisibility.hidden}
-                  pinnedProjectKeys={projectVisibility.pinned}
-                  hidingProjectKeys={visibilityTransitions.hidingProjectKeys}
-                  loadingPaths={projectActions.loadingPaths}
-                  showHiddenProjects={visibilityTransitions.showHiddenProjects}
-                  onProjectHiddenChange={
-                    visibilityTransitions.changeProjectHidden
-                  }
-                  onProjectPinnedChange={setProjectPinned}
-                />
-              </>
-            )}
-          </div>
-        </Spin>
+              {/* 项目扫描只遮罩表格区域，顶部导航、路径切换和筛选工具仍可操作。 */}
+              <ProjectTable
+                data={workspaceViewData.filteredProjects}
+                loading={loading}
+                selectedPaths={workspaceViewData.visibleSelectedPaths}
+                onSelectChange={setSelectedPaths}
+                onDetail={setDetailProject}
+                onCheckoutMain={projectActions.checkoutMain}
+                onPull={projectActions.pull}
+                onOpenFinder={projectActions.openFinder}
+                onOpenVscode={projectActions.openVscode}
+                onOpenUrl={projectActions.openUrl}
+                onOpenTerminal={projectActions.openTerminal}
+                onCopyPath={projectActions.copyPath}
+                hiddenProjectKeys={projectVisibility.hidden}
+                pinnedProjectKeys={projectVisibility.pinned}
+                hidingProjectKeys={visibilityTransitions.hidingProjectKeys}
+                loadingPaths={projectActions.loadingPaths}
+                showHiddenProjects={visibilityTransitions.showHiddenProjects}
+                onProjectHiddenChange={
+                  visibilityTransitions.changeProjectHidden
+                }
+                onProjectPinnedChange={setProjectPinned}
+              />
+            </>
+          )}
+        </div>
       </Content>
 
       <BatchProgressModal progress={batchProgress} />

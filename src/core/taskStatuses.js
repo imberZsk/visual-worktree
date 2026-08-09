@@ -5,7 +5,7 @@ export const TASK_STATUS_MAX_COUNT = 20
 // DEFAULT_TASK_STATUS 存储没有人工标记时使用的稳定状态 key。
 export const DEFAULT_TASK_STATUS = 'not-started'
 
-// TASK_STATUS_KANBAN_COLUMNS 存储状态可归入的三个稳定看板分组及其展示名称。
+// TASK_STATUS_KANBAN_COLUMNS 存储旧版三组看板归类，仅用于兼容已持久化状态数据。
 export const TASK_STATUS_KANBAN_COLUMNS = [
   { value: 'pending', label: '待启动' },
   { value: 'inProgress', label: '进行中' },
@@ -26,7 +26,7 @@ export const TASK_STATUS_COLOR_SEQUENCE = [
   'geekblue',
 ]
 
-// DEFAULT_TASK_STATUSES 存储任务状态的稳定 key、默认文案、语义颜色和看板归类。
+// DEFAULT_TASK_STATUSES 存储任务状态的稳定 key、默认文案和语义颜色；kanbanColumn 仅保留旧配置兼容。
 export const DEFAULT_TASK_STATUSES = [
   {
     key: DEFAULT_TASK_STATUS,
@@ -185,7 +185,7 @@ export function normalizeTaskStatuses(statuses, legacyLabels) {
     const color = VALID_STATUS_COLORS.has(rawStatus?.color)
       ? rawStatus.color
       : fallbackColor
-    // kanbanColumn 存储状态对应的看板分组；新增和损坏配置默认归入“进行中”。
+    // kanbanColumn 存储旧版三组看板兼容值；动态看板不再使用该字段分列。
     const kanbanColumn = VALID_KANBAN_COLUMNS.has(rawStatus?.kanbanColumn)
       ? rawStatus.kanbanColumn
       : fallbackStatus?.kanbanColumn || 'inProgress'

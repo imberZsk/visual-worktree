@@ -74,11 +74,11 @@ test('任务状态可以切换并在看板移动到对应列', async ({
     .locator('.ant-card')
     .filter({ hasText: 'feat-status-task' })
   await expect(testingTaskCard).toContainText('测试中')
-  // testingColumn 存储任务所在的进行中列，用于比较标题模块与任务卡片边界。
+  // testingColumn 存储任务所在的“测试中”动态状态列，用于比较标题模块与任务卡片边界。
   const testingColumn = testingTaskCard.locator(
     'xpath=ancestor::*[contains(@class, "kanban-column")]'
   )
-  // columnHeaderBounds 存储进行中标题模块的实际像素边界。
+  // columnHeaderBounds 存储“测试中”标题模块的实际像素边界。
   const columnHeaderBounds = await testingColumn
     .locator('.kanban-column-header')
     .boundingBox()
@@ -103,4 +103,77 @@ test('任务状态可以切换并在看板移动到对应列', async ({
     path: screenshotPath,
     contentType: 'image/png',
   })
+})
+
+test('动态看板支持全区域横向滚动、隐藏列和任务置顶并持久化', async ({
+  appPage,
+  e2eHomePath,
+}) => {
+  await prepareWorkspace(appPage, e2eHomePath, ['dynamic-kanban-source'])
+  await createTaskThroughUi(appPage, 'feat-kanban-pin')
+  await appPage.setViewportSize({ width: 900, height: 700 })
+  await appPage.getByRole('button', { name: '设置', exact: true }).click()
+  await appPage.getByRole('tab', { name: '展示' }).click()
+  await appPage.getByRole('button', { name: '配置任务状态' }).click()
+  // statusDialog 存储任务状态编辑弹层，看板显示与固定偏好统一在这里配置。
+  const statusDialog = appPage.getByRole('dialog', { name: /任务状态（/ })
+  await statusDialog.getByRole('checkbox', { name: '看板展示 待提测' }).click()
+  await statusDialog.getByRole('button', { name: /完\s*成/ }).click()
+  await appPage.locator('.ant-drawer-footer button').last().click()
+  await expect(appPage.getByRole('dialog', { name: '设置' })).toBeHidden()
+  await appPage.getByText('看板', { exact: true }).click()
+
+  // kanbanColumns 存储设置页筛选后生成的动态看板列。
+  const kanbanColumns = appPage.locator('.kanban-column')
+  await expect(kanbanColumns).toHaveCount(6)
+  await expect(appPage.getByRole('button', { name: '设置看板列' })).toHaveCount(
+    0
+  )
+  // boardScroll 存储看板横向滚动视口，用于验证多列不会被压缩到一屏。
+  const boardScroll = appPage.locator('.kanban-board-scroll')
+  // horizontalOverflowPx 存储看板内容超出可视区的横向像素。
+  const horizontalOverflowPx = await boardScroll.evaluate(
+    (element) => element.scrollWidth - element.clientWidth
+  )
+  expect(horizontalOverflowPx).toBeGreaterThan(0)
+  await expect(appPage.locator('[data-status-key="pending-test"]')).toHaveCount(
+    0
+  )
+  // boardScrollBox 存储横向滚动视口边界，下方空白区域也必须属于该视口。
+  const boardScrollBox = await boardScroll.boundingBox()
+  expect(boardScrollBox).not.toBeNull()
+  if (!boardScrollBox) throw new Error('无法读取看板横向滚动视口边界')
+  expect(boardScrollBox.height).toBeGreaterThan(500)
+  await appPage.mouse.move(
+    boardScrollBox.x + boardScrollBox.width / 2,
+    boardScrollBox.y + boardScrollBox.height - 24
+  )
+  await appPage.mouse.wheel(480, 0)
+  await expect
+    .poll(() => boardScroll.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(0)
+
+  await appPage
+    .getByRole('button', {
+      name: '置顶任务 feat-kanban-pin',
+    })
+    .click()
+  await expect(
+    appPage.getByRole('button', { name: '取消置顶任务 feat-kanban-pin' })
+  ).toBeVisible()
+
+  await appPage.reload()
+  await appPage.getByText('看板', { exact: true }).click()
+  await expect(appPage.locator('.kanban-column')).toHaveCount(6)
+  await expect(appPage.locator('[data-status-key="pending-test"]')).toHaveCount(
+    0
+  )
+  await expect(
+    appPage.getByRole('button', { name: '取消置顶任务 feat-kanban-pin' })
+  ).toBeVisible()
+  await expect(
+    appPage.getByRole('button', {
+      name: '在 VSCode 中打开任务 feat-kanban-pin',
+    })
+  ).toBeEnabled()
 })

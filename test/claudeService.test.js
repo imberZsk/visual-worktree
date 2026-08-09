@@ -5,6 +5,7 @@ import {
   parseTokenUsage,
   calculateCost,
   usdToCny,
+  tokenCostToCny,
   getSessionsByTask,
   getTasksSummary,
 } from '../src/core/claudeService.js'
@@ -386,6 +387,40 @@ describe('claudeService', () => {
       }
       expect(calculateCost(usage, 'claude-opus-4-8', customPricing)).toBe(10)
     })
+
+    it('按模型采用专属价格和中转倍率', () => {
+      // usage 存储截图账单中的普通输入、输出和缓存读取 Token。
+      const usage = {
+        input: 526,
+        output: 77,
+        cacheWrite: 0,
+        cacheRead: 228_740,
+      }
+      // customPricing 存储 Codex 默认价及 gpt-5.6-sol 专属中转价格。
+      const customPricing = {
+        enabled: true,
+        input: 1,
+        output: 2,
+        cacheWrite: 3,
+        cacheRead: 4,
+        multiplier: 1,
+        models: [
+          {
+            model: 'gpt-5.6-sol',
+            input: 5,
+            output: 30,
+            cacheWrite: 0,
+            cacheRead: 0.5,
+            multiplier: 0.3,
+          },
+        ],
+      }
+
+      expect(calculateCost(usage, 'gpt-5.6-sol', customPricing)).toBe(0.035793)
+      expect(calculateCost(usage, 'gpt-5.6-terra', customPricing)).not.toBe(
+        0.035793
+      )
+    })
   })
 
   describe('usdToCny', () => {
@@ -397,6 +432,12 @@ describe('claudeService', () => {
 
     it('支持自定义美元兑人民币汇率', () => {
       expect(usdToCny(10, 8)).toBe(80)
+    })
+
+    it('直接人民币模式固定按一比一换算', () => {
+      expect(tokenCostToCny(10, { usdToCny: 8, directCnyDisplay: true })).toBe(
+        10
+      )
     })
   })
 
@@ -799,6 +840,8 @@ describe('claudeService', () => {
         projDirs[s.proj] = [`${s.id}.jsonl`]
       }
       const deps = {
+        // tokenPricing 存储汇率为 1 的费用配置，用于防止任务汇总回退默认汇率。
+        tokenPricing: { usdToCny: 1 },
         homedir: () => '/mock/home',
         existsSync: (p) =>
           p === projectsDir ||
@@ -825,6 +868,7 @@ describe('claudeService', () => {
       expect(summary['task-A'].usage.input).toBe(15000) // 10000 + 5000
       // 费用 = sonnet(10K*3/M+1K*15/M) + opus(5K*5/M+0.5K*25/M) = 0.045 + 0.0375 = 0.0825
       expect(summary['task-A'].cost.usd).toBeCloseTo(0.0825, 4)
+      expect(summary['task-A'].cost.cny).toBe(0.08)
     })
   })
 })

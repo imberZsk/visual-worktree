@@ -96,13 +96,26 @@ const HEAD_LINES = 400
  * @returns {{input:number,output:number,cacheWrite:number,cacheRead:number}} 单价（美元/百万 token）
  */
 function priceFor(model, customPricing) {
-  // 自定义规则启用时统一覆盖模型价格；直接调用的异常字段按零处理，避免产生 NaN 费用。
+  // 自定义计价启用时优先精确匹配模型；历史统一价继续作为未匹配模型的兜底，保证旧配置兼容。
   if (customPricing?.enabled) {
+    // normalizedModel 存储去除空白后的日志模型名，避免空值误命中。
+    const normalizedModel = String(model || '').trim()
+    // modelPricing 存储当前模型专属价格；仅精确匹配，避免相似模型误用价格。
+    const modelPricing = Array.isArray(customPricing.models)
+      ? customPricing.models.find(
+          (item) => String(item?.model || '').trim() === normalizedModel
+        )
+      : undefined
+    // selectedPricing 存储模型专属价格或兼容旧配置的统一兜底价格。
+    const selectedPricing = modelPricing || customPricing
     return {
-      input: Number(customPricing.input) || 0,
-      output: Number(customPricing.output) || 0,
-      cacheWrite: Number(customPricing.cacheWrite) || 0,
-      cacheRead: Number(customPricing.cacheRead) || 0,
+      input: Number(selectedPricing.input) || 0,
+      output: Number(selectedPricing.output) || 0,
+      cacheWrite: Number(selectedPricing.cacheWrite) || 0,
+      cacheRead: Number(selectedPricing.cacheRead) || 0,
+      multiplier: Number.isFinite(Number(selectedPricing.multiplier))
+        ? Math.max(0, Number(selectedPricing.multiplier))
+        : 1,
     }
   }
   // 无模型名时用默认价
@@ -449,12 +462,16 @@ export function parseTokenUsage(jsonlPath, deps = {}) {
 export function calculateCost(usage, model, customPricing) {
   // p 存储当前模型最终采用的单价，自定义规则启用时覆盖内置模型价格。
   const p = priceFor(model, customPricing)
+  // multiplier 存储中转服务计费倍率；官方内置价格默认按一倍计算。
+  const multiplier = p.multiplier ?? 1
+  // cost 存储应用倍率后的最终费用，与中转账单的用户扣费口径一致。
   const cost =
-    (usage.input * p.input +
+    ((usage.input * p.input +
       usage.output * p.output +
       usage.cacheWrite * p.cacheWrite +
       usage.cacheRead * p.cacheRead) /
-    1_000_000
+      1_000_000) *
+    multiplier
   return Math.round(cost * 1_000_000) / 1_000_000 // 保留 6 位小数
 }
 
@@ -471,6 +488,19 @@ export function usdToCny(usd, exchangeRate = USD_TO_CNY) {
       ? Number(exchangeRate)
       : USD_TO_CNY
   return Math.round(usd * safeExchangeRate * 100) / 100
+}
+
+/**
+ * 按 Token 费用设置将美元成本换算为人民币，直接人民币模式固定使用 1:1。
+ * @param {number} usd - 美元计价得到的金额
+ * @param {object} [tokenPricing] - Token 费用设置
+ * @returns {number} 人民币金额，保留 2 位小数
+ */
+export function tokenCostToCny(usd, tokenPricing = {}) {
+  // exchangeRate 存储当前展示模式采用的换算率；直接人民币模式忽略已保存的普通汇率。
+  const exchangeRate =
+    tokenPricing?.directCnyDisplay === true ? 1 : tokenPricing?.usdToCny
+  return usdToCny(usd, exchangeRate)
 }
 
 /**
@@ -531,14 +561,14 @@ function computeSessionUsageAndCost(session, deps = {}) {
     usd += c
     byModel[model] = {
       usage: u,
-      cost: { usd: c, cny: usdToCny(c, deps.tokenPricing?.usdToCny) },
+      cost: { usd: c, cny: tokenCostToCny(c, deps.tokenPricing) },
     }
   }
   usd = Math.round(usd * 1_000_000) / 1_000_000
 
   return {
     usage,
-    cost: { usd, cny: usdToCny(usd, deps.tokenPricing?.usdToCny) },
+    cost: { usd, cny: tokenCostToCny(usd, deps.tokenPricing) },
     byModel,
   }
 }
@@ -702,7 +732,7 @@ export function getTasksSummary(taskNames, worktreesRoot, deps = {}) {
       usage: totalUsage,
       cost: {
         usd: totalUsd,
-        cny: usdToCny(totalUsd),
+        cny: tokenCostToCny(totalUsd, deps.tokenPricing),
       },
     }
   }

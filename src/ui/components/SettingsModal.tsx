@@ -15,6 +15,7 @@ import {
   Modal,
   InputNumber,
   Tooltip,
+  Checkbox,
 } from 'antd'
 import {
   ArrowDownOutlined,
@@ -24,6 +25,7 @@ import {
   MinusCircleOutlined,
   EditOutlined,
   QuestionCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { api } from '../api.ts'
 import { useStore } from '../store/useStore.ts'
@@ -42,11 +44,11 @@ import { withConfirmDefaults } from '../modalDefaults.ts'
 import {
   DEFAULT_TASK_STATUS,
   TASK_STATUS_COLOR_SEQUENCE,
-  TASK_STATUS_KANBAN_COLUMNS,
   TASK_STATUS_LABEL_MAX_LENGTH,
   TASK_STATUS_MAX_COUNT,
   normalizeTaskStatuses,
 } from '../../core/taskStatuses.js'
+import { normalizeKanbanSettings } from '../../core/kanbanSettings.js'
 import './SettingsModal.css'
 
 // 默认工作文档模板：设置页缺省时只配置会归档的 docs 目录，固定说明文件由核心层单独生成。
@@ -62,6 +64,10 @@ const WORKFLOW_STEP_EDITOR_Z_INDEX = 1300
 const WORK_DOCUMENT_EDITOR_Z_INDEX = 1300
 // 路径组合管理弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
 const PATH_PROFILE_EDITOR_Z_INDEX = 1300
+// 任务状态编辑弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
+const TASK_STATUS_EDITOR_Z_INDEX = 1300
+// Token 模型价格管理弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
+const TOKEN_PRICING_EDITOR_Z_INDEX = 1300
 // WORKFLOW_TASK_ARG_MODE_OPTIONS 存储流程步骤「任务目录参数」的下拉选项。
 const WORKFLOW_TASK_ARG_MODE_OPTIONS = [
   { label: '自动', value: TASK_ARG_MODE_AUTO },
@@ -131,20 +137,90 @@ const SETTINGS_HELP_TEXT = {
   workflowAutoCheck: '命令成功后自动标记步骤完成。',
   workflowStopOnFailure: '步骤失败时停止后续命令。',
   aiUsageTool: '任务 Token 和费用统计的数据来源。',
-  customPricing: '为所选工具统一设置 Token 单价。',
+  customPricing: '为当前统计工具单独设置 Token 单价。',
+  tokenPricingModels: '按日志中的模型标识精确匹配；未匹配时使用默认价格。',
+  tokenPricingMultiplier: '中转站对原始费用应用的计费倍率，如 0.30x 填 0.3。',
   tokenInputPrice: '每百万输入 Token 的美元单价。',
   tokenOutputPrice: '每百万输出 Token 的美元单价。',
   tokenCacheWritePrice: '每百万缓存写入 Token 的美元单价。',
   tokenCacheReadPrice: '每百万缓存读取 Token 的美元单价。',
   usdToCny: '费用换算使用的美元兑人民币汇率。',
+  directCnyDisplay: '按美元计价数值直接以人民币 1:1 展示。',
   displayPreferences: '选择任务标题显示的辅助信息。',
-  taskStatuses: '管理任务状态及其看板归类。',
-  taskStatusKanbanColumn: '该状态在看板中的归类。',
+  taskStatuses: '管理任务状态；状态顺序同时决定看板列顺序。',
   cicdLinks: '按项目配置 CI/CD 页面地址。',
   pathProfileEntry: '一组项目根目录和 Worktree 根目录。',
   pathProfileName: '路径组合的显示名称。',
   sourceProjectsPath: '存放源 Git 项目的根目录。',
   worktreesPath: '按“任务/项目”存放 Worktree 的根目录。',
+}
+// AI_USAGE_TOOL_OPTIONS 存储 Token 统计工具多选项及用户可见名称。
+const AI_USAGE_TOOL_OPTIONS = [
+  { label: 'Claude Code', value: 'claude-code' },
+  { label: 'Codex', value: 'codex' },
+]
+// TOKEN_MODEL_OPTIONS_BY_TOOL 存储各统计工具常用的新模型，同时允许输入日志中的其他模型标识。
+const TOKEN_MODEL_OPTIONS_BY_TOOL = {
+  'claude-code': [
+    {
+      label: 'Claude Opus 4.8',
+      value: 'claude-opus-4-8',
+      pricing: { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+    },
+    {
+      label: 'Claude Sonnet 5',
+      value: 'claude-sonnet-5',
+      pricing: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+    },
+    {
+      label: 'Claude Sonnet 4.6',
+      value: 'claude-sonnet-4-6',
+      pricing: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+    },
+    {
+      label: 'Claude Haiku 4.5',
+      value: 'claude-haiku-4-5',
+      pricing: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 },
+    },
+  ],
+  codex: [
+    { label: 'GPT-5.6 Sol', value: 'gpt-5.6-sol' },
+    { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
+    { label: 'GPT-5.6 Luna', value: 'gpt-5.6-luna' },
+    { label: 'GPT-5.5', value: 'gpt-5.5' },
+  ],
+}
+// TOKEN_PRICING_FIELDS 存储每个工具独立维护的四种 Token 单价字段。
+const TOKEN_PRICING_FIELDS = [
+  {
+    key: 'input',
+    label: 'Input 单价',
+    tooltip: SETTINGS_HELP_TEXT.tokenInputPrice,
+  },
+  {
+    key: 'output',
+    label: 'Output 单价',
+    tooltip: SETTINGS_HELP_TEXT.tokenOutputPrice,
+  },
+  {
+    key: 'cacheWrite',
+    label: 'Cache write 单价',
+    tooltip: SETTINGS_HELP_TEXT.tokenCacheWritePrice,
+  },
+  {
+    key: 'cacheRead',
+    label: 'Cache read 单价',
+    tooltip: SETTINGS_HELP_TEXT.tokenCacheReadPrice,
+  },
+]
+// DEFAULT_MODEL_PRICING_DRAFT 存储新增模型价格时的可编辑初始值。
+const DEFAULT_MODEL_PRICING_DRAFT = {
+  model: '',
+  input: 3,
+  output: 15,
+  cacheWrite: 3.75,
+  cacheRead: 0.3,
+  multiplier: 1,
 }
 
 // 编辑器打开命令的预置选项：覆盖常见编辑器；用 AutoComplete 既可下拉选择也可手动输入自定义命令。
@@ -179,7 +255,7 @@ let customTaskStatusSequence = 0
 /**
  * 创建一条尚未命名的新任务状态表单数据。
  * @param {number} index - 新状态加入列表前的状态数量，用于轮换语义颜色和生成唯一后缀。
- * @returns {{key:string,label:string,color:string,kanbanColumn:string}} 可直接加入 Form.List 的状态草稿。
+ * @returns {{key:string,label:string,color:string}} 可直接加入 Form.List 的状态草稿。
  */
 function createTaskStatusDraft(index) {
   customTaskStatusSequence += 1
@@ -188,7 +264,7 @@ function createTaskStatusDraft(index) {
     TASK_STATUS_COLOR_SEQUENCE[index % TASK_STATUS_COLOR_SEQUENCE.length]
   // key 存储不随标签重命名变化的状态标识；时间戳与进程序号组合避免连续新增冲突。
   const key = `${CUSTOM_TASK_STATUS_KEY_PREFIX}-${Date.now()}-${customTaskStatusSequence}`
-  return { key, label: '', color, kanbanColumn: 'inProgress' }
+  return { key, label: '', color }
 }
 
 /**
@@ -371,6 +447,21 @@ function getTerminalOptions(platform) {
 export default function SettingsModal({ open, config, onClose, onSaved }) {
   // antd 表单实例
   const [form] = Form.useForm()
+  // watchedTaskStatuses 存储表单中的动态任务状态，用于实时清洗看板列设置。
+  const watchedTaskStatuses = Form.useWatch('taskStatuses', {
+    form,
+    preserve: true,
+  })
+  // watchedKanbanSettings 存储表单中的看板显示与固定偏好，用于驱动状态行控件。
+  const watchedKanbanSettings = Form.useWatch('kanbanSettings', {
+    form,
+    preserve: true,
+  })
+  // editorKanbanSettings 存储与当前任务状态一致的有效看板列设置。
+  const editorKanbanSettings = normalizeKanbanSettings(
+    watchedKanbanSettings || config?.kanbanSettings,
+    watchedTaskStatuses || config?.taskStatuses
+  )
 
   /**
    * 校验单个任务状态标签非空且不与其他状态重复，避免状态菜单出现无法区分的选项。
@@ -424,6 +515,10 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
   const [workDocumentEditorIndex, setWorkDocumentEditorIndex] = useState(null)
   // pathProfileEditorOpen 标记路径组合管理弹层是否打开。
   const [pathProfileEditorOpen, setPathProfileEditorOpen] = useState(false)
+  // taskStatusEditorOpen 标记任务状态编辑弹层是否打开。
+  const [taskStatusEditorOpen, setTaskStatusEditorOpen] = useState(false)
+  // tokenPricingEditorToolId 存储当前正在管理价格的工具标识；空值表示弹层关闭。
+  const [tokenPricingEditorToolId, setTokenPricingEditorToolId] = useState('')
   // pickingPathField 当前正在打开系统目录选择器的字段名；空字符串表示没有选择器在执行。
   const [pickingPathField, setPickingPathField] = useState('')
   // saving 标记保存操作是否正在进行，防止重复提交并给按钮提供 loading 反馈。
@@ -452,6 +547,10 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
     if (!open) {
       // 设置页关闭后重置本轮补扫标记，便于下次打开时在项目列表仍为空的情况下重新尝试。
       projectScanRequestedRef.current = false
+      // 设置抽屉关闭时同步收起任务状态弹层，避免下次打开残留弹层状态。
+      setTaskStatusEditorOpen(false)
+      // 设置抽屉关闭时同步收起模型价格弹层，避免下次打开残留状态。
+      setTokenPricingEditorToolId('')
       return
     }
     // 已有项目、正在扫描或本轮已请求过时都不重复扫描；尤其要避免源目录暂无仓库时陷入循环。
@@ -561,6 +660,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workDocumentTemplates: rawWorkDocumentTemplates = [],
         taskTitleBadges: rawTaskTitleBadges = {},
         taskStatuses: rawTaskStatuses = [],
+        kanbanSettings: rawKanbanSettings = {},
         taskStatusLabels: legacyTaskStatusLabels,
         aiModel = 'gpt-5.6-sol',
         aiBaseUrl = '',
@@ -599,10 +699,15 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       )
       // taskTitleBadges 规范化：老配置缺失字段时按默认全开展示。
       const taskTitleBadges = normalizeTaskTitleBadges(rawTaskTitleBadges)
-      // taskStatuses 规范化：保留用户顺序与稳定 key，并清理标签、颜色和看板归类异常值。
+      // taskStatuses 规范化：保留用户顺序与稳定 key，并清理标签、颜色及旧看板兼容值异常。
       const taskStatuses = normalizeTaskStatuses(
         rawTaskStatuses,
         legacyTaskStatusLabels
+      )
+      // kanbanSettings 存储按最终任务状态清洗后的列显示与固定偏好。
+      const kanbanSettings = normalizeKanbanSettings(
+        rawKanbanSettings,
+        taskStatuses
       )
       // envCheckRoles 为历史兼容字段：新 UI 改为自动识别前后端，不再要求用户维护角色映射
       const envCheckRoles = Array.isArray(config?.envCheckRoles)
@@ -633,6 +738,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workDocumentTemplates,
         taskTitleBadges,
         taskStatuses,
+        kanbanSettings,
         envCheckRoles,
       })
       // AI 后端是正式安装包之外的可选服务；离线时本地与普通设置均已保存，只提示同步状态而不判定失败。
@@ -721,6 +827,40 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
    */
   const closePathProfileEditor = () => {
     setPathProfileEditorOpen(false)
+  }
+
+  /**
+   * 打开任务状态编辑弹层。
+   */
+  const openTaskStatusEditor = () => {
+    setTaskStatusEditorOpen(true)
+  }
+
+  /**
+   * 关闭任务状态编辑弹层，表单改动保留到设置主表单统一保存。
+   */
+  const closeTaskStatusEditor = () => {
+    setTaskStatusEditorOpen(false)
+  }
+
+  /**
+   * 切换指定任务状态是否生成看板列，并保证至少保留一个可见列。
+   * @param {string} statusKey - 待调整的任务状态稳定 key。
+   * @param {boolean} visible - 调整后是否在看板展示。
+   */
+  const changeKanbanStatusVisibility = (statusKey, visible) => {
+    // currentKanbanSettings 存储点击瞬间的最新表单值，避免连续操作使用上一渲染帧的旧配置。
+    const currentKanbanSettings = normalizeKanbanSettings(
+      form.getFieldValue('kanbanSettings'),
+      form.getFieldValue('taskStatuses')
+    )
+    // hiddenStatusKeys 存储切换后的隐藏列 key。
+    const hiddenStatusKeys = visible
+      ? currentKanbanSettings.hiddenStatusKeys.filter(
+          (hiddenStatusKey) => hiddenStatusKey !== statusKey
+        )
+      : [...currentKanbanSettings.hiddenStatusKeys, statusKey]
+    form.setFieldValue('kanbanSettings', { hiddenStatusKeys })
   }
 
   /**
@@ -1435,83 +1575,333 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
           <Form.Item
             className="token-pricing-tool-field"
             label="统计工具"
-            name="aiUsageTool"
+            name="aiUsageTools"
             tooltip={SETTINGS_HELP_TEXT.aiUsageTool}
             rules={[{ required: true, message: '请选择 Token 统计工具' }]}
           >
             <Select
-              options={[
-                { label: 'Claude Code', value: 'claude-code' },
-                { label: 'Codex', value: 'codex' },
-              ]}
+              mode="multiple"
+              options={AI_USAGE_TOOL_OPTIONS}
+              placeholder="选择一个或多个统计工具"
             />
           </Form.Item>
-          <div className="token-pricing-rule-header">
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              // selectedUsageTools 存储当前已选工具，用于动态渲染紧凑的价格管理入口。
+              const selectedUsageTools = Array.isArray(
+                getFieldValue('aiUsageTools')
+              )
+                ? getFieldValue('aiUsageTools')
+                : []
+              return (
+                <div className="token-pricing-tool-list">
+                  {selectedUsageTools.map((toolId) => {
+                    // toolOption 存储当前工具的用户可见名称，异常标识回退原值。
+                    const toolOption = AI_USAGE_TOOL_OPTIONS.find(
+                      (option) => option.value === toolId
+                    )
+                    // toolLabel 存储当前计价区标题使用的工具名称。
+                    const toolLabel = toolOption?.label || toolId
+                    // pricingEnabled 存储当前工具是否启用自定义计价，用于入口状态提示。
+                    const pricingEnabled =
+                      getFieldValue([
+                        'tokenPricingByTool',
+                        toolId,
+                        'enabled',
+                      ]) === true
+                    // modelCount 存储当前工具已配置的专属模型价格数量。
+                    const modelCount = Array.isArray(
+                      getFieldValue(['tokenPricingByTool', toolId, 'models'])
+                    )
+                      ? getFieldValue(['tokenPricingByTool', toolId, 'models'])
+                          .length
+                      : 0
+                    return (
+                      <div className="token-pricing-tool-row" key={toolId}>
+                        <div className="token-pricing-tool-summary">
+                          <Text strong>{toolLabel}</Text>
+                          <Text type="secondary">
+                            {pricingEnabled
+                              ? `自定义计价 · ${modelCount} 个模型`
+                              : '使用内置价格'}
+                          </Text>
+                        </div>
+                        <Button
+                          icon={<SettingOutlined />}
+                          onClick={() => setTokenPricingEditorToolId(toolId)}
+                        >
+                          价格配置
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }}
+          </Form.Item>
+          <Modal
+            title={`${AI_USAGE_TOOL_OPTIONS.find((option) => option.value === tokenPricingEditorToolId)?.label || ''} 价格配置`}
+            open={Boolean(tokenPricingEditorToolId)}
+            onCancel={() => setTokenPricingEditorToolId('')}
+            onOk={() => setTokenPricingEditorToolId('')}
+            okText="完成"
+            cancelButtonProps={{ className: 'settings-hidden-action' }}
+            width={680}
+            zIndex={TOKEN_PRICING_EDITOR_Z_INDEX}
+            rootClassName="settings-surface token-pricing-modal"
+            destroyOnHidden
+          >
+            {tokenPricingEditorToolId && (
+              <Form.Item noStyle shouldUpdate>
+                {({ getFieldValue }) => {
+                  // pricingEnabled 存储弹层当前工具是否启用自定义计价。
+                  const pricingEnabled =
+                    getFieldValue([
+                      'tokenPricingByTool',
+                      tokenPricingEditorToolId,
+                      'enabled',
+                    ]) === true
+                  return (
+                    <div className="token-pricing-editor">
+                      <div className="token-pricing-rule-header">
+                        <SettingTitleWithHelp
+                          label="自定义计价"
+                          help={SETTINGS_HELP_TEXT.customPricing}
+                        />
+                        <Form.Item
+                          noStyle
+                          name={[
+                            'tokenPricingByTool',
+                            tokenPricingEditorToolId,
+                            'enabled',
+                          ]}
+                          valuePropName="checked"
+                        >
+                          <Switch aria-label="启用自定义计价" />
+                        </Form.Item>
+                      </div>
+                      <SettingTitleWithHelp
+                        label="未匹配模型价格"
+                        help={SETTINGS_HELP_TEXT.tokenPricingModels}
+                      />
+                      <div className="token-pricing-fields-grid">
+                        {TOKEN_PRICING_FIELDS.map((pricingField) => (
+                          <Form.Item
+                            className="token-pricing-field"
+                            key={pricingField.key}
+                            label={pricingField.label}
+                            name={[
+                              'tokenPricingByTool',
+                              tokenPricingEditorToolId,
+                              pricingField.key,
+                            ]}
+                            tooltip={pricingField.tooltip}
+                            rules={[{ required: true, message: '请输入单价' }]}
+                          >
+                            <InputNumber
+                              min={0}
+                              precision={6}
+                              disabled={!pricingEnabled}
+                              prefix="$"
+                              className="settings-full-width-control"
+                            />
+                          </Form.Item>
+                        ))}
+                        <Form.Item
+                          className="token-pricing-field"
+                          label="计费倍率"
+                          name={[
+                            'tokenPricingByTool',
+                            tokenPricingEditorToolId,
+                            'multiplier',
+                          ]}
+                          tooltip={SETTINGS_HELP_TEXT.tokenPricingMultiplier}
+                          rules={[
+                            { required: true, message: '请输入计费倍率' },
+                          ]}
+                        >
+                          <InputNumber
+                            min={0}
+                            precision={6}
+                            disabled={!pricingEnabled}
+                            suffix="x"
+                            className="settings-full-width-control"
+                          />
+                        </Form.Item>
+                      </div>
+                      <Form.List
+                        name={[
+                          'tokenPricingByTool',
+                          tokenPricingEditorToolId,
+                          'models',
+                        ]}
+                      >
+                        {(fields, { add, remove }) => (
+                          <div className="token-model-pricing-list">
+                            <Form.Item
+                              label="计价模型"
+                              tooltip={SETTINGS_HELP_TEXT.tokenPricingModels}
+                            >
+                              <Select
+                                mode="tags"
+                                disabled={!pricingEnabled}
+                                placeholder="选择一个或多个模型"
+                                options={
+                                  TOKEN_MODEL_OPTIONS_BY_TOOL[
+                                    tokenPricingEditorToolId
+                                  ] || []
+                                }
+                                value={fields
+                                  .map((field) =>
+                                    getFieldValue([
+                                      'tokenPricingByTool',
+                                      tokenPricingEditorToolId,
+                                      'models',
+                                      field.name,
+                                      'model',
+                                    ])
+                                  )
+                                  .filter(Boolean)}
+                                onChange={(selectedModels) => {
+                                  // currentModels 存储变更前模型名与表单下标的对应关系。
+                                  const currentModels = fields.map((field) => ({
+                                    name: field.name,
+                                    model: getFieldValue([
+                                      'tokenPricingByTool',
+                                      tokenPricingEditorToolId,
+                                      'models',
+                                      field.name,
+                                      'model',
+                                    ]),
+                                  }))
+                                  // removedIndexes 存储取消选择的模型下标，倒序删除避免下标移动误删。
+                                  const removedIndexes = currentModels
+                                    .filter(
+                                      (item) =>
+                                        !selectedModels.includes(item.model)
+                                    )
+                                    .map((item) => item.name)
+                                    .sort((left, right) => right - left)
+                                  removedIndexes.forEach((index) =>
+                                    remove(index)
+                                  )
+                                  // existingModels 存储变更前已有模型名，用于只新增本次选择项。
+                                  const existingModels = new Set(
+                                    currentModels.map((item) => item.model)
+                                  )
+                                  selectedModels
+                                    .filter(
+                                      (model) => !existingModels.has(model)
+                                    )
+                                    .forEach((model) => {
+                                      // selectedOption 存储当前预置模型及其内置价格；自定义模型继续使用通用草稿价。
+                                      const selectedOption = (
+                                        TOKEN_MODEL_OPTIONS_BY_TOOL[
+                                          tokenPricingEditorToolId
+                                        ] || []
+                                      ).find((option) => option.value === model)
+                                      add({
+                                        ...DEFAULT_MODEL_PRICING_DRAFT,
+                                        ...(selectedOption?.pricing || {}),
+                                        model,
+                                      })
+                                    })
+                                }}
+                              />
+                            </Form.Item>
+                            {fields.map(({ key, name }) => (
+                              <div
+                                className="token-model-pricing-row"
+                                key={key}
+                              >
+                                <div className="token-model-pricing-header">
+                                  <Text strong>
+                                    {getFieldValue([
+                                      'tokenPricingByTool',
+                                      tokenPricingEditorToolId,
+                                      'models',
+                                      name,
+                                      'model',
+                                    ])}
+                                  </Text>
+                                  <Button
+                                    aria-label="删除模型价格"
+                                    danger
+                                    type="text"
+                                    disabled={!pricingEnabled}
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => remove(name)}
+                                  />
+                                </div>
+                                <Form.Item name={[name, 'model']} hidden>
+                                  <Input />
+                                </Form.Item>
+                                {TOKEN_PRICING_FIELDS.map((pricingField) => (
+                                  <Form.Item
+                                    className="token-pricing-field"
+                                    key={pricingField.key}
+                                    label={pricingField.label}
+                                    name={[name, pricingField.key]}
+                                    rules={[
+                                      { required: true, message: '请输入单价' },
+                                    ]}
+                                  >
+                                    <InputNumber
+                                      min={0}
+                                      precision={6}
+                                      disabled={!pricingEnabled}
+                                      prefix="$"
+                                      className="settings-full-width-control"
+                                    />
+                                  </Form.Item>
+                                ))}
+                                <Form.Item
+                                  className="token-pricing-field"
+                                  label="倍率"
+                                  name={[name, 'multiplier']}
+                                  rules={[
+                                    { required: true, message: '请输入倍率' },
+                                  ]}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    precision={6}
+                                    disabled={!pricingEnabled}
+                                    suffix="x"
+                                    className="settings-full-width-control"
+                                  />
+                                </Form.Item>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Form.List>
+                    </div>
+                  )
+                }}
+              </Form.Item>
+            )}
+          </Modal>
+          <div className="token-pricing-rule-header token-pricing-currency-header">
             <SettingTitleWithHelp
-              label="自定义计价"
-              help={SETTINGS_HELP_TEXT.customPricing}
+              label="直接人民币显示"
+              help={SETTINGS_HELP_TEXT.directCnyDisplay}
             />
             <Form.Item
               noStyle
-              name={['tokenPricing', 'enabled']}
+              name={['tokenPricing', 'directCnyDisplay']}
               valuePropName="checked"
             >
-              <Switch aria-label="启用自定义计价" />
+              <Switch aria-label="直接人民币显示" />
             </Form.Item>
           </div>
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
-              // pricingEnabled 存储自定义计价开关状态，用于控制价格输入是否可编辑。
-              const pricingEnabled =
-                getFieldValue(['tokenPricing', 'enabled']) === true
-              // pricingFields 存储四种 Token 类型对应的字段名和界面文案。
-              const pricingFields = [
-                {
-                  key: 'input',
-                  label: 'Input 单价',
-                  tooltip: SETTINGS_HELP_TEXT.tokenInputPrice,
-                },
-                {
-                  key: 'output',
-                  label: 'Output 单价',
-                  tooltip: SETTINGS_HELP_TEXT.tokenOutputPrice,
-                },
-                {
-                  key: 'cacheWrite',
-                  label: 'Cache write 单价',
-                  tooltip: SETTINGS_HELP_TEXT.tokenCacheWritePrice,
-                },
-                {
-                  key: 'cacheRead',
-                  label: 'Cache read 单价',
-                  tooltip: SETTINGS_HELP_TEXT.tokenCacheReadPrice,
-                },
-              ]
+              // directCnyDisplay 存储是否直接按人民币 1:1 展示，用于停用不再生效的汇率输入。
+              const directCnyDisplay =
+                getFieldValue(['tokenPricing', 'directCnyDisplay']) === true
               return (
                 <div className="token-pricing-fields-grid">
-                  {pricingFields.map((pricingField) => (
-                    <Form.Item
-                      className="token-pricing-field"
-                      key={pricingField.key}
-                      label={pricingField.label}
-                      name={['tokenPricing', pricingField.key]}
-                      tooltip={pricingField.tooltip}
-                      rules={[
-                        {
-                          required: true,
-                          message: `请输入${pricingField.label}`,
-                        },
-                      ]}
-                    >
-                      <InputNumber
-                        min={0}
-                        precision={6}
-                        disabled={!pricingEnabled}
-                        prefix="$"
-                        className="settings-full-width-control"
-                      />
-                    </Form.Item>
-                  ))}
                   <Form.Item
                     className="token-pricing-field token-pricing-exchange-field"
                     label="美元兑人民币汇率"
@@ -1524,7 +1914,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     <InputNumber
                       min={0.000001}
                       precision={6}
-                      disabled={!pricingEnabled}
+                      disabled={directCnyDisplay}
                       className="settings-full-width-control"
                     />
                   </Form.Item>
@@ -1562,140 +1952,191 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                     label={item.label}
                     help={DISPLAY_BADGE_DESCRIPTIONS[item.key]}
                   />
-                  <Form.Item
-                    name={['taskTitleBadges', item.key]}
-                    valuePropName="checked"
-                    className="settings-display-switch-field"
-                  >
-                    <Switch checkedChildren="展示" unCheckedChildren="隐藏" />
-                  </Form.Item>
+                  <div className="settings-display-card-actions">
+                    {item.key === 'taskStatus' && (
+                      <Button
+                        type="text"
+                        icon={<SettingOutlined />}
+                        aria-label="配置任务状态"
+                        title="配置任务状态"
+                        onClick={openTaskStatusEditor}
+                      />
+                    )}
+                    <Form.Item
+                      name={['taskTitleBadges', item.key]}
+                      valuePropName="checked"
+                      className="settings-display-switch-field"
+                    >
+                      <Switch checkedChildren="展示" unCheckedChildren="隐藏" />
+                    </Form.Item>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
           <Form.List name="taskStatuses">
             {(fields, { add, remove, move }) => (
-              <div
-                data-testid="task-status-settings"
-                className="settings-status-label-section"
+              <Modal
+                title={`任务状态（${fields.length}/${TASK_STATUS_MAX_COUNT}）`}
+                open={taskStatusEditorOpen}
+                onCancel={closeTaskStatusEditor}
+                footer={
+                  <Button type="primary" onClick={closeTaskStatusEditor}>
+                    完成
+                  </Button>
+                }
+                width={640}
+                zIndex={TASK_STATUS_EDITOR_Z_INDEX}
+                className="settings-task-status-modal"
               >
-                <div className="settings-status-label-header">
-                  <SettingTitleWithHelp
-                    label={`任务状态（${fields.length}/${TASK_STATUS_MAX_COUNT}）`}
-                    help={SETTINGS_HELP_TEXT.taskStatuses}
-                  />
-                </div>
-                <div className="settings-status-list">
-                  {fields.map(({ key, name }, index) => {
-                    // statusKey 存储当前行不随重命名变化的稳定状态标识。
-                    const statusKey = form.getFieldValue([
-                      'taskStatuses',
-                      name,
-                      'key',
-                    ])
-                    // statusColor 存储当前行用于菜单和任务标题标签的语义颜色。
-                    const statusColor = form.getFieldValue([
-                      'taskStatuses',
-                      name,
-                      'color',
-                    ])
-                    // isDefaultStatus 标记不可删除、不可移动的默认兜底状态。
-                    const isDefaultStatus = statusKey === DEFAULT_TASK_STATUS
-                    return (
-                      <div
-                        key={key}
-                        className="settings-status-row"
-                        data-testid={`task-status-row-${statusKey}`}
-                      >
-                        <Form.Item name={[name, 'key']} hidden>
-                          <Input />
-                        </Form.Item>
-                        <Form.Item name={[name, 'color']} hidden>
-                          <Input />
-                        </Form.Item>
-                        <Form.Item
-                          className="settings-status-field settings-status-name-field"
-                          label={
-                            <span className="settings-status-name-label">
-                              状态名称
-                              {isDefaultStatus && (
-                                <Tag
-                                  color={statusColor}
-                                  className="settings-status-default-tag"
-                                >
-                                  默认
-                                </Tag>
-                              )}
-                            </span>
-                          }
-                          name={[name, 'label']}
-                          rules={[
-                            { validator: validateTaskStatusLabel },
-                            {
-                              max: TASK_STATUS_LABEL_MAX_LENGTH,
-                              message: `最多 ${TASK_STATUS_LABEL_MAX_LENGTH} 个字符`,
-                            },
-                          ]}
-                        >
-                          <Input
-                            maxLength={TASK_STATUS_LABEL_MAX_LENGTH}
-                            aria-label="状态名称"
-                            placeholder="输入状态名称"
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          className="settings-status-field settings-status-column-field"
-                          label="看板归类"
-                          name={[name, 'kanbanColumn']}
-                          tooltip={SETTINGS_HELP_TEXT.taskStatusKanbanColumn}
-                          rules={[
-                            { required: true, message: '请选择看板归类' },
-                          ]}
-                        >
-                          <Select options={TASK_STATUS_KANBAN_COLUMNS} />
-                        </Form.Item>
-                        <div className="settings-status-row-actions">
-                          <Button
-                            type="text"
-                            icon={<ArrowUpOutlined />}
-                            aria-label="上移状态"
-                            title="上移"
-                            disabled={isDefaultStatus || index <= 1}
-                            onClick={() => move(index, index - 1)}
-                          />
-                          <Button
-                            type="text"
-                            icon={<ArrowDownOutlined />}
-                            aria-label="下移状态"
-                            title="下移"
-                            disabled={
-                              isDefaultStatus || index === fields.length - 1
-                            }
-                            onClick={() => move(index, index + 1)}
-                          />
-                          <Button
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            aria-label="删除状态"
-                            title={
-                              isDefaultStatus ? '默认状态不可删除' : '删除状态'
-                            }
-                            disabled={isDefaultStatus}
-                            onClick={() => remove(index)}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <AddListButton
-                  disabled={fields.length >= TASK_STATUS_MAX_COUNT}
-                  onClick={() => add(createTaskStatusDraft(fields.length))}
+                <div
+                  data-testid="task-status-settings"
+                  className="settings-status-label-section"
                 >
-                  添加任务状态
-                </AddListButton>
-              </div>
+                  <Text type="secondary" className="settings-helper-text">
+                    状态顺序同时决定任务菜单、排序和看板列顺序。
+                  </Text>
+                  <div className="settings-status-list">
+                    {fields.map(({ key, name }, index) => {
+                      // statusKey 存储当前行不随重命名变化的稳定状态标识。
+                      const statusKey = form.getFieldValue([
+                        'taskStatuses',
+                        name,
+                        'key',
+                      ])
+                      // statusColor 存储当前行用于菜单和任务标题标签的语义颜色。
+                      const statusColor = form.getFieldValue([
+                        'taskStatuses',
+                        name,
+                        'color',
+                      ])
+                      // statusLabel 存储当前状态文案，用于看板设置控件的无障碍名称。
+                      const statusLabel = form.getFieldValue([
+                        'taskStatuses',
+                        name,
+                        'label',
+                      ])
+                      // isDefaultStatus 标记不可删除、不可移动的默认兜底状态。
+                      const isDefaultStatus = statusKey === DEFAULT_TASK_STATUS
+                      // statusVisible 标记当前状态是否在看板中生成列。
+                      const statusVisible =
+                        !editorKanbanSettings.hiddenStatusKeys.includes(
+                          statusKey
+                        )
+                      // visibleStatusCount 存储当前可见看板列数量，用于阻止隐藏最后一列。
+                      const visibleStatusCount = fields.filter((field) => {
+                        // fieldStatusKey 存储待统计状态的稳定 key。
+                        const fieldStatusKey = form.getFieldValue([
+                          'taskStatuses',
+                          field.name,
+                          'key',
+                        ])
+                        return !editorKanbanSettings.hiddenStatusKeys.includes(
+                          fieldStatusKey
+                        )
+                      }).length
+                      return (
+                        <div
+                          key={key}
+                          className="settings-status-row"
+                          data-testid={`task-status-row-${statusKey}`}
+                        >
+                          <Form.Item name={[name, 'key']} hidden>
+                            <Input />
+                          </Form.Item>
+                          <Form.Item name={[name, 'color']} hidden>
+                            <Input />
+                          </Form.Item>
+                          <Form.Item
+                            className="settings-status-field settings-status-name-field"
+                            label={
+                              <span className="settings-status-name-label">
+                                状态名称
+                                {isDefaultStatus && (
+                                  <Tag
+                                    color={statusColor}
+                                    className="settings-status-default-tag"
+                                  >
+                                    默认
+                                  </Tag>
+                                )}
+                              </span>
+                            }
+                            name={[name, 'label']}
+                            rules={[
+                              { validator: validateTaskStatusLabel },
+                              {
+                                max: TASK_STATUS_LABEL_MAX_LENGTH,
+                                message: `最多 ${TASK_STATUS_LABEL_MAX_LENGTH} 个字符`,
+                              },
+                            ]}
+                          >
+                            <Input
+                              maxLength={TASK_STATUS_LABEL_MAX_LENGTH}
+                              aria-label="状态名称"
+                              placeholder="输入状态名称"
+                            />
+                          </Form.Item>
+                          <div className="settings-status-row-actions">
+                            <Checkbox
+                              checked={statusVisible}
+                              disabled={
+                                statusVisible && visibleStatusCount <= 1
+                              }
+                              aria-label={`看板展示 ${statusLabel}`}
+                              onChange={(event) =>
+                                changeKanbanStatusVisibility(
+                                  statusKey,
+                                  event.target.checked
+                                )
+                              }
+                            >
+                              看板
+                            </Checkbox>
+                            <Button
+                              type="text"
+                              icon={<ArrowUpOutlined />}
+                              aria-label="上移状态"
+                              title="上移"
+                              disabled={isDefaultStatus || index <= 1}
+                              onClick={() => move(index, index - 1)}
+                            />
+                            <Button
+                              type="text"
+                              icon={<ArrowDownOutlined />}
+                              aria-label="下移状态"
+                              title="下移"
+                              disabled={
+                                isDefaultStatus || index === fields.length - 1
+                              }
+                              onClick={() => move(index, index + 1)}
+                            />
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              aria-label="删除状态"
+                              title={
+                                isDefaultStatus
+                                  ? '默认状态不可删除'
+                                  : '删除状态'
+                              }
+                              disabled={isDefaultStatus}
+                              onClick={() => remove(index)}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <AddListButton
+                    disabled={fields.length >= TASK_STATUS_MAX_COUNT}
+                    onClick={() => add(createTaskStatusDraft(fields.length))}
+                  >
+                    添加任务状态
+                  </AddListButton>
+                </div>
+              </Modal>
             )}
           </Form.List>
         </div>
