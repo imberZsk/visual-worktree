@@ -171,6 +171,8 @@ export default function useTaskLifecycle({
           )
           // blockedWorktrees 累积因未提交变更而安全删除失败的 Worktree。
           const blockedWorktrees = []
+          // failedWorktrees 累积非未提交变更导致的删除失败，必须展示真实错误且禁止误导性强删。
+          const failedWorktrees = []
           for (const worktree of removableWorktrees) {
             // removeResult 存储当前 Worktree 的安全删除结果。
             const removeResult = await api.removeWorktree(
@@ -178,7 +180,16 @@ export default function useTaskLifecycle({
               worktree.path,
               {}
             )
-            if (!removeResult?.success) blockedWorktrees.push(worktree)
+            if (!removeResult?.success) {
+              if (removeResult?.reason === 'dirty') {
+                blockedWorktrees.push(worktree)
+              } else {
+                failedWorktrees.push({
+                  worktree,
+                  error: removeResult?.error || '未知错误',
+                })
+              }
+            }
           }
           // projectPaths 存储需要 prune 的全部去重项目路径，包括失效项。
           const projectPaths = [
@@ -187,6 +198,15 @@ export default function useTaskLifecycle({
           await Promise.all(
             projectPaths.map((path) => api.pruneWorktrees(path))
           )
+          if (failedWorktrees.length > 0) {
+            // firstFailure 存储第一个真实删除错误，避免把权限、锁定等故障误报为未提交变更。
+            const firstFailure = failedWorktrees[0]
+            message.error(
+              `删除 ${firstFailure.worktree.project} 失败：${firstFailure.error}`
+            )
+            scanWorktrees()
+            return
+          }
           if (blockedWorktrees.length === 0) {
             // removed 标记任务目录与历史记录是否处理完成。
             const removed = await finalizeRemove(task, archiveResult.docsPath)

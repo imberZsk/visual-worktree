@@ -69,6 +69,7 @@ import TaskLinksEditor from './TaskLinksEditor.tsx'
 import SingleLineText from './SingleLineText.tsx'
 import { withConfirmDefaults } from '../modalDefaults.ts'
 import './WorktreePanel.css'
+import TaskTagControl from './TaskTagControl.tsx'
 
 // PRIVATE_WORKFLOW_EDITOR_Z_INDEX 存储项目私有流程编辑弹层层级，需高于外层需求流程弹层。
 const PRIVATE_WORKFLOW_EDITOR_Z_INDEX = 1200
@@ -853,6 +854,9 @@ function wtStatusTags(wt) {
  * @param {Record<string,string>} props.taskStatusMap - 任务名 → 人工状态 key 的映射
  * @param {Array<object>} [props.taskStatuses] - 当前工作区动态任务状态定义列表。
  * @param {(taskName:string, statusKey?:string)=>void} props.onTaskStatusChange - 切换/清除任务状态
+ * @param {Record<string,string>} props.taskTagMap - 任务名到分类 key 的映射。
+ * @param {Array<object>} props.taskTags - 当前工作区任务分类定义。
+ * @param {(taskName:string,tagKey:string)=>void} props.onTaskTagChange - 切换或清除任务分类。
  * @param {Record<string,string|string[]|Array<{name?:string,url?:string}>>} props.taskLinkMap - 任务名 → Jira/飞书需求/工单链接条目列表 的映射
  * @param {(taskName:string, links:Array<{name:string,url:string}>|string[]|string)=>void} props.onTaskLinkChange - 设置/清除任务链接
  * @param {(url:string)=>void} props.onOpenUrl - 在浏览器中打开 URL
@@ -894,6 +898,9 @@ export default function WorktreePanel({
   taskStatusMap = {},
   taskStatuses = [],
   onTaskStatusChange,
+  taskTagMap = {},
+  taskTags = [],
+  onTaskTagChange,
   taskLinkMap = {},
   onTaskLinkChange,
   onOpenUrl,
@@ -1135,6 +1142,14 @@ export default function WorktreePanel({
               </Tag>
             )}
             {/* 徽标组独立横向滚动，任务名和右侧操作始终保持在固定区域。 */}
+            {titleBadges.taskTag && (
+              <TaskTagControl
+                taskName={t.task}
+                tagKey={taskTagMap[t.task]}
+                taskTags={taskTags}
+                onChange={onTaskTagChange}
+              />
+            )}
             {titleBadges.projectCount && projectCountTag}
             {titleBadges.taskStatus && (
               <TaskStatusControl

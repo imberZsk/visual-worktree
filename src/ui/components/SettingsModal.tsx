@@ -49,6 +49,13 @@ import {
   normalizeTaskStatuses,
 } from '../../core/taskStatuses.js'
 import { normalizeKanbanSettings } from '../../core/kanbanSettings.js'
+import {
+  TASK_TAG_COLOR_OPTIONS,
+  TASK_TAG_LABEL_MAX_LENGTH,
+  TASK_TAG_MAX_COUNT,
+  createTaskTagDraft,
+  normalizeTaskTags,
+} from '../../core/taskTags.js'
 import './SettingsModal.css'
 
 // 默认工作文档模板：设置页缺省时只配置会归档的 docs 目录，固定说明文件由核心层单独生成。
@@ -66,6 +73,8 @@ const WORK_DOCUMENT_EDITOR_Z_INDEX = 1300
 const PATH_PROFILE_EDITOR_Z_INDEX = 1300
 // 任务状态编辑弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
 const TASK_STATUS_EDITOR_Z_INDEX = 1300
+// 任务分类编辑弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
+const TASK_TAG_EDITOR_Z_INDEX = 1300
 // Token 模型价格管理弹层层级：需高于设置 Drawer，避免弹层被抽屉遮挡。
 const TOKEN_PRICING_EDITOR_Z_INDEX = 1300
 // WORKFLOW_TASK_ARG_MODE_OPTIONS 存储流程步骤「任务目录参数」的下拉选项。
@@ -108,6 +117,7 @@ const AI_MODEL_OPTIONS = [
 
 // DISPLAY_BADGE_DESCRIPTIONS 存储「设置 → 展示」中每个任务标题徽标的用户友好说明。
 const DISPLAY_BADGE_DESCRIPTIONS = {
+  taskTag: '区分需求、BUG 等任务类型。',
   projectCount: '任务包含的项目数。',
   taskStatus: '任务当前状态。',
   taskLinks: '任务关联的需求链接。',
@@ -145,8 +155,10 @@ const SETTINGS_HELP_TEXT = {
   tokenCacheWritePrice: '每百万缓存写入 Token 的美元单价。',
   tokenCacheReadPrice: '每百万缓存读取 Token 的美元单价。',
   usdToCny: '费用换算使用的美元兑人民币汇率。',
-  directCnyDisplay: '按美元计价数值直接以人民币 1:1 展示。',
+  directCnyDisplay:
+    '中转站通常按人民币 1:1 扣费；开启后按美元计价数值直接显示人民币。',
   displayPreferences: '选择任务标题显示的辅助信息。',
+  taskTags: '区分需求、BUG 等任务类型，可自定义名称和颜色。',
   taskStatuses: '管理任务状态；状态顺序同时决定看板列顺序。',
   cicdLinks: '按项目配置 CI/CD 页面地址。',
   pathProfileEntry: '一组项目根目录和 Worktree 根目录。',
@@ -483,6 +495,25 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
     ).length
     if (duplicateCount > 1) throw new Error('状态标签不能重复')
   }
+  /**
+   * 校验任务分类名称非空且不重复，保证下拉选项可明确区分。
+   * @param {object} _rule - Ant Design 当前校验规则，本校验无需读取。
+   * @param {string} value - 当前分类名称。
+   * @returns {Promise<void>} 分类名称有效时完成，否则返回字段校验错误。
+   */
+  const validateTaskTagLabel = async (_rule, value) => {
+    // normalizedLabel 存储去除首尾空白后的当前分类名称。
+    const normalizedLabel = typeof value === 'string' ? value.trim() : ''
+    if (!normalizedLabel) throw new Error('请输入分类名称')
+    // currentTags 存储表单中的全部任务分类，用于检测重复名称。
+    const currentTags = form.getFieldValue('taskTags') || []
+    // duplicateCount 存储清理空白后与当前名称相同的分类数量。
+    const duplicateCount = currentTags.filter(
+      (tag) =>
+        typeof tag?.label === 'string' && tag.label.trim() === normalizedLabel
+    ).length
+    if (duplicateCount > 1) throw new Error('分类名称不能重复')
+  }
   // fallbackPathProfileState 存储从配置推导出的路径组合，用于路径组合表单尚未挂载时给当前组合下拉兜底。
   const fallbackPathProfileState = useMemo(
     () => normalizePathProfilesForForm(config),
@@ -517,6 +548,8 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
   const [pathProfileEditorOpen, setPathProfileEditorOpen] = useState(false)
   // taskStatusEditorOpen 标记任务状态编辑弹层是否打开。
   const [taskStatusEditorOpen, setTaskStatusEditorOpen] = useState(false)
+  // taskTagEditorOpen 标记任务分类编辑弹层是否打开。
+  const [taskTagEditorOpen, setTaskTagEditorOpen] = useState(false)
   // tokenPricingEditorToolId 存储当前正在管理价格的工具标识；空值表示弹层关闭。
   const [tokenPricingEditorToolId, setTokenPricingEditorToolId] = useState('')
   // pickingPathField 当前正在打开系统目录选择器的字段名；空字符串表示没有选择器在执行。
@@ -587,6 +620,8 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         config.taskStatuses,
         config.taskStatusLabels
       )
+      // taskTags 存储当前工作区的自定义任务分类定义。
+      const taskTags = normalizeTaskTags(config.taskTags)
       // pathProfileState 存储路径组合表单状态，兼容旧配置里的顶层路径字段。
       const pathProfileState = normalizePathProfilesForForm(config)
       form.setFieldsValue({
@@ -597,6 +632,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workDocumentTemplates,
         taskTitleBadges,
         taskStatuses,
+        taskTags,
       })
     }
   }, [open, config, form])
@@ -660,6 +696,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workDocumentTemplates: rawWorkDocumentTemplates = [],
         taskTitleBadges: rawTaskTitleBadges = {},
         taskStatuses: rawTaskStatuses = [],
+        taskTags: rawTaskTags,
         kanbanSettings: rawKanbanSettings = {},
         taskStatusLabels: legacyTaskStatusLabels,
         aiModel = 'gpt-5.6-sol',
@@ -704,6 +741,8 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         rawTaskStatuses,
         legacyTaskStatusLabels
       )
+      // taskTags 规范化：保留稳定 key、用户顺序与语义颜色；显式空列表允许关闭分类功能。
+      const taskTags = normalizeTaskTags(rawTaskTags)
       // kanbanSettings 存储按最终任务状态清洗后的列显示与固定偏好。
       const kanbanSettings = normalizeKanbanSettings(
         rawKanbanSettings,
@@ -738,6 +777,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         workDocumentTemplates,
         taskTitleBadges,
         taskStatuses,
+        taskTags,
         kanbanSettings,
         envCheckRoles,
       })
@@ -841,6 +881,16 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
    */
   const closeTaskStatusEditor = () => {
     setTaskStatusEditorOpen(false)
+  }
+
+  /** 打开任务分类编辑弹层。 */
+  const openTaskTagEditor = () => {
+    setTaskTagEditorOpen(true)
+  }
+
+  /** 关闭任务分类编辑弹层，改动保留到设置主表单统一保存。 */
+  const closeTaskTagEditor = () => {
+    setTaskTagEditorOpen(false)
   }
 
   /**
@@ -1962,6 +2012,15 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
                         onClick={openTaskStatusEditor}
                       />
                     )}
+                    {item.key === 'taskTag' && (
+                      <Button
+                        type="text"
+                        icon={<SettingOutlined />}
+                        aria-label="配置任务分类标签"
+                        title="配置任务分类标签"
+                        onClick={openTaskTagEditor}
+                      />
+                    )}
                     <Form.Item
                       name={['taskTitleBadges', item.key]}
                       valuePropName="checked"
@@ -1974,6 +2033,103 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
               </div>
             ))}
           </div>
+          <Form.List name="taskTags">
+            {(fields, { add, remove, move }) => (
+              <Modal
+                title={`任务分类标签（${fields.length}/${TASK_TAG_MAX_COUNT}）`}
+                open={taskTagEditorOpen}
+                onCancel={closeTaskTagEditor}
+                footer={
+                  <Button type="primary" onClick={closeTaskTagEditor}>
+                    完成
+                  </Button>
+                }
+                width={640}
+                zIndex={TASK_TAG_EDITOR_Z_INDEX}
+                className="settings-task-tag-modal"
+              >
+                <div className="settings-task-tag-section">
+                  <Text type="secondary" className="settings-helper-text">
+                    标签用于区分任务类型，不影响任务状态和看板列。
+                  </Text>
+                  {fields.length > 0 && (
+                    <div className="settings-task-tag-list">
+                      {fields.map(({ key, name }, index) => (
+                        <div key={key} className="settings-task-tag-row">
+                          <Form.Item name={[name, 'key']} hidden>
+                            <Input />
+                          </Form.Item>
+                          <Form.Item
+                            className="settings-task-tag-field"
+                            label="分类名称"
+                            name={[name, 'label']}
+                            rules={[
+                              { validator: validateTaskTagLabel },
+                              {
+                                max: TASK_TAG_LABEL_MAX_LENGTH,
+                                message: `最多 ${TASK_TAG_LABEL_MAX_LENGTH} 个字符`,
+                              },
+                            ]}
+                          >
+                            <Input
+                              maxLength={TASK_TAG_LABEL_MAX_LENGTH}
+                              aria-label="分类名称"
+                            />
+                          </Form.Item>
+                          <Form.Item
+                            className="settings-task-tag-field"
+                            label="颜色"
+                            name={[name, 'color']}
+                          >
+                            <Select
+                              aria-label="分类颜色"
+                              options={TASK_TAG_COLOR_OPTIONS.map((option) => ({
+                                // value 存储写入分类定义的 Ant Design 语义颜色。
+                                value: option.value,
+                                // label 使用真实色签和中文名称，避免用户理解英文颜色值。
+                                label: (
+                                  <Tag color={option.value}>{option.label}</Tag>
+                                ),
+                              }))}
+                            />
+                          </Form.Item>
+                          <div className="settings-task-tag-actions">
+                            <Button
+                              type="text"
+                              icon={<ArrowUpOutlined />}
+                              aria-label="上移分类"
+                              disabled={index === 0}
+                              onClick={() => move(index, index - 1)}
+                            />
+                            <Button
+                              type="text"
+                              icon={<ArrowDownOutlined />}
+                              aria-label="下移分类"
+                              disabled={index === fields.length - 1}
+                              onClick={() => move(index, index + 1)}
+                            />
+                            <Button
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              aria-label="删除分类"
+                              onClick={() => remove(index)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <AddListButton
+                    disabled={fields.length >= TASK_TAG_MAX_COUNT}
+                    onClick={() => add(createTaskTagDraft(fields.length))}
+                  >
+                    添加任务分类
+                  </AddListButton>
+                </div>
+              </Modal>
+            )}
+          </Form.List>
           <Form.List name="taskStatuses">
             {(fields, { add, remove, move }) => (
               <Modal

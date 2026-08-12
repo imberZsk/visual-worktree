@@ -19,6 +19,7 @@ export default function useWorkspaceNavigation({
   scanWorktrees,
   loadConfig,
   loadTaskStatus,
+  loadTaskTags,
   loadTaskLinks,
   loadTaskVisibility,
   loadProjectVisibility,
@@ -47,6 +48,7 @@ export default function useWorkspaceNavigation({
       scanWorktrees()
     }
     loadTaskStatus()
+    loadTaskTags()
     loadTaskLinks()
     loadTaskVisibility()
     loadProjectVisibility()

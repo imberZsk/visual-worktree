@@ -158,6 +158,16 @@ describe('registerIpcHandlers', () => {
     }
   })
 
+  it('任务分类映射可写入隔离文件并重新读取', async () => {
+    // taskTagMap 存储待持久化的任务分类选择。
+    const taskTagMap = { 'TASK-1': 'bug' }
+    expect(await mock.invoke(IPC.SAVE_TASK_TAGS, taskTagMap)).toBe(true)
+    expect(await mock.invoke(IPC.LOAD_TASK_TAGS)).toEqual(taskTagMap)
+    expect(
+      JSON.parse(readFileSync(join(dataDir, 'task-tags.json'), 'utf8'))
+    ).toEqual(taskTagMap)
+  })
+
   it('双选统计工具时返回 Claude、Codex 明细和费用合计', async () => {
     // claudeSummary 存储模拟的 Claude 任务汇总。
     const claudeSummary = {
@@ -336,11 +346,21 @@ describe('registerIpcHandlers', () => {
     expect(mock.sentEvents).toEqual([
       {
         ch: IPC.AI_ASSISTANT_STREAM_CHUNK,
-        payload: { requestId: 'request-1', chunk: '这是' },
+        payload: {
+          requestId: 'request-1',
+          type: 'delta',
+          content: '这是',
+          chunk: '这是',
+        },
       },
       {
         ch: IPC.AI_ASSISTANT_STREAM_CHUNK,
-        payload: { requestId: 'request-1', chunk: '流式回答' },
+        payload: {
+          requestId: 'request-1',
+          type: 'delta',
+          content: '流式回答',
+          chunk: '流式回答',
+        },
       },
     ])
     expect(result).toEqual({ success: true, answer: '这是流式回答' })

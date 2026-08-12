@@ -15,6 +15,7 @@ import { homedir } from 'os'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { DEFAULT_TASK_STATUSES } from '../src/core/taskStatuses.js'
 import { DEFAULT_KANBAN_SETTINGS } from '../src/core/kanbanSettings.js'
+import { DEFAULT_TASK_TAGS } from '../src/core/taskTags.js'
 
 // 配置读写测试，使用临时目录避免污染真实用户配置
 
@@ -37,6 +38,7 @@ describe('config', () => {
     expect(cfg.worktreesPath).toBe(
       join(homedir(), 'Desktop', 'work', 'worktrees')
     )
+    expect(cfg.tokenPricing.directCnyDisplay).toBe(true)
   })
 
   it('does not show onboarding when an existing user data directory remains', () => {
@@ -63,6 +65,19 @@ describe('config', () => {
     const cfg = loadConfig(join(ctx.root, 'task-status-label-defaults'))
     expect(cfg.taskStatuses).toEqual(DEFAULT_TASK_STATUSES)
     expect(cfg.kanbanSettings).toEqual(DEFAULT_KANBAN_SETTINGS)
+    expect(cfg.taskTags).toEqual(DEFAULT_TASK_TAGS)
+  })
+
+  it('persists workspace task category definitions', () => {
+    // dir 存储任务分类配置持久化测试的隔离目录。
+    const dir = join(ctx.root, 'task-tags')
+    // taskTags 存储用户调整后的分类定义。
+    const taskTags = [
+      { key: 'bug', label: '缺陷', color: 'volcano' },
+      { key: 'research', label: '调研', color: 'purple' },
+    ]
+    saveConfig({ taskTags }, dir)
+    expect(loadConfig(dir).taskTags).toEqual(taskTags)
   })
 
   it('persists workspace-specific kanban column visibility and removes legacy pinned column', () => {

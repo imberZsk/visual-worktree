@@ -30,6 +30,7 @@ import {
 import { normalizeKanbanSettings } from '../../core/kanbanSettings.js'
 import { VscodeIcon } from '../icons.tsx'
 import './KanbanView.css'
+import TaskTagControl from './TaskTagControl.tsx'
 
 const { Text } = Typography
 
@@ -41,6 +42,9 @@ const { Text } = Typography
  * @param {Record<string,string[]>} taskWorkflowMap - 任务名 → 已勾选步骤 key 数组
  * @param {Record<string,string>} taskStatusMap - 任务名 → 人工状态 key（分组依据）
  * @param {Array<object>} taskStatuses - 当前工作区动态任务状态定义列表
+ * @param {Record<string,string>} taskTagMap - 任务名到分类 key 的映射。
+ * @param {Array<object>} taskTags - 当前工作区任务分类定义。
+ * @param {boolean} showTaskTags - 是否在看板任务卡片展示分类标签。
  * @param {{hiddenStatusKeys?:string[]}} kanbanSettings - 当前工作区看板列显示偏好
  * @param {string[]} pinnedTaskKeys - 已置顶任务名列表
  * @param {Record<string,string>} taskBlockerMap - 任务名 → 备注文本（属性名沿用历史 blocker 标识）
@@ -49,6 +53,7 @@ const { Text } = Typography
  * @param {(taskName:string) => void} onTaskClick - 点击任务卡片回调（跳转到 worktree 视图）
  * @param {(taskName:string,pinned:boolean) => void} onTaskPinnedChange - 置顶或取消置顶任务回调
  * @param {(path:string) => void} onOpenVscode - 使用 VSCode 打开任务目录回调
+ * @param {(taskName:string,tagKey:string)=>void} onTaskTagChange - 修改任务分类回调。
  */
 export default function KanbanView({
   tasks = [],
@@ -56,6 +61,9 @@ export default function KanbanView({
   taskWorkflowMap = {},
   taskStatusMap = {},
   taskStatuses = [],
+  taskTagMap = {},
+  taskTags = [],
+  showTaskTags = true,
   kanbanSettings = {},
   pinnedTaskKeys = [],
   taskBlockerMap = {},
@@ -64,6 +72,7 @@ export default function KanbanView({
   onTaskClick,
   onTaskPinnedChange,
   onOpenVscode,
+  onTaskTagChange,
 }) {
   // 取主题 token，替换写死颜色以适配明暗主题
   const { token } = theme.useToken()
@@ -211,6 +220,14 @@ export default function KanbanView({
               {task.task}
             </Text>
             <Space size={4} style={{ flexShrink: 0 }}>
+              {showTaskTags && (
+                <TaskTagControl
+                  taskName={task.task}
+                  tagKey={taskTagMap[task.task]}
+                  taskTags={taskTags}
+                  onChange={onTaskTagChange}
+                />
+              )}
               <Tag
                 color={statusMeta.color}
                 style={{ marginInlineEnd: 0, flexShrink: 0 }}

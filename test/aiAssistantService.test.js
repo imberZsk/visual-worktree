@@ -177,6 +177,59 @@ describe('streamAiAssistantMessage', () => {
     )
   })
 
+  it('转发工具事件并携带会话历史和思考强度', async () => {
+    // encoder 存储将工具与文本事件编码为响应字节的编码器。
+    const encoder = new TextEncoder()
+    // responseBody 存储包含工具开始、完成、文本和结束事件的模拟流。
+    const responseBody = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            '{"type":"tool_start","name":"get_workspace_summary"}\n' +
+              '{"type":"tool_end","name":"get_workspace_summary"}\n' +
+              '{"type":"delta","content":"完成"}\n' +
+              '{"type":"done","elapsed_ms":12}\n'
+          )
+        )
+        controller.close()
+      },
+    })
+    // fetchImpl 模拟返回完整公开执行事件的后端请求。
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: responseBody,
+    })
+    // events 存储调用方接收到的全部公开流式事件。
+    const events = []
+    // history 存储当前 Tab 此前的独立聊天上下文。
+    const history = [{ role: 'user', content: '上一问' }]
+
+    await streamAiAssistantMessage('下一问', {
+      fetchImpl,
+      history,
+      reasoningEffort: 'high',
+      onEvent: (event) => events.push(event),
+    })
+
+    expect(events.map((event) => event.type)).toEqual([
+      'tool_start',
+      'tool_end',
+      'delta',
+      'done',
+    ])
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `${DEFAULT_AI_ASSISTANT_API_URL}/chat/stream`,
+      expect.objectContaining({
+        body: JSON.stringify({
+          message: '下一问',
+          history,
+          reasoning_effort: 'high',
+        }),
+      })
+    )
+  })
+
   it('把流内错误事件转换为稳定异常', async () => {
     // encoder 存储测试错误事件的 UTF-8 编码器。
     const encoder = new TextEncoder()

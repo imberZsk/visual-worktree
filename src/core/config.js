@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { DEFAULT_WORKFLOW_STEPS } from './workflowSteps.js'
 import { DEFAULT_WORK_DOCUMENT_TEMPLATES } from './taskDocsService.js'
 import { DEFAULT_TASK_STATUSES, normalizeTaskStatuses } from './taskStatuses.js'
+import { DEFAULT_TASK_TAGS, normalizeTaskTags } from './taskTags.js'
 import {
   DEFAULT_KANBAN_SETTINGS,
   normalizeKanbanSettings,
@@ -36,7 +37,7 @@ const DEFAULT_TOKEN_PRICING = {
   multiplier: 1,
   models: [],
   usdToCny: 7.2,
-  directCnyDisplay: false,
+  directCnyDisplay: true, // 首次安装默认按中转站人民币 1:1 扣费口径展示。
 }
 // AI_USAGE_TOOL_IDS 存储支持参与 Token 统计的工具标识。
 export const AI_USAGE_TOOL_IDS = ['claude-code', 'codex']
@@ -63,6 +64,7 @@ const DEFAULT_WORKSPACE_SETTINGS = {
     ...template,
   })),
   taskTitleBadges: {
+    taskTag: true,
     projectCount: true,
     taskStatus: true,
     taskLinks: true,
@@ -70,6 +72,7 @@ const DEFAULT_WORKSPACE_SETTINGS = {
     claudeUsage: true,
   },
   taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
+  taskTags: DEFAULT_TASK_TAGS.map((tag) => ({ ...tag })),
   kanbanSettings: { ...DEFAULT_KANBAN_SETTINGS },
   tokenPricing: { ...DEFAULT_TOKEN_PRICING },
   tokenPricingByTool: cloneJson(DEFAULT_TOKEN_PRICING_BY_TOOL),
@@ -213,6 +216,7 @@ function normalizeWorkspaceSettings(settings) {
     rawTaskStatuses,
     settings?.taskStatusLabels
   )
+  normalizedSettings.taskTags = normalizeTaskTags(settings?.taskTags)
   normalizedSettings.kanbanSettings = normalizeKanbanSettings(
     normalizedSettings.kanbanSettings,
     normalizedSettings.taskStatuses

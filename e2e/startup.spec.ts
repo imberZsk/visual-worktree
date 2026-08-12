@@ -1,17 +1,11 @@
 import { test, expect } from './fixtures/electronApp.ts'
 
 // STARTUP_ICON_SIZE_PX 存储启动图标在真实 Electron 窗口中的设计尺寸。
-const STARTUP_ICON_SIZE_PX = 112
-// STARTUP_SPINNER_SIZE_PX 存储启动旋转指示器的设计尺寸。
-const STARTUP_SPINNER_SIZE_PX = 20
-// STARTUP_SPINNER_ITEM_SIZE_PX 存储 Ant Design 默认四点 loading 的单点设计尺寸。
-const STARTUP_SPINNER_ITEM_SIZE_PX = 9
-// STARTUP_SPINNER_GAP_PX 存储项目图标与启动旋转指示器之间的设计间距。
-const STARTUP_SPINNER_GAP_PX = 16
+const STARTUP_ICON_SIZE_PX = 80
 // CENTER_TOLERANCE_PX 存储截图像素计算允许的亚像素取整误差。
 const CENTER_TOLERANCE_PX = 1
 
-test('React 挂载前在窗口中央展示项目图标和加载状态', async ({
+test('React 挂载前在窗口中央展示小号项目图标且不显示 loading', async ({
   electronApp,
   appPage,
 }, testInfo) => {
@@ -57,39 +51,10 @@ test('React 挂载前在窗口中央展示项目图标和加载状态', async ({
 
   // startupIcon 存储启动占位中的项目图标元素。
   const startupIcon = startupPage.locator('#startup-splash img')
-  // startupSpinner 存储启动占位中的旋转状态指示器。
-  const startupSpinner = startupPage.locator('.startup-splash__spinner')
-  // startupSpinnerItems 存储 Ant Design 默认 Spin 形态对应的四个状态点。
-  const startupSpinnerItems = startupSpinner.locator(
-    '.startup-splash__spinner-item'
-  )
   await expect(startupIcon).toBeVisible()
-  await expect(startupSpinner).toBeVisible()
-  await expect(startupSpinnerItems).toHaveCount(4)
-  // spinnerAnimationName 存储浏览器实际应用的动画名，用于确认 loading 会持续旋转。
-  const spinnerAnimationName = await startupSpinner.evaluate(
-    (element) => getComputedStyle(element).animationName
-  )
-  expect(spinnerAnimationName).toBe('startup-spinner-rotate')
-  // spinnerItemAnimationName 存储单个状态点的明暗交替动画名。
-  const spinnerItemAnimationName = await startupSpinnerItems
-    .first()
-    .evaluate((element) => getComputedStyle(element).animationName)
-  expect(spinnerItemAnimationName).toBe('startup-spinner-item')
-  // 四点容器默认旋转 45 度后外接矩形会放大；几何验收前关闭动画并归零旋转，稳定验证设计盒尺寸和间距。
-  await startupSpinner.evaluate((element) => {
-    element.style.animation = 'none'
-    element.style.transform = 'translateX(-50%)'
-  })
-  await startupSpinnerItems.evaluateAll((elements) => {
-    elements.forEach((element) => {
-      ;(element as HTMLElement).style.animation = 'none'
-    })
-  })
+  await expect(startupPage.locator('.startup-splash__spinner')).toHaveCount(0)
   // iconBox 存储启动图标在窗口内的实际像素边界。
   const iconBox = await startupIcon.boundingBox()
-  // spinnerBox 存储启动旋转指示器在窗口内的实际像素边界。
-  const spinnerBox = await startupSpinner.boundingBox()
   // viewportSize 存储隐藏预览页面的 CSS 视口尺寸。
   const viewportSize = await startupPage.evaluate(() => ({
     width: window.innerWidth,
@@ -98,40 +63,11 @@ test('React 挂载前在窗口中央展示项目图标和加载状态', async ({
   expect(iconBox).not.toBeNull()
   expect(iconBox?.width).toBe(STARTUP_ICON_SIZE_PX)
   expect(iconBox?.height).toBe(STARTUP_ICON_SIZE_PX)
-  expect(spinnerBox).not.toBeNull()
-  expect(spinnerBox?.width).toBe(STARTUP_SPINNER_SIZE_PX)
-  expect(spinnerBox?.height).toBe(STARTUP_SPINNER_SIZE_PX)
-  // spinnerItemSize 存储单点 CSS 设计盒尺寸；Ant Design 默认 scale(0.75) 会让可见外接矩形更小。
-  const spinnerItemSize = await startupSpinnerItems
-    .first()
-    .evaluate((element) => {
-      // style 存储单个状态点的最终计算样式。
-      const style = getComputedStyle(element)
-      return {
-        width: Number.parseFloat(style.width),
-        height: Number.parseFloat(style.height),
-      }
-    })
-  expect(spinnerItemSize.width).toBe(STARTUP_SPINNER_ITEM_SIZE_PX)
-  expect(spinnerItemSize.height).toBe(STARTUP_SPINNER_ITEM_SIZE_PX)
   expect(
     Math.abs(
       (iconBox?.x || 0) +
         STARTUP_ICON_SIZE_PX / 2 -
         (viewportSize?.width || 0) / 2
-    )
-  ).toBeLessThanOrEqual(CENTER_TOLERANCE_PX)
-  expect(
-    Math.abs(
-      (spinnerBox?.x || 0) +
-        STARTUP_SPINNER_SIZE_PX / 2 -
-        (viewportSize?.width || 0) / 2
-    )
-  ).toBeLessThanOrEqual(CENTER_TOLERANCE_PX)
-  expect(
-    Math.abs(
-      (spinnerBox?.y || 0) -
-        ((iconBox?.y || 0) + STARTUP_ICON_SIZE_PX + STARTUP_SPINNER_GAP_PX)
     )
   ).toBeLessThanOrEqual(CENTER_TOLERANCE_PX)
   expect(
@@ -155,7 +91,7 @@ test('React 挂载前在窗口中央展示项目图标和加载状态', async ({
   })
   await startupPage.reload()
   await expect(startupPage.locator('#startup-splash img')).toBeVisible()
-  await expect(startupPage.locator('.startup-splash__spinner')).toBeVisible()
+  await expect(startupPage.locator('.startup-splash__spinner')).toHaveCount(0)
   // lightBackgroundColor 存储亮色主题启动占位的实际背景色。
   const lightBackgroundColor = await startupPage
     .locator('html')

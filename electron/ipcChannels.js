@@ -59,6 +59,10 @@ export const IPC = {
   LOAD_TASK_STATUS: 'load-task-status',
   // 保存任务状态映射（~/.visualWorktree/task-status.json）
   SAVE_TASK_STATUS: 'save-task-status',
+  // 读取任务分类映射（~/.visualWorktree/task-tags.json）
+  LOAD_TASK_TAGS: 'load-task-tags',
+  // 保存任务分类映射（~/.visualWorktree/task-tags.json）
+  SAVE_TASK_TAGS: 'save-task-tags',
   // 读取任务链接映射（~/.visualWorktree/task-links.json）
   LOAD_TASK_LINKS: 'load-task-links',
   // 保存任务链接映射（~/.visualWorktree/task-links.json）

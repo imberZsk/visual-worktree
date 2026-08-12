@@ -1,0 +1,361 @@
+/* AI 助手抽屉集中定义局部节奏，并退出 Electron 窗口拖动区域。 */
+.ai-assistant-drawer {
+  --ai-assistant-radius: 8px;
+  --ai-assistant-space-xs: 4px;
+  --ai-assistant-space-sm: 8px;
+  --ai-assistant-space-md: 16px;
+  --ai-assistant-space-lg: 24px;
+  --ai-assistant-tab-height: 32px;
+  --ai-assistant-user-message-max-width: 82%;
+  -webkit-app-region: no-drag;
+}
+
+/* 抽屉使用稳定宽度，同时限制在当前窗口内，避免窄窗口出现横向裁切。 */
+.ai-assistant-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+/* Ant Design Drawer body 默认只提供 padding；这里建立组件内部唯一的全高滚动边界。 */
+.ai-assistant-drawer .ant-drawer-body {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+/* 聊天区域采用 Tab、消息阅读区与底部输入面板三段结构。 */
+.ai-assistant-drawer .ai-assistant-chat {
+  background: var(--ant-color-bg-container);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 横向 Tab 工具条固定在消息区上方，聊天较多时仅滚动标题列表。 */
+.ai-assistant-drawer .ai-assistant-tabs {
+  align-items: center;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--ai-assistant-space-sm);
+  min-width: 0;
+  padding: var(--ai-assistant-space-sm) var(--ai-assistant-space-md);
+}
+
+.ai-assistant-drawer .ai-assistant-tabs-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--ai-assistant-space-xs);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ai-assistant-drawer .ai-assistant-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 单个 Tab 使用弱背景和底边状态，避免一排厚重的卡片边框。 */
+.ai-assistant-drawer .ai-assistant-tab {
+  align-items: center;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  display: flex;
+  flex: 0 0 auto;
+  height: var(--ai-assistant-tab-height);
+  max-width: 180px;
+  min-width: 96px;
+}
+
+.ai-assistant-drawer .ai-assistant-tab:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+
+.ai-assistant-drawer .ai-assistant-tab.is-active {
+  background: var(--ant-color-fill-quaternary);
+  border-bottom-color: var(--ant-color-primary);
+}
+
+.ai-assistant-drawer .ai-assistant-tab-select,
+.ai-assistant-drawer .ai-assistant-tab-close {
+  background: transparent;
+  border: 0;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  height: 100%;
+  padding: 0;
+}
+
+.ai-assistant-drawer .ai-assistant-tab-select {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--ai-assistant-space-xs);
+  min-width: 0;
+  padding-left: var(--ai-assistant-space-sm);
+  text-align: left;
+}
+
+.ai-assistant-drawer .ai-assistant-tab-select span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-assistant-drawer .ai-assistant-tab.is-active .ai-assistant-tab-select {
+  color: var(--ant-color-text);
+}
+
+.ai-assistant-drawer .ai-assistant-tab-close {
+  flex: 0 0 28px;
+  opacity: 0;
+  width: 28px;
+}
+
+.ai-assistant-drawer .ai-assistant-tab:hover .ai-assistant-tab-close,
+.ai-assistant-drawer .ai-assistant-tab.is-active .ai-assistant-tab-close,
+.ai-assistant-drawer .ai-assistant-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.ai-assistant-drawer .ai-assistant-tab-close:disabled {
+  color: var(--ant-color-text-disabled);
+  cursor: not-allowed;
+}
+
+.ai-assistant-drawer .ai-assistant-new-tab {
+  flex: 0 0 auto;
+}
+
+/* 消息列表独立滚动，并给正文保留适合长回答阅读的水平留白。 */
+.ai-assistant-drawer .ai-assistant-messages {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--ai-assistant-space-md);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ai-assistant-space-lg);
+  scrollbar-gutter: stable;
+}
+
+.ai-assistant-drawer .ant-empty {
+  margin: auto;
+}
+
+.ai-assistant-drawer .ant-empty-image {
+  color: var(--ant-color-text-tertiary);
+  font-size: 32px;
+  height: auto;
+  line-height: 1;
+}
+
+/* 所有消息允许保留模型换行并安全折断长路径或长单词。 */
+.ai-assistant-drawer .ai-assistant-message {
+  line-height: 1.7;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.ai-assistant-drawer .ai-assistant-message-user {
+  align-self: flex-end;
+  background: var(--ant-color-primary);
+  border-radius: var(--ai-assistant-radius) var(--ai-assistant-radius) 2px
+    var(--ai-assistant-radius);
+  color: var(--ant-color-text-light-solid);
+  max-width: var(--ai-assistant-user-message-max-width);
+  padding: var(--ai-assistant-space-sm) 12px;
+}
+
+/* 助手回答不使用气泡，使长文本形成连续、安静的阅读区域。 */
+.ai-assistant-drawer .ai-assistant-message-assistant {
+  align-self: stretch;
+  color: var(--ant-color-text);
+}
+
+.ai-assistant-drawer .ai-assistant-message-meta {
+  color: var(--ant-color-text-tertiary);
+  font-size: var(--ant-font-size-sm);
+  line-height: var(--ant-line-height-sm);
+  margin-top: var(--ai-assistant-space-xs);
+}
+
+/* 已发送附件紧跟用户文本展示，只保留文件名而不复制造型卡片。 */
+.ai-assistant-drawer .ai-assistant-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ai-assistant-space-xs);
+  margin-top: var(--ai-assistant-space-xs);
+}
+
+.ai-assistant-drawer .ai-assistant-message-attachments span {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--ai-assistant-space-xs);
+}
+
+.ai-assistant-drawer .ai-assistant-message-error {
+  align-self: stretch;
+  background: var(--ant-color-error-bg);
+  border: 1px solid var(--ant-color-error-border);
+  border-radius: var(--ai-assistant-radius);
+  color: var(--ant-color-error);
+  padding: var(--ai-assistant-space-sm) 12px;
+}
+
+/* 执行过程使用原生 disclosure，折叠后只保留当前阶段与实时耗时。 */
+.ai-assistant-drawer .ai-assistant-process {
+  align-self: stretch;
+  border-left: 2px solid var(--ant-color-border-secondary);
+  color: var(--ant-color-text-secondary);
+  padding-left: 12px;
+}
+
+.ai-assistant-drawer .ai-assistant-process summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--ai-assistant-space-sm);
+  justify-content: space-between;
+  list-style: none;
+  min-height: 24px;
+}
+
+.ai-assistant-drawer .ai-assistant-process summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-assistant-drawer .ai-assistant-process-title {
+  align-items: center;
+  display: flex;
+  gap: var(--ai-assistant-space-sm);
+}
+
+.ai-assistant-drawer .ai-assistant-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ai-assistant-space-sm);
+  padding-top: var(--ai-assistant-space-sm);
+}
+
+.ai-assistant-drawer .ai-assistant-activity {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--ai-assistant-space-sm);
+  min-width: 0;
+}
+
+.ai-assistant-drawer .ai-assistant-activity-icon {
+  color: var(--ant-color-text-tertiary);
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.ai-assistant-drawer .ai-assistant-activity > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-assistant-drawer .ai-assistant-activity > div > div + div {
+  color: var(--ant-color-text-tertiary);
+  margin-top: var(--ai-assistant-space-xs);
+  white-space: pre-wrap;
+}
+
+/* 输入面板始终使用相同弱边框，输入聚焦不改变线框或几何尺寸。 */
+.ai-assistant-drawer .ai-assistant-composer {
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--ai-assistant-space-sm);
+  margin: 0 var(--ai-assistant-space-lg) var(--ai-assistant-space-lg);
+  padding: var(--ai-assistant-space-sm);
+}
+
+.ai-assistant-drawer .ai-assistant-composer .ant-input {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  min-width: 0;
+  outline: none;
+  padding: var(--ai-assistant-space-xs);
+  resize: none;
+}
+
+.ai-assistant-drawer .ai-assistant-composer .ant-input:focus,
+.ai-assistant-drawer .ai-assistant-composer .ant-input:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.ai-assistant-drawer .ai-assistant-composer-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* 原生文件输入保持可访问但不占布局，由可见加号按钮触发。 */
+.ai-assistant-drawer .ai-assistant-file-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.ai-assistant-drawer .ai-assistant-composer-submit {
+  align-items: center;
+  display: flex;
+  gap: var(--ai-assistant-space-sm);
+}
+
+/* 待发送附件在输入框内紧凑换行，长文件名省略且可单独移除。 */
+.ai-assistant-drawer .ai-assistant-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ai-assistant-space-xs);
+}
+
+.ai-assistant-drawer .ai-assistant-attachment {
+  align-items: center;
+  background: var(--ant-color-fill-secondary);
+  border-radius: var(--ai-assistant-radius);
+  display: inline-flex;
+  gap: var(--ai-assistant-space-xs);
+  max-width: 220px;
+  padding: var(--ai-assistant-space-xs) var(--ai-assistant-space-sm);
+}
+
+.ai-assistant-drawer .ai-assistant-attachment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-assistant-drawer .ai-assistant-attachment button {
+  background: transparent;
+  border: 0;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ai-assistant-drawer .ai-assistant-effort-select {
+  width: 88px;
+}
+
+@media (max-width: 480px) {
+  .ai-assistant-drawer .ai-assistant-messages {
+    padding: var(--ai-assistant-space-md);
+  }
+
+  .ai-assistant-drawer .ai-assistant-composer {
+    margin: 0 var(--ai-assistant-space-md) var(--ai-assistant-space-md);
+  }
+}

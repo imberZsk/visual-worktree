@@ -14,6 +14,7 @@ export const PROJECT_VISIBILITY_STORAGE_KEY = 'vw-project-visibility'
 
 // TASK_TITLE_BADGE_ITEMS 存储设置页可控制的任务标题徽标项及展示文案。
 export const TASK_TITLE_BADGE_ITEMS = [
+  { key: 'taskTag', label: '任务分类标签' },
   { key: 'projectCount', label: '项目数量' },
   { key: 'taskStatus', label: '任务状态' },
   { key: 'taskLinks', label: '需求链接' },

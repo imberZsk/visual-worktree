@@ -244,6 +244,63 @@
   width: 28px;
 }
 
+.settings-task-tag-modal {
+  --settings-space-2xs: 4px;
+  --settings-space-xs: 8px;
+  --settings-space-sm: 12px;
+  --settings-list-radius: 6px;
+}
+
+.settings-task-tag-modal .ant-modal-body {
+  max-height: min(64vh, 560px);
+  overflow-y: auto;
+}
+
+.settings-task-tag-modal .settings-task-tag-section,
+.settings-task-tag-modal .settings-task-tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-space-sm);
+}
+
+.settings-task-tag-modal .settings-task-tag-list {
+  gap: var(--settings-space-xs);
+}
+
+.settings-task-tag-modal .settings-task-tag-row {
+  align-items: end;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--settings-list-radius);
+  display: grid;
+  gap: var(--settings-space-sm);
+  grid-template-columns: minmax(160px, 1fr) 132px 92px;
+  padding: var(--settings-space-sm);
+}
+
+.settings-task-tag-modal .settings-task-tag-field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.settings-task-tag-modal .settings-task-tag-actions {
+  align-items: center;
+  display: flex;
+  gap: var(--settings-space-2xs);
+  min-height: 32px;
+}
+
+.settings-task-tag-modal .settings-task-tag-actions .ant-btn {
+  flex: 0 0 28px;
+  height: 28px;
+  padding: 0;
+  width: 28px;
+}
+
+.settings-task-tag-modal .settings-add-list-button {
+  width: 100%;
+}
+
 /* 状态标签配置放入独立弹层，避免展示页被长列表撑高。 */
 .settings-task-status-modal {
   --settings-space-2xs: 4px;
@@ -393,7 +450,7 @@
 /* 工具价格入口使用紧凑横排，详细字段统一收进管理弹层。 */
 .settings-surface .token-pricing-tool-list {
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  margin-bottom: var(--settings-space-lg);
+  margin-bottom: 0;
 }
 
 .settings-surface .token-pricing-tool-row {
@@ -430,7 +487,7 @@
 /* 币种设置与工具价格列表分段展示，避免两组配置在视觉上粘连。 */
 .settings-surface .token-pricing-currency-header {
   align-items: center;
-  margin-top: var(--settings-space-xs);
+  padding-block: var(--settings-space-md);
 }
 
 /* 价格弹层参考历史任务弹层限制内容高度，模型较多时仅滚动内容区。 */

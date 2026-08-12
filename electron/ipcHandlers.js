@@ -808,20 +808,50 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
       request?.workspace && typeof request.workspace === 'object'
         ? request.workspace
         : undefined
+    // history 存储当前聊天 Tab 先前的文本消息；核心层与后端会继续执行角色和长度校验。
+    const history = Array.isArray(request?.history) ? request.history : []
+    // attachments 存储渲染进程已经完成大小限制和 data URL 编码的当前消息附件。
+    const attachments = Array.isArray(request?.attachments)
+      ? request.attachments
+      : []
+    // reasoningEffort 存储本次请求选择的思考强度，非法值由后端请求模型拒绝。
+    const reasoningEffort =
+      typeof request?.reasoningEffort === 'string'
+        ? request.reasoningEffort
+        : 'medium'
     if (!requestId) return { success: false, error: 'AI 助手请求标识不能为空' }
     try {
       await synchronizeAiModelSettings()
+      /**
+       * 将当前请求的流式事件定向推送回来源窗口。
+       * @param {object} streamEvent - 核心层解析出的单个公开执行事件
+       */
+      const forwardStreamEvent = (streamEvent) => {
+        // sender 存储本次 IPC 请求来源，确保全部流式事件只推送给对应窗口。
+        const sender = event?.sender
+        if (sender && !sender.isDestroyed?.()) {
+          sender.send(IPC.AI_ASSISTANT_STREAM_CHUNK, {
+            requestId,
+            ...streamEvent,
+            chunk:
+              streamEvent?.type === 'delta' ? streamEvent.content : undefined,
+          })
+        }
+      }
       // answer 存储后端流完成后拼接出的完整回答。
       const answer = await streamAiAssistantMessageImpl(message, {
         workspace,
-        onChunk: (chunk) => {
-          // sender 存储本次 IPC 请求来源，确保文本只推送给对应窗口。
-          const sender = event?.sender
-          if (sender && !sender.isDestroyed?.()) {
-            sender.send(IPC.AI_ASSISTANT_STREAM_CHUNK, { requestId, chunk })
-          }
-        },
+        history,
+        attachments,
+        reasoningEffort,
+        onEvent: forwardStreamEvent,
+        // 旧测试替身和旧核心实现只回调文本片段；转换为 delta 后继续沿用同一 IPC 事件。
+        onChunk: (chunk) =>
+          forwardStreamEvent({ type: 'delta', content: chunk }),
       })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[AI 主进程第 3 步] 已收到 FastAPI 完整响应')
+      }
       return { success: true, answer }
     } catch (error) {
       return {
@@ -890,6 +920,8 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   const VW_DIR = dataDir || join(homedir(), '.visualWorktree')
   // STATUS_FILE 任务状态的持久化文件路径
   const STATUS_FILE = join(VW_DIR, 'task-status.json')
+  // TASK_TAGS_FILE 存储任务名到分类 key 映射的持久化文件路径。
+  const TASK_TAGS_FILE = join(VW_DIR, 'task-tags.json')
   // TASK_DOCS_ARCHIVE_ROOT 历史任务工作记录归档根目录：~/.visualWorktree/task-docs
   const TASK_DOCS_ARCHIVE_ROOT = join(VW_DIR, 'task-docs')
 
@@ -925,6 +957,36 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     try {
       await mkdir(VW_DIR, { recursive: true })
       await writeFile(STATUS_FILE, JSON.stringify(map || {}, null, 2))
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  // 读取任务分类映射；损坏或不存在时回退空对象，避免阻塞任务视图。
+  ipcMain.handle(IPC.LOAD_TASK_TAGS, async () => {
+    try {
+      if (!existsSync(TASK_TAGS_FILE)) return {}
+      // parsedMap 存储磁盘反序列化后的候选分类映射。
+      const parsedMap = JSON.parse(await readFile(TASK_TAGS_FILE, 'utf8'))
+      return parsedMap &&
+        typeof parsedMap === 'object' &&
+        !Array.isArray(parsedMap)
+        ? parsedMap
+        : {}
+    } catch {
+      return {}
+    }
+  })
+
+  // 保存任务分类映射；使用异步文件 API 避免阻塞 Electron 主进程。
+  ipcMain.handle(IPC.SAVE_TASK_TAGS, async (_event, map) => {
+    try {
+      await mkdir(VW_DIR, { recursive: true })
+      // safeMap 存储通过对象边界校验的分类映射，拒绝数组和标量进入文件。
+      const safeMap =
+        map && typeof map === 'object' && !Array.isArray(map) ? map : {}
+      await writeFile(TASK_TAGS_FILE, JSON.stringify(safeMap, null, 2))
       return true
     } catch {
       return false

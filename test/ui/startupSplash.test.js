@@ -8,33 +8,21 @@ const INDEX_HTML_PATH = join(process.cwd(), 'src/ui/index.html')
 const STARTUP_ICON_PATH = join(process.cwd(), 'src/ui/assets/startup-icon.png')
 
 describe('Electron 启动占位', () => {
-  it('React 挂载前使用当前主题背景居中展示项目图标和启动状态', () => {
+  it('React 挂载前使用当前主题背景居中展示小号项目图标', () => {
     // indexHtml 存储渲染进程入口源码，用于锁定不依赖 React 的首屏结构与关键样式。
     const indexHtml = readFileSync(INDEX_HTML_PATH, 'utf8')
 
     expect(indexHtml).toContain('id="startup-splash"')
-    expect(indexHtml).toContain('aria-label="Visual Worktree 正在启动"')
+    expect(indexHtml).toContain('aria-label="Visual Worktree"')
     expect(indexHtml).toContain('src="./assets/startup-icon.png"')
-    expect(indexHtml).toContain('class="startup-splash__spinner"')
-    expect(indexHtml).toContain('--startup-spinner-color: #1668dc')
-    expect(indexHtml).toContain('--startup-spinner-color: #1677ff')
-    expect(
-      indexHtml.match(/class="startup-splash__spinner-item"/g)
-    ).toHaveLength(4)
+    expect(indexHtml).toContain('--startup-icon-size: 80px')
+    expect(indexHtml).not.toContain('startup-splash__spinner')
+    expect(indexHtml).not.toContain('startup-spinner-item')
     expect(indexHtml).toMatch(
       /#startup-splash\s*\{[\s\S]*position:\s*fixed[\s\S]*place-items:\s*center[\s\S]*background:\s*inherit/
     )
     expect(indexHtml).toMatch(
       /#startup-splash\s*\{[\s\S]*-webkit-app-region:\s*drag/
-    )
-    expect(indexHtml).toMatch(
-      /\.startup-splash__spinner\s*\{[\s\S]*top:\s*calc\(100% \+ 16px\)[\s\S]*animation:\s*startup-spinner-rotate 1\.2s linear infinite/
-    )
-    expect(indexHtml).toMatch(
-      /\.startup-splash__spinner-item\s*\{[\s\S]*width:\s*var\(--startup-spinner-item-size\)[\s\S]*animation:\s*startup-spinner-item 1s linear infinite alternate/
-    )
-    expect(indexHtml).toMatch(
-      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*\.startup-splash__spinner-item\s*\{\s*animation:\s*none/
     )
   })
 

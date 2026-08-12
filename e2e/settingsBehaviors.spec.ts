@@ -185,6 +185,67 @@ test('Token 统计工具支持多选、独立计价并持久化', async ({
   await appPage.getByRole('tab', { name: 'Token 费用' }).click()
   // pricingPanel 存储 Token 计价设置区域。
   const pricingPanel = appPage.getByTestId('token-pricing-settings-panel')
+  // directCnyDisplaySwitch 存储首次安装默认开启的人民币 1:1 展示开关。
+  const directCnyDisplaySwitch = pricingPanel.getByRole('switch', {
+    name: '直接人民币显示',
+  })
+  await expect(directCnyDisplaySwitch).toBeChecked()
+  await expect(
+    pricingPanel.getByRole('spinbutton', { name: '美元兑人民币汇率' })
+  ).toBeDisabled()
+  // currencyTitleBox 存储标题几何位置，用于防止额外外边距造成视觉偏移。
+  const currencyTitleBox = await pricingPanel
+    .locator('.token-pricing-currency-header .settings-title-with-help')
+    .boundingBox()
+  // currencySwitchBox 存储开关几何位置，用于与标题中心线比较。
+  const currencySwitchBox = await directCnyDisplaySwitch.boundingBox()
+  // currencyHeaderBox 存储人民币展示整行位置，用于确认控件在上下分隔线之间居中。
+  const currencyHeaderBox = await pricingPanel
+    .locator('.token-pricing-currency-header')
+    .boundingBox()
+  // pricingToolListBox 存储工具价格列表位置，用于确认列表分隔线与人民币行之间没有额外空白。
+  const pricingToolListBox = await pricingPanel
+    .locator('.token-pricing-tool-list')
+    .boundingBox()
+  expect(currencyTitleBox).not.toBeNull()
+  expect(currencySwitchBox).not.toBeNull()
+  expect(currencyHeaderBox).not.toBeNull()
+  expect(pricingToolListBox).not.toBeNull()
+  expect(
+    currencyHeaderBox!.y - (pricingToolListBox!.y + pricingToolListBox!.height)
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(
+      currencyTitleBox!.y +
+        currencyTitleBox!.height / 2 -
+        (currencySwitchBox!.y + currencySwitchBox!.height / 2)
+    )
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(
+      currencyHeaderBox!.y +
+        currencyHeaderBox!.height / 2 -
+        (currencySwitchBox!.y + currencySwitchBox!.height / 2)
+    )
+  ).toBeLessThanOrEqual(1)
+  // currencyScreenshotPath 存储人民币展示行的真实 Electron 截图，便于回归检查上下留白。
+  const currencyScreenshotPath = testInfo.outputPath(
+    'token-pricing-direct-cny-row.png'
+  )
+  await pricingPanel.screenshot({
+    path: currencyScreenshotPath,
+    animations: 'disabled',
+  })
+  await testInfo.attach('token-pricing-direct-cny-row', {
+    path: currencyScreenshotPath,
+    contentType: 'image/png',
+  })
+  await pricingPanel.getByLabel('直接人民币显示说明').hover()
+  await expect(
+    appPage.getByText(
+      '中转站通常按人民币 1:1 扣费；开启后按美元计价数值直接显示人民币。'
+    )
+  ).toBeVisible()
   await pricingPanel.getByRole('button', { name: /价格配置/ }).click()
   // pricingDialog 存储 Claude Code 模型价格管理弹层。
   const pricingDialog = appPage.getByRole('dialog', {
@@ -242,11 +303,6 @@ test('Token 统计工具支持多选、独立计价并持久化', async ({
   ).toHaveCount(2)
   await appPage.getByRole('tab', { name: '展示' }).click()
   await appPage.getByRole('tab', { name: 'Token 费用' }).click()
-  // directCnyDisplaySwitch 存储人民币 1:1 单币种展示开关。
-  const directCnyDisplaySwitch = pricingPanel.getByRole('switch', {
-    name: '直接人民币显示',
-  })
-  await directCnyDisplaySwitch.click()
   await expect(
     pricingPanel.getByRole('spinbutton', { name: '美元兑人民币汇率' })
   ).toBeDisabled()

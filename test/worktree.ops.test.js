@@ -355,6 +355,53 @@ describe('removeWorktree', () => {
     expect(res.success).toBe(true)
     expect(existsSync(target)).toBe(false)
   })
+
+  it('干净 worktree 含已初始化子模块时自动安全删除', async () => {
+    // childRepo 存储作为子模块来源的真实临时 Git 仓库。
+    const childRepo = initRepo(join(ctx.root, 'child'), 'master')
+    // parentRepo 存储包含子模块的源项目仓库。
+    const parentRepo = initRepo(join(ctx.root, 'parent'), 'master')
+    git(
+      parentRepo,
+      `-c protocol.file.allow=always submodule add -q ${childRepo} ThinkPHP`
+    )
+    git(parentRepo, 'commit -qam "add submodule"')
+    // target 存储待删除的功能分支 worktree 路径。
+    const target = join(ctx.root, 'worktrees', 'TASK-SUBMODULE', 'parent')
+    await addWorktree(parentRepo, target, 'feat/submodule', {
+      newBranch: true,
+    })
+    git(target, '-c protocol.file.allow=always submodule update --init -q')
+
+    // result 存储安全删除结果；内部可绕过 Git 的子模块结构限制，但不应要求用户强制确认。
+    const result = await removeWorktree(parentRepo, target)
+    expect(result).toEqual({ success: true })
+    expect(existsSync(target)).toBe(false)
+  })
+
+  it('子模块内部有改动时安全删除返回 dirty 并保留 worktree', async () => {
+    // childRepo 存储作为子模块来源的真实临时 Git 仓库。
+    const childRepo = initRepo(join(ctx.root, 'dirty-child'), 'master')
+    // parentRepo 存储包含子模块的源项目仓库。
+    const parentRepo = initRepo(join(ctx.root, 'dirty-parent'), 'master')
+    git(
+      parentRepo,
+      `-c protocol.file.allow=always submodule add -q ${childRepo} ThinkPHP`
+    )
+    git(parentRepo, 'commit -qam "add submodule"')
+    // target 存储含脏子模块的功能分支 worktree 路径。
+    const target = join(ctx.root, 'worktrees', 'TASK-DIRTY-SUBMODULE', 'parent')
+    await addWorktree(parentRepo, target, 'feat/dirty-submodule', {
+      newBranch: true,
+    })
+    git(target, '-c protocol.file.allow=always submodule update --init -q')
+    writeFileSync(join(target, 'ThinkPHP', 'README.md'), '# dirty child\n')
+
+    // result 存储安全删除结果；必须明确归类 dirty，供 UI 显示风险确认。
+    const result = await removeWorktree(parentRepo, target)
+    expect(result).toMatchObject({ success: false, reason: 'dirty' })
+    expect(existsSync(target)).toBe(true)
+  })
 })
 
 describe('pruneWorktrees', () => {
