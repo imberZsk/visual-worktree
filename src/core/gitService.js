@@ -26,6 +26,9 @@ import {
 const NODE_MODULES_DIR = 'node_modules'
 // PROJECT_WORK_DOCUMENT_TEMPLATES 存储项目 worktree 级固定模板；空数组代表只生成 CLAUDE.md/AGENTS.md，不创建任务级工作文档目录。
 const PROJECT_WORK_DOCUMENT_TEMPLATES = []
+// WORKTREE_SUBMODULE_REMOVE_ERROR 存储 Git 对已初始化子模块 worktree 的固定删除限制文案。
+const WORKTREE_SUBMODULE_REMOVE_ERROR =
+  'working trees containing submodules cannot be moved or removed'
 
 /**
  * 把路径归一化为正斜杠（POSIX 风格）分隔符，用于跨平台路径比较与切分。
@@ -1050,15 +1053,33 @@ async function isExistingWorktree(projectPath, targetPath) {
  * @param {string} projectPath - 源项目路径
  * @param {string} worktreePath - 要删除的 worktree 路径
  * @param {{force?:boolean, unlinkNodeModules?:boolean}} [opts] - force 为真时强制删除（丢弃未提交变更）；unlinkNodeModules 为真（默认）时先移除 node_modules 软链接
- * @returns {Promise<{success:boolean, error?:string}>} 操作结果
+ * @returns {Promise<{success:boolean,reason?:'dirty'|'error',error?:string}>} 操作结果；只有 dirty 允许 UI 提示强制删除风险。
  */
 export async function removeWorktree(projectPath, worktreePath, opts = {}) {
   // force 控制是否强制删除；unlinkNodeModules 控制删除前是否先移除依赖软链接
   const { force = false, unlinkNodeModules: doUnlink = true } = opts
   try {
-    // 先移除 node_modules 软链接：防止 git worktree remove 误删或跟随链接影响源项目依赖
+    // 应用创建的 node_modules 复用链接不是用户改动，且本就必须在删除前解除；先处理可避免实时状态误报 dirty。
     if (doUnlink) {
       unlinkNodeModules(worktreePath)
+    }
+    // targetGit 存储目标 worktree 的 Git 客户端；安全模式必须实时判断主仓库和子模块状态。
+    const targetGit = simpleGit(worktreePath)
+    if (!force) {
+      // statusOutput 存储包含子模块状态的 porcelain 输出；子模块内有改动时父仓库会显示 M <path>。
+      const statusOutput = await targetGit.raw([
+        'status',
+        '--porcelain',
+        '--untracked-files=all',
+        '--ignore-submodules=none',
+      ])
+      if (statusOutput.trim()) {
+        return {
+          success: false,
+          reason: 'dirty',
+          error: 'worktree has uncommitted changes',
+        }
+      }
     }
     const git = simpleGit(projectPath)
     // 组装参数：force 时加 --force（git 对有变更的 worktree 需 --force 才删）
@@ -1068,7 +1089,27 @@ export async function removeWorktree(projectPath, worktreePath, opts = {}) {
     await git.raw(args)
     return { success: true }
   } catch (e) {
-    return { success: false, error: e.message }
+    // errorMessage 存储 Git 返回的可诊断错误文案。
+    const errorMessage = String(e?.message || e || '未知错误')
+    if (!force && errorMessage.includes(WORKTREE_SUBMODULE_REMOVE_ERROR)) {
+      try {
+        // Git 即使对子模块整体干净也拒绝普通删除；前置实时状态检查已证明无改动，此处 force 仅绕过结构限制。
+        await simpleGit(projectPath).raw([
+          'worktree',
+          'remove',
+          '--force',
+          worktreePath,
+        ])
+        return { success: true }
+      } catch (retryError) {
+        return {
+          success: false,
+          reason: 'error',
+          error: String(retryError?.message || retryError || '未知错误'),
+        }
+      }
+    }
+    return { success: false, reason: 'error', error: errorMessage }
   }
 }
 

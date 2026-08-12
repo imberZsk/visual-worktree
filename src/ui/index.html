@@ -19,20 +19,13 @@
       }
       /* React 首次提交前展示轻量启动占位；固定定位确保图标始终位于窗口几何中心。 */
       #startup-splash {
-        --startup-icon-size: 112px;
-        --startup-spinner-size: 20px;
-        --startup-spinner-item-size: 9px;
-        --startup-spinner-color: #1668dc;
+        --startup-icon-size: 80px;
         position: fixed;
         inset: 0;
         display: grid;
         place-items: center;
         background: inherit;
         -webkit-app-region: drag;
-      }
-      /* 亮色主题使用 Ant Design 的亮色主色，确保小号 loading 在白底上清晰可见。 */
-      html.light-theme #startup-splash {
-        --startup-spinner-color: #1677ff;
       }
       /* 内容容器保持与图标同尺寸，使图标继续严格位于窗口几何中心。 */
       #startup-splash .startup-splash__content {
@@ -47,66 +40,6 @@
         object-fit: contain;
         user-select: none;
         -webkit-user-drag: none;
-      }
-      /* 四点旋转指示器复现 Ant Design Spin 默认形态，确保 React 加载前的反馈与正式界面一致。 */
-      #startup-splash .startup-splash__spinner {
-        position: absolute;
-        top: calc(100% + 16px);
-        left: 50%;
-        width: var(--startup-spinner-size);
-        height: var(--startup-spinner-size);
-        color: var(--startup-spinner-color);
-        transform: translateX(-50%) rotate(45deg);
-        animation: startup-spinner-rotate 1.2s linear infinite;
-      }
-      /* 每个点使用 Ant Design 默认位置、缩放和透明度节奏。 */
-      #startup-splash .startup-splash__spinner-item {
-        position: absolute;
-        width: var(--startup-spinner-item-size);
-        height: var(--startup-spinner-item-size);
-        border-radius: 100%;
-        background: currentColor;
-        opacity: 0.3;
-        transform: scale(0.75);
-        transform-origin: 50% 50%;
-        animation: startup-spinner-item 1s linear infinite alternate;
-      }
-      #startup-splash .startup-splash__spinner-item:nth-child(1) {
-        top: 0;
-        left: 0;
-      }
-      #startup-splash .startup-splash__spinner-item:nth-child(2) {
-        top: 0;
-        right: 0;
-        animation-delay: 0.4s;
-      }
-      #startup-splash .startup-splash__spinner-item:nth-child(3) {
-        right: 0;
-        bottom: 0;
-        animation-delay: 0.8s;
-      }
-      #startup-splash .startup-splash__spinner-item:nth-child(4) {
-        bottom: 0;
-        left: 0;
-        animation-delay: 1.2s;
-      }
-      /* 旋转时保留水平居中位移，避免 transform 动画覆盖定位。 */
-      @keyframes startup-spinner-rotate {
-        to {
-          transform: translateX(-50%) rotate(405deg);
-        }
-      }
-      @keyframes startup-spinner-item {
-        to {
-          opacity: 1;
-        }
-      }
-      /* 尊重系统减少动态效果设置，仍保留静态四点 loading 作为启动反馈。 */
-      @media (prefers-reduced-motion: reduce) {
-        #startup-splash .startup-splash__spinner,
-        #startup-splash .startup-splash__spinner-item {
-          animation: none;
-        }
       }
     </style>
     <script>
@@ -127,19 +60,9 @@
   </head>
   <body>
     <div id="root">
-      <div
-        id="startup-splash"
-        role="status"
-        aria-label="Visual Worktree 正在启动"
-      >
+      <div id="startup-splash" aria-label="Visual Worktree">
         <div class="startup-splash__content">
           <img src="./assets/startup-icon.png" alt="" aria-hidden="true" />
-          <span class="startup-splash__spinner" aria-hidden="true">
-            <i class="startup-splash__spinner-item"></i>
-            <i class="startup-splash__spinner-item"></i>
-            <i class="startup-splash__spinner-item"></i>
-            <i class="startup-splash__spinner-item"></i>
-          </span>
         </div>
       </div>
     </div>

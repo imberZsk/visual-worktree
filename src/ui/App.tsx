@@ -57,6 +57,7 @@ export default function App() {
     worktreeLoading,
     theme: themeMode,
     taskStatusMap,
+    taskTagMap,
     taskLinkMap,
     taskWorkflowMap,
     taskBlockerMap,
@@ -76,6 +77,8 @@ export default function App() {
     toggleTheme,
     setTaskStatus,
     loadTaskStatus,
+    setTaskTag,
+    loadTaskTags,
     setTaskLink,
     loadTaskLinks,
     toggleWorkflowStep,
@@ -124,6 +127,7 @@ export default function App() {
     scanWorktrees,
     loadConfig,
     loadTaskStatus,
+    loadTaskTags,
     loadTaskLinks,
     loadTaskVisibility,
     loadProjectVisibility,
@@ -327,6 +331,9 @@ export default function App() {
                 taskStatusMap={taskStatusMap}
                 taskStatuses={config?.taskStatuses ?? []}
                 onTaskStatusChange={setTaskStatus}
+                taskTagMap={taskTagMap}
+                taskTags={config?.taskTags ?? []}
+                onTaskTagChange={setTaskTag}
                 taskLinkMap={taskLinkMap}
                 onTaskLinkChange={setTaskLink}
                 onOpenUrl={projectActions.openUrl}
@@ -368,6 +375,10 @@ export default function App() {
               taskWorkflowMap={taskWorkflowMap}
               taskStatusMap={taskStatusMap}
               taskStatuses={config?.taskStatuses ?? []}
+              taskTagMap={taskTagMap}
+              taskTags={config?.taskTags ?? []}
+              showTaskTags={workspaceViewData.taskTitleBadges.taskTag}
+              onTaskTagChange={setTaskTag}
               kanbanSettings={config?.kanbanSettings ?? {}}
               pinnedTaskKeys={taskVisibility.pinned}
               taskBlockerMap={taskBlockerMap}

@@ -16,6 +16,7 @@ import {
   setVisibilityKey,
 } from '../visibilityLogic.ts'
 import { stepRunKey } from '../../core/stepOutputLog.js'
+import { loadTaskTagMap, setTaskTagInMap } from '../taskTagLogic.ts'
 
 // 全局状态管理（Zustand）：项目列表、筛选条件、加载与批量进度状态。
 
@@ -52,6 +53,8 @@ export const useStore = create((set, get) => ({
   worktreeLoading: false,
   // 任务状态映射「任务名 → 状态 key」（人工标记，持久化到 ~/.visualWorktree/task-status.json）；启动后由 loadTaskStatus 异步填充
   taskStatusMap: loadTaskStatusMap(),
+  // taskTagMap 存储任务名到分类 key 的映射，并由 Electron 文件异步覆盖首屏 localStorage 值。
+  taskTagMap: loadTaskTagMap(),
   // 任务链接映射「任务名 → {name,url}[]」（Jira/飞书需求/工单地址及展示名称，持久化到 ~/.visualWorktree/task-links.json）；启动后由 loadTaskLinks 异步填充
   taskLinkMap: {},
   // 任务隐藏/置顶偏好，持久化到 ~/.visualWorktree/task-visibility.json；Electron 文件加载前先用 localStorage 兜底首屏
@@ -123,6 +126,34 @@ export const useStore = create((set, get) => ({
       set({ taskStatusMap: map || {} })
     } catch (e) {
       // 加载失败时保持初始值（localStorage 已预填）
+    }
+  },
+
+  /**
+   * 设置或清除任务分类，并持久化到 ~/.visualWorktree/task-tags.json。
+   * @param {string} taskName - 任务名。
+   * @param {string} tagKey - 目标分类 key；为空时清除。
+   */
+  setTaskTag: (taskName, tagKey) => {
+    // nextMap 存储依据当前工作区分类定义更新后的映射。
+    const nextMap = setTaskTagInMap(
+      get().taskTagMap,
+      taskName,
+      tagKey,
+      get().config?.taskTags
+    )
+    api.saveTaskTags(nextMap)
+    set({ taskTagMap: nextMap })
+  },
+
+  /** 从 ~/.visualWorktree/task-tags.json 异步加载任务分类映射。 */
+  loadTaskTags: async () => {
+    try {
+      // loadedMap 存储主进程返回的任务分类映射。
+      const loadedMap = await api.loadTaskTags()
+      set({ taskTagMap: loadedMap || {} })
+    } catch {
+      // Electron 文件不可用时保留 localStorage 首屏值。
     }
   },
 

@@ -102,6 +102,7 @@ describe('task title badge visibility', () => {
     })
 
     expect(badges.projectCount).toBe(true)
+    expect(badges.taskTag).toBe(true)
     expect(badges.taskStatus).toBe(true)
     expect(badges.taskLinks).toBe(true)
     expect(badges.envHealth).toBe(false)

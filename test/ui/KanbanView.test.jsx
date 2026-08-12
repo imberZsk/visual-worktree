@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import KanbanView from '../../src/ui/components/KanbanView.tsx'
 import { DEFAULT_TASK_STATUSES } from '../../src/core/taskStatuses.js'
+import { DEFAULT_TASK_TAGS } from '../../src/core/taskTags.js'
 
 // KanbanView 组件测试：跑在 happy-dom 环境。
 // 验证每个动态人工状态直接对应看板列、列偏好、任务名渲染、备注编辑/展示和点击跳转。
@@ -51,6 +52,17 @@ const statusMap = {
 }
 
 describe('KanbanView', () => {
+  it('展示偏好关闭时隐藏看板任务分类标签', () => {
+    render(
+      <KanbanView
+        tasks={[makeTasks()[0]]}
+        taskTagMap={{ 'TASK-PENDING': 'bug' }}
+        taskTags={DEFAULT_TASK_TAGS}
+        showTaskTags={false}
+      />
+    )
+    expect(screen.queryByText('BUG')).toBeNull()
+  })
   it('首次加载且还没有任务数据时只显示内容区 loading', () => {
     // container 存储渲染结果，用于确认只保留 Ant Design Spin 而不显示加载文案。
     const { container } = render(<KanbanView tasks={[]} loading />)

@@ -101,7 +101,7 @@ const browserFallback = {
     success: false,
     error: '仅桌面端可使用 AI 智能助手',
   }),
-  // 浏览器降级环境不会收到 AI 流式文本事件。
+  // 浏览器降级环境不会收到 AI 流式执行事件。
   onAiAssistantStreamChunk: () => () => {},
   copyText: async () => true,
   removeTaskFolder: async () => ({ success: false, error: '非 Electron 环境' }),
@@ -122,6 +122,23 @@ const browserFallback = {
   saveTaskStatus: async (map) => {
     try {
       localStorage.setItem('vw-task-status', JSON.stringify(map || {}))
+      return true
+    } catch {
+      return false
+    }
+  },
+  loadTaskTags: async () => {
+    try {
+      // rawValue 存储浏览器降级环境中的任务分类映射 JSON。
+      const rawValue = localStorage.getItem('vw-task-tags')
+      return rawValue ? JSON.parse(rawValue) : {}
+    } catch {
+      return {}
+    }
+  },
+  saveTaskTags: async (map) => {
+    try {
+      localStorage.setItem('vw-task-tags', JSON.stringify(map || {}))
       return true
     } catch {
       return false

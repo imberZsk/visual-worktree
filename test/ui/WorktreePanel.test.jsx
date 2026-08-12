@@ -14,6 +14,7 @@ import {
   TASK_LINK_NAME_PLACEHOLDER,
   TASK_LINK_PLACEHOLDER,
 } from '../../src/ui/components/TaskLinksEditor.tsx'
+import { DEFAULT_TASK_TAGS } from '../../src/core/taskTags.js'
 
 // WorktreePanel 组件测试：跑在 happy-dom 环境（见 vitest.config.js environmentMatchGlobs）。
 // 重点验证「新建后只展开对应任务栏」的受控展开行为，以及终端/复制路径新按钮的接线。
@@ -783,6 +784,36 @@ describe('WorktreePanel 环境检查状态', () => {
 
     expect(headerText.indexOf('1')).toBeLessThan(headerText.indexOf('未开始'))
     expect(headerText.indexOf('1')).toBeLessThan(headerText.indexOf('环境正常'))
+  })
+
+  it('任务分类显示在项目数量前，并可通过展示偏好隐藏', () => {
+    // renderResult 存储带 BUG 分类的任务标题渲染结果。
+    const renderResult = render(
+      <WorktreePanel
+        {...baseProps({
+          taskTagMap: { 'TASK-A': 'bug' },
+          taskTags: DEFAULT_TASK_TAGS,
+        })}
+      />
+    )
+    // taskHeader 存储 TASK-A 的标题区域，用于验证分类和项目数顺序。
+    const taskHeader = [
+      ...renderResult.container.querySelectorAll('.ant-collapse-header'),
+    ].find((header) => header.textContent.includes('TASK-A'))
+    expect(taskHeader.textContent.indexOf('BUG')).toBeLessThan(
+      taskHeader.textContent.indexOf('1 项目')
+    )
+
+    renderResult.rerender(
+      <WorktreePanel
+        {...baseProps({
+          taskTagMap: { 'TASK-A': 'bug' },
+          taskTags: DEFAULT_TASK_TAGS,
+          taskTitleBadges: { taskTag: false, claudeUsage: false },
+        })}
+      />
+    )
+    expect(within(taskHeader).queryByText('BUG')).toBeNull()
   })
 
   it('任务行显示环境检查中、正常、异常状态', () => {

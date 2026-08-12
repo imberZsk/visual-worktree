@@ -37,6 +37,8 @@ const IPC = {
   ARCHIVE_TASK_DOCS: 'archive-task-docs',
   LOAD_TASK_STATUS: 'load-task-status',
   SAVE_TASK_STATUS: 'save-task-status',
+  LOAD_TASK_TAGS: 'load-task-tags',
+  SAVE_TASK_TAGS: 'save-task-tags',
   LOAD_TASK_LINKS: 'load-task-links',
   SAVE_TASK_LINKS: 'save-task-links',
   LOAD_TASK_VISIBILITY: 'load-task-visibility',
@@ -157,6 +159,10 @@ contextBridge.exposeInMainWorld('api', {
   loadTaskStatus: () => ipcRenderer.invoke(IPC.LOAD_TASK_STATUS),
   // 保存任务状态映射（~/.visualWorktree/task-status.json）
   saveTaskStatus: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_STATUS, map),
+  // 读取任务分类映射（~/.visualWorktree/task-tags.json）
+  loadTaskTags: () => ipcRenderer.invoke(IPC.LOAD_TASK_TAGS),
+  // 保存任务分类映射（~/.visualWorktree/task-tags.json）
+  saveTaskTags: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_TAGS, map),
   // 读取任务链接映射（~/.visualWorktree/task-links.json）
   loadTaskLinks: () => ipcRenderer.invoke(IPC.LOAD_TASK_LINKS),
   // 保存任务链接映射（~/.visualWorktree/task-links.json）
@@ -232,9 +238,9 @@ contextBridge.exposeInMainWorld('api', {
   // 请求 AI 助手流式回答，文本片段通过独立事件持续推送。
   streamAiAssistantMessage: (request) =>
     ipcRenderer.invoke(IPC.STREAM_AI_ASSISTANT_MESSAGE, request),
-  // 订阅 AI 助手文本片段，返回精确取消当前监听器的函数。
+  // 订阅 AI 助手文本、工具和执行阶段事件，返回精确取消当前监听器的函数。
   onAiAssistantStreamChunk: (callback) => {
-    // listener 存储剥离 Electron event 参数后的 AI 文本片段监听器。
+    // listener 存储剥离 Electron event 参数后的 AI 流式事件监听器。
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on(IPC.AI_ASSISTANT_STREAM_CHUNK, listener)
     return () =>

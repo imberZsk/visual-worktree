@@ -144,7 +144,7 @@ export async function sendAiAssistantMessage(message, options = {}) {
 /**
  * 通过 HTTP 消费 AI 助手 NDJSON 流，并逐段通知调用方。
  * @param {string} message - 用户提交的非空消息
- * @param {{fetchImpl?:typeof fetch,baseUrl?:string,workspace?:object,onChunk?:(chunk:string)=>void}} [options] - 可注入的网络实现、后端地址、工作区快照和文本片段回调
+ * @param {{fetchImpl?:typeof fetch,baseUrl?:string,workspace?:object,history?:Array<{role:string,content:string}>,attachments?:Array<object>,reasoningEffort?:string,onChunk?:(chunk:string)=>void,onEvent?:(event:object)=>void}} [options] - 可注入的网络实现、聊天上下文、附件和流式事件回调
  * @returns {Promise<string>} 流式响应完成后拼接出的完整回答
  */
 export async function streamAiAssistantMessage(message, options = {}) {
@@ -163,6 +163,15 @@ export async function streamAiAssistantMessage(message, options = {}) {
   const requestPayload = { message: content }
   if (options.workspace && typeof options.workspace === 'object') {
     requestPayload.workspace = options.workspace
+  }
+  if (Array.isArray(options.history)) {
+    requestPayload.history = options.history
+  }
+  if (Array.isArray(options.attachments)) {
+    requestPayload.attachments = options.attachments
+  }
+  if (typeof options.reasoningEffort === 'string') {
+    requestPayload.reasoning_effort = options.reasoningEffort
   }
   // 开发日志只标记调用阶段，不输出消息正文、工作区快照或 API Key。
   if (process.env.NODE_ENV === 'development') {
@@ -215,13 +224,15 @@ export async function streamAiAssistantMessage(message, options = {}) {
     }
     if (event?.type === 'delta' && typeof event.content === 'string') {
       answer += event.content
-      options.onChunk?.(event.content)
+      if (typeof options.onEvent === 'function') options.onEvent(event)
+      else options.onChunk?.(event.content)
       return
     }
     if (event?.type === 'error') {
       throw new Error(event.message || 'AI 智能助手请求失败')
     }
     if (event?.type === 'done') completed = true
+    options.onEvent?.(event)
   }
 
   while (true) {

@@ -1,0 +1,20 @@
+.task-tag-control {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.task-tag-control-tag,
+.task-tag-control-menu-tag {
+  margin-inline-end: 0;
+}
+
+.task-tag-control-tag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.task-tag-control-chevron {
+  margin-inline-start: 4px;
+  font-size: 10px;
+}

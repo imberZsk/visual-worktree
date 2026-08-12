@@ -182,6 +182,10 @@ export default function useProjectActions({
             scanWorktrees()
             return
           }
+          if (result?.reason !== 'dirty') {
+            message.error(`删除失败：${result?.error || '未知错误'}`)
+            return
+          }
           modal.confirm(
             withConfirmDefaults({
               title: '该 worktree 有未提交变更',

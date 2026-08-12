@@ -70,6 +70,7 @@ function makeConfig() {
       { type: 'file', path: '.ai/summary.md', content: '# Summary\n' },
     ],
     taskTitleBadges: {
+      taskTag: true,
       projectCount: true,
       taskStatus: true,
       taskLinks: true,
@@ -693,6 +694,7 @@ describe('SettingsModal 流程配置布局', () => {
     // savedConfig 存储提交给主进程的设置对象，应保留其他展示项默认开启。
     const savedConfig = mockApi.saveConfig.mock.calls[0][0]
     expect(savedConfig.taskTitleBadges).toEqual({
+      taskTag: true,
       projectCount: true,
       taskStatus: true,
       taskLinks: true,
