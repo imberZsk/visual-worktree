@@ -1,4 +1,6 @@
 import React from 'react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   cleanup,
   fireEvent,
@@ -14,6 +16,30 @@ describe('AiAssistant', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
+  })
+
+  it('抽屉关闭按钮使用完整的固定方形点击区域并居中图标', () => {
+    render(<AiAssistant />)
+    fireEvent.click(screen.getByLabelText('打开 AI 智能助手'))
+
+    // closeButton 存储抽屉右上角关闭入口，用于验证不会被非对称内边距压缩图标。
+    const closeButton = screen.getByLabelText('关闭对话')
+    // componentCss 存储测试环境未注入 DOM 的组件样式源码。
+    const componentCss = readFileSync(
+      join(process.cwd(), 'src/ui/components/AiAssistant.css'),
+      'utf8'
+    )
+    // closeButtonRule 存储关闭按钮专用规则，验证尺寸与 Ant Design 覆盖声明同时存在。
+    const closeButtonRule =
+      componentCss.match(
+        /\.ai-assistant-drawer \.ai-assistant-close\s*\{([^}]*)\}/
+      )?.[1] || ''
+    expect(closeButton.classList.contains('ai-assistant-close')).toBe(true)
+    expect(closeButton.querySelector('.anticon-close')).toBeTruthy()
+    expect(closeButtonRule).toContain('height: var(--ai-assistant-tab-height)')
+    expect(closeButtonRule).toContain('width: var(--ai-assistant-tab-height)')
+    expect(closeButtonRule).toContain('padding-left: 0 !important')
+    expect(closeButtonRule).toContain('padding-right: 0 !important')
   })
 
   it('通过主进程发送消息并展示智能体回答', async () => {
@@ -72,7 +98,7 @@ describe('AiAssistant', () => {
       />
     )
     fireEvent.click(screen.getByLabelText('打开 AI 智能助手'))
-    expect(screen.getByText('AI 智能助手')).toBeTruthy()
+    expect(screen.getByRole('tablist', { name: '聊天列表' })).toBeTruthy()
     // input 存储聊天框文本输入节点。
     const input = screen.getByLabelText('向 AI 智能助手提问')
     fireEvent.change(input, { target: { value: '如何创建 Worktree？' } })

@@ -14,19 +14,9 @@ import {
   winQuote,
 } from '../src/core/terminalService.js'
 import { buildStepCommand, resolveShell } from '../src/core/commandRunner.js'
-import {
-  getSessionsByTask,
-  getTasksSummary,
-} from '../src/core/claudeService.js'
-import {
-  getCodexSessionsByTask,
-  getCodexTasksSummary,
-} from '../src/core/codexService.js'
-import { checkEnvHealth } from '../src/core/envHealthService.js'
-import {
-  loadTaskEnvHealth,
-  saveTaskEnvHealth,
-} from '../src/core/envHealthStore.js'
+import { getSessionsByTask } from '../src/core/claudeService.js'
+import { getCodexSessionsByTask } from '../src/core/codexService.js'
+import { runUsageSummaryWorker } from '../src/core/usageSummaryRunner.js'
 import {
   loadIdeaWorkflows,
   saveIdeaWorkflows,
@@ -43,9 +33,11 @@ import {
 import {
   DEFAULT_AI_MODEL,
   loadAiModelCredentials,
+  loadAiModelSettingsSummary,
   maskAiModelApiKey,
   normalizeAiModelCredentials,
   saveAiModelCredentials,
+  saveAiModelSettingsSummary,
 } from '../src/core/aiModelCredentialStore.js'
 import { exec, spawn } from 'child_process'
 import { dirname, join, resolve } from 'path'
@@ -76,14 +68,20 @@ function getConfiguredUsageTools(config) {
  * 合并指定工具的独立单价与全局人民币展示配置。
  * @param {object} config - 当前工作区配置
  * @param {string} toolId - 统计工具标识
+ * @param {string} [taskName] - 任务名，用于选择不同 API key 对应的任务专属价格
  * @returns {object} 传给会话统计服务的完整计价配置
  */
-function getToolTokenPricing(config, toolId) {
+function getToolTokenPricing(config, toolId, taskName) {
   // toolPricing 存储该工具独立的自定义单价，旧配置回退统一单价。
   const toolPricing =
     config?.tokenPricingByTool?.[toolId] || config?.tokenPricing
+  // taskPricingOverride 存储当前任务绑定的 API key 专属价格，缺失时保留工具默认价格。
+  const taskPricingOverride = taskName
+    ? toolPricing?.taskPricingOverrides?.[taskName]
+    : undefined
   return {
     ...(toolPricing || {}),
+    ...(taskPricingOverride || {}),
     usdToCny: config?.tokenPricing?.usdToCny,
     directCnyDisplay: config?.tokenPricing?.directCnyDisplay === true,
   }
@@ -475,16 +473,19 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     dataDir,
     safeStorage,
     loadAiModelCredentials: loadAiModelCredentialsImpl = loadAiModelCredentials,
+    loadAiModelSettingsSummary:
+      loadAiModelSettingsSummaryImpl = loadAiModelSettingsSummary,
     saveAiModelCredentials: saveAiModelCredentialsImpl = saveAiModelCredentials,
+    saveAiModelSettingsSummary:
+      saveAiModelSettingsSummaryImpl = saveAiModelSettingsSummary,
     getAiModelSettings: getAiModelSettingsImpl = getAiModelSettings,
     updateAiModelSettings: updateAiModelSettingsImpl = updateAiModelSettings,
     sendAiAssistantMessage: sendAiAssistantMessageImpl = sendAiAssistantMessage,
     streamAiAssistantMessage:
       streamAiAssistantMessageImpl = streamAiAssistantMessage,
     getSessionsByTask: getSessionsByTaskImpl = getSessionsByTask,
-    getTasksSummary: getTasksSummaryImpl = getTasksSummary,
     getCodexSessionsByTask: getCodexSessionsByTaskImpl = getCodexSessionsByTask,
-    getCodexTasksSummary: getCodexTasksSummaryImpl = getCodexTasksSummary,
+    runUsageSummaryWorker: runUsageSummaryWorkerImpl = runUsageSummaryWorker,
     platform = process.platform,
   } = deps
   // configBaseDir 存储配置文件目录；生产环境为空时使用默认 ~/.visualWorktree，测试时复用 dataDir 隔离真实用户配置。
@@ -719,14 +720,25 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   // 设置页只读取本机安全投影，不访问可选的 FastAPI 服务，避免正式安装包离线时打开设置就报错。
   ipcMain.handle(IPC.LOAD_AI_MODEL_SETTINGS, async () => {
     try {
-      // credentials 存储本机加密配置，仅用于生成不含 Key 明文的安全投影。
+      // summary 存储不含 Key 的本机摘要；正常打开设置时不解密，避免 macOS 每次请求钥匙串授权。
+      const summary = loadAiModelSettingsSummaryImpl({
+        dataDir: aiCredentialsBaseDir,
+      })
+      if (summary) return { success: true, settings: summary }
+      // credentials 存储旧版本加密配置；仅首次迁移摘要时解密一次。
       const credentials = loadAiModelCredentialsImpl({
         dataDir: aiCredentialsBaseDir,
         safeStorage,
       })
+      // migratedSummary 存储迁移生成的安全摘要，后续打开设置不再访问钥匙串。
+      const migratedSummary = credentials
+        ? saveAiModelSettingsSummaryImpl(credentials, {
+            dataDir: aiCredentialsBaseDir,
+          })
+        : getLocalAiModelSettings(null)
       return {
         success: true,
-        settings: getLocalAiModelSettings(credentials),
+        settings: migratedSummary,
       }
     } catch (error) {
       return { success: false, error: error?.message || '读取模型配置失败' }
@@ -755,6 +767,10 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
         dataDir: aiCredentialsBaseDir,
         safeStorage,
       })
+      // 自定义存储实现（如测试替身）也必须同步摘要，保证设置页后续不解密完整凭据。
+      const settingsSummary = saveAiModelSettingsSummaryImpl(credentials, {
+        dataDir: aiCredentialsBaseDir,
+      })
       // backendSynchronized 标记可选 FastAPI 服务是否已收到最新设置；离线不影响本机持久化和其它设置保存。
       let backendSynchronized = true
       try {
@@ -769,7 +785,7 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
       }
       return {
         success: true,
-        settings: getLocalAiModelSettings(credentials),
+        settings: settingsSummary,
         backendSynchronized,
         warning: backendSynchronized
           ? ''
@@ -1230,7 +1246,7 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     const sessions = []
     for (const toolId of usageTools) {
       // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
-      const tokenPricing = getToolTokenPricing(cfg, toolId)
+      const tokenPricing = getToolTokenPricing(cfg, toolId, taskName)
       // toolSessions 存储当前工具命中该任务的会话。
       const toolSessions =
         toolId === 'codex'
@@ -1251,18 +1267,25 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     const cfg = loadConfig(configBaseDir)
     // usageTools 存储本次需要分别扫描并合并的工具列表。
     const usageTools = getConfiguredUsageTools(cfg)
-    // summariesByTool 存储工具标识到任务汇总映射。
-    const summariesByTool = {}
-    for (const toolId of usageTools) {
+    // toolRequests 存储 Worker 批量扫描所需的工具与价格配置。
+    const toolRequests = usageTools.map((toolId) => {
       // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
       const tokenPricing = getToolTokenPricing(cfg, toolId)
-      summariesByTool[toolId] =
-        toolId === 'codex'
-          ? getCodexTasksSummaryImpl(taskNames, cfg.worktreesPath, {
-              tokenPricing,
-            })
-          : getTasksSummaryImpl(taskNames, cfg.worktreesPath, { tokenPricing })
-    }
+      // tokenPricingByTask 存储批量统计中每个任务各自的 API key 价格，避免按模型全局覆盖。
+      const tokenPricingByTask = Object.fromEntries(
+        taskNames.map((taskName) => [
+          taskName,
+          getToolTokenPricing(cfg, toolId, taskName),
+        ])
+      )
+      return { toolId, tokenPricing, tokenPricingByTask }
+    })
+    // summariesByTool 存储 Worker 返回的工具标识到任务汇总映射。
+    const summariesByTool = await runUsageSummaryWorkerImpl({
+      taskNames,
+      worktreesPath: cfg.worktreesPath,
+      tools: toolRequests,
+    })
     // combinedSummary 存储每个任务的各工具明细和合计。
     const combinedSummary = {}
     for (const taskName of taskNames) {
@@ -1318,23 +1341,6 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
       cfg.mainBranches
     )
   })
-
-  // 对任务目录执行环境健康检查（依赖/端口/服务/Git 并行）；传入 envCheckRoles 按角色分组结果
-  ipcMain.handle(IPC.CHECK_ENV_HEALTH, async (_e, taskDir) => {
-    const cfg = loadConfig(configBaseDir)
-    // envCheckRoles 角色配置（如前端/后端目录映射），空数组时自动扫描全部子目录；workDocumentTemplates 用于排除 docs 等工作文档入口。
-    return checkEnvHealth(taskDir, cfg.envCheckRoles || [], {
-      workDocumentTemplates: cfg.workDocumentTemplates,
-    })
-  })
-
-  // 读取任务环境检查缓存（不存在/损坏时回退空对象）
-  ipcMain.handle(IPC.LOAD_TASK_ENV_HEALTH, () => loadTaskEnvHealth(VW_DIR))
-
-  // 保存任务环境检查缓存（目录不存在时自动创建）
-  ipcMain.handle(IPC.SAVE_TASK_ENV_HEALTH, (_e, map) =>
-    saveTaskEnvHealth(map, VW_DIR)
-  )
 
   // 想法工作流定义文件路径：~/.visualWorktree/idea-workflows.json
   // 读取想法工作流定义列表（不存在时返回内置默认）

@@ -68,8 +68,6 @@ export const useStore = create((set, get) => ({
   // 任务工作流勾选映射「任务名 → 已勾选步骤 key 数组」（需求流程进度，持久化到 ~/.visualWorktree/task-workflow.json）；
   // 启动后由 loadTaskWorkflow 异步填充，localStorage 预填保证首屏可用
   taskWorkflowMap: loadTaskWorkflowMap(),
-  // 任务环境检查缓存「任务名 → 上次环境检查状态」（持久化到 ~/.visualWorktree/task-env-health.json）
-  taskEnvHealthMap: {},
   // runningSteps 正在执行的步骤集合：key 为 stepRunKey(taskName, stepKey)，value 为 true。
   // 用对象（而非全局 loading）支持多任务/多步骤并发执行，各自独立显示按钮 loading，互不影响。
   runningSteps: {},
@@ -327,30 +325,6 @@ export const useStore = create((set, get) => ({
       set({ taskWorkflowMap: map || {} })
     } catch (e) {
       // 加载失败时保持初始值（localStorage 已预填）
-    }
-  },
-
-  /**
-   * 设置任务环境检查缓存并持久化到 ~/.visualWorktree/task-env-health.json
-   * @param {Record<string,object>} map - 任务名到环境检查缓存的映射
-   */
-  setTaskEnvHealthMap: (map) => {
-    // next 为即将写入 store 和磁盘的环境检查缓存映射
-    const next =
-      map && typeof map === 'object' && !Array.isArray(map) ? map : {}
-    api.saveTaskEnvHealth(next)
-    set({ taskEnvHealthMap: next })
-  },
-
-  /**
-   * 从 ~/.visualWorktree/task-env-health.json 异步加载任务环境检查缓存
-   */
-  loadTaskEnvHealth: async () => {
-    try {
-      const map = await api.loadTaskEnvHealth()
-      set({ taskEnvHealthMap: map || {} })
-    } catch (e) {
-      // 加载失败时保持空缓存，不影响环境检查实时执行
     }
   },
 

@@ -505,7 +505,7 @@ describe('WorktreePanel 隐藏置顶与标题徽标展示', () => {
         ],
       },
     ]
-    // claudeUsageMap 模拟 token 用量，envHealthMap 模拟环境问题；本用例会通过配置关闭它们。
+    // claudeUsageMap 模拟 token 用量；本用例会通过配置关闭它。
     const claudeUsageMap = {
       'TASK-A': {
         sessionCount: 1,
@@ -513,20 +513,15 @@ describe('WorktreePanel 隐藏置顶与标题徽标展示', () => {
         cost: { usd: 0.02, cny: 0.14 },
       },
     }
-    const envHealthMap = { 'TASK-A': { status: 'warning', issueCount: 2 } }
-
     const { container } = render(
       <WorktreePanel
         {...baseProps({
           tasks,
-          envHealthMap,
           claudeUsageMap,
-          onEnvCheck: noop,
           taskTitleBadges: {
             projectCount: false,
             taskStatus: true,
             taskLinks: true,
-            envHealth: false,
             claudeUsage: false,
           },
         })}
@@ -538,13 +533,12 @@ describe('WorktreePanel 隐藏置顶与标题徽标展示', () => {
       (node) => node.textContent.includes('TASK-A')
     )
     expect(within(header).queryByText('2 项目')).toBeNull()
-    expect(within(header).queryByText('2 个环境问题')).toBeNull()
     expect(within(header).queryByText('1.5K · $0.020')).toBeNull()
   })
 })
 
 describe('WorktreePanel 任务链接', () => {
-  it('任务标题按项目数、状态、链接、环境、token 用量顺序展示，并使用空心方形项目数', () => {
+  it('任务标题按项目数、状态、链接、token 用量顺序展示，并使用空心方形项目数', () => {
     // tasks 模拟一个包含两个项目的任务，便于项目数量徽标展示为 2。
     const tasks = [
       {
@@ -590,19 +584,13 @@ describe('WorktreePanel 任务链接', () => {
         { name: 'Jira', url: 'https://jira.example.com/browse/TASK-A' },
       ],
     }
-    // envHealthMap 模拟环境检查已有问题，标题中应排在链接之后、token 之前。
-    const envHealthMap = { 'TASK-A': { status: 'warning', issueCount: 2 } }
-    // noopEnvCheck 占位环境检查点击回调，传入后才会渲染环境状态标签。
-    const noopEnvCheck = () => {}
     const { container } = render(
       <WorktreePanel
         {...baseProps({
           tasks,
           taskStatusMap: { 'TASK-A': 'developing' },
           taskLinkMap,
-          envHealthMap,
           claudeUsageMap,
-          onEnvCheck: noopEnvCheck,
           taskTitleBadges: { claudeUsage: true },
         })}
       />
@@ -621,10 +609,7 @@ describe('WorktreePanel 任务链接', () => {
       headerText.indexOf('Jira')
     )
     expect(headerText.indexOf('Jira')).toBeLessThan(
-      headerText.indexOf('2个环境问题')
-    )
-    expect(headerText.indexOf('2个环境问题')).toBeLessThan(
-      headerText.indexOf('1.5K·$0.020')
+      headerText.indexOf('$0.020')
     )
 
     // projectCountTag 存储项目数徽标节点；应是镂空方形 Tag，而不是 Badge 的圆点。
@@ -762,28 +747,18 @@ describe('WorktreePanel 任务链接', () => {
   })
 })
 
-describe('WorktreePanel 环境检查状态', () => {
-  it('任务行项目数量显示在人工状态和环境检查前面', () => {
+describe('WorktreePanel 任务标题徽标', () => {
+  it('任务行项目数量显示在人工状态前面', () => {
     // container 存储渲染结果根节点，用于限定到第一个任务头部断言 DOM 顺序
-    const { container } = render(
-      <WorktreePanel
-        {...baseProps({
-          onEnvCheck: noop,
-          envHealthMap: {
-            'TASK-A': { status: 'ok', issueCount: 0 },
-          },
-        })}
-      />
-    )
+    const { container } = render(<WorktreePanel {...baseProps()} />)
     // taskHeader 存储 TASK-A 所在的折叠面板头部，避免 TASK-B 的默认状态干扰顺序断言
     const taskHeader = [
       ...container.querySelectorAll('.ant-collapse-header'),
     ].find((header) => header.textContent.includes('TASK-A'))
-    // headerText 存储该任务标题完整文本：预期顺序为「任务名 → 项目数 → 人工状态 → 环境检查」
+    // headerText 存储该任务标题完整文本，用于验证项目数量位于人工状态前。
     const headerText = taskHeader.textContent
 
     expect(headerText.indexOf('1')).toBeLessThan(headerText.indexOf('未开始'))
-    expect(headerText.indexOf('1')).toBeLessThan(headerText.indexOf('环境正常'))
   })
 
   it('任务分类显示在项目数量前，并可通过展示偏好隐藏', () => {
@@ -814,99 +789,6 @@ describe('WorktreePanel 环境检查状态', () => {
       />
     )
     expect(within(taskHeader).queryByText('BUG')).toBeNull()
-  })
-
-  it('任务行显示环境检查中、正常、异常状态', () => {
-    render(
-      <WorktreePanel
-        {...baseProps({
-          onEnvCheck: noop,
-          envHealthMap: {
-            'TASK-A': { status: 'checking' },
-            'TASK-B': { status: 'failed', issueCount: 2 },
-          },
-        })}
-      />
-    )
-
-    expect(screen.getByText('环境检查中')).toBeTruthy()
-    expect(screen.getByText('2 个环境问题')).toBeTruthy()
-  })
-
-  it('环境检查标签保留固定占位，避免 loading 状态撑动标题行', () => {
-    // container 存储渲染结果根节点，用于查询环境状态 Tag 的样式占位。
-    const { container } = render(
-      <WorktreePanel
-        {...baseProps({
-          onEnvCheck: noop,
-          envHealthMap: {
-            'TASK-A': { status: 'checking' },
-            'TASK-B': { status: 'failed', issueCount: 12 },
-          },
-        })}
-      />
-    )
-    // envTags 存储环境检查标签节点；检查中与异常态都应使用同一稳定最小宽度。
-    const envTags = [...container.querySelectorAll('.env-health-status-tag')]
-    // minWidths 存储标签最小宽度样式，用于证明不同状态不会把任务标题行横向撑动。
-    const minWidths = envTags.map((tag) => tag.style.minWidth)
-
-    expect(envTags).toHaveLength(2)
-    expect(new Set(minWidths).size).toBe(1)
-    expect(minWidths[0]).toBeTruthy()
-  })
-
-  it('任务行用黄色展示 warning 级环境问题', () => {
-    // container 存储渲染结果根节点，用于断言 warning 标签类名。
-    const { container } = render(
-      <WorktreePanel
-        {...baseProps({
-          onEnvCheck: noop,
-          envHealthMap: {
-            'TASK-A': {
-              status: 'warning',
-              issueCount: 1,
-              result: {
-                summary: {
-                  status: 'warning',
-                  issueCount: 1,
-                  message: 'Git 有 1 个未提交改动',
-                },
-              },
-            },
-          },
-        })}
-      />
-    )
-
-    // warningTag 存储显示“1 个环境问题”的环境标签，它应该是 warning 色而不是 error 色。
-    const warningTag = [...container.querySelectorAll('.ant-tag')].find((tag) =>
-      tag.textContent.includes('1 个环境问题')
-    )
-
-    expect(warningTag).toBeTruthy()
-    expect(warningTag.className).toContain('ant-tag-warning')
-    expect(warningTag.className).not.toContain('ant-tag-error')
-  })
-
-  it('点击环境状态回调当前任务，用于打开详情或重新检查', () => {
-    // onEnvCheck 间谍，验证点击状态不会折叠面板，而是打开环境详情
-    const onEnvCheck = vi.fn()
-    render(
-      <WorktreePanel
-        {...baseProps({
-          onEnvCheck,
-          envHealthMap: {
-            'TASK-A': { status: 'ok', issueCount: 0 },
-          },
-        })}
-      />
-    )
-
-    fireEvent.click(screen.getByText('环境正常'))
-
-    expect(onEnvCheck).toHaveBeenCalledTimes(1)
-    expect(onEnvCheck.mock.calls[0][0].task).toBe('TASK-A')
   })
 })
 

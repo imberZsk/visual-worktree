@@ -4,7 +4,6 @@ import {
   computeActiveKeysAfterCreate,
   normalizeTaskLinkItems,
 } from '../worktreeLogic.ts'
-import { buildTaskDir } from '../envHealthDisplayLogic.ts'
 import { withConfirmDefaults } from '../modalDefaults.ts'
 
 /**
@@ -20,7 +19,6 @@ import { withConfirmDefaults } from '../modalDefaults.ts'
  * @param {() => Promise<void>} options.scanWorktrees - 刷新 Worktree 列表的动作。
  * @param {(taskName:string,links:Array<object>) => void} options.setTaskLink - 写入任务链接的动作。
  * @param {(keys:Array<string>) => void} options.setActiveKeys - 更新展开任务的动作。
- * @param {(task:object,options:object) => Promise<void>} options.runEnvHealthCheck - 执行环境检查的动作。
  * @returns {object} 创建弹窗状态及任务生命周期操作。
  */
 export default function useTaskLifecycle({
@@ -34,7 +32,6 @@ export default function useTaskLifecycle({
   scanWorktrees,
   setTaskLink,
   setActiveKeys,
-  runEnvHealthCheck,
 }) {
   // createOpen 控制创建 Worktree 弹窗是否展示。
   const [createOpen, setCreateOpen] = useState(false)
@@ -241,7 +238,7 @@ export default function useTaskLifecycle({
   }
 
   /**
-   * 批量创建任务 Worktree，并刷新任务状态及环境检查。
+   * 批量创建任务 Worktree，并刷新任务状态。
    * @param {object} values - 创建表单值。
    */
   const createWorktrees = async (values) => {
@@ -307,13 +304,6 @@ export default function useTaskLifecycle({
     }
     scanWorktrees()
     setActiveKeys(computeActiveKeysAfterCreate(values.task))
-    if (successCount > 0) {
-      // taskDir 存储新建任务的绝对目录，用于随后执行环境检查。
-      const taskDir = buildTaskDir(config?.worktreesPath, values.task)
-      if (taskDir) {
-        runEnvHealthCheck({ task: values.task, path: taskDir }, { open: false })
-      }
-    }
   }
 
   /**

@@ -40,16 +40,12 @@ describe('registerIpcHandlers', () => {
   let ctx
   let mock
   let dataDir
-  let envFileSnapshot
   let histFileSnapshot
   beforeEach(() => {
     ctx = makeTempRoot()
     mock = makeMockIpc()
     // dataDir 存储本用例的 Visual Worktree 持久化临时目录，避免测试写入用户真实 ~/.visualWorktree
     dataDir = join(ctx.root, 'visualWorktree-data')
-    // envFileSnapshot 记录真实环境检查缓存的原始内容；RED 阶段旧实现仍可能误写真实目录，afterEach 会原样恢复
-    const envFile = join(homedir(), '.visualWorktree', 'task-env-health.json')
-    envFileSnapshot = existsSync(envFile) ? readFileSync(envFile, 'utf8') : null
     // histFileSnapshot 记录真实历史文件的原始内容；避免 IPC 历史测试污染用户真实数据
     const histFile = join(homedir(), '.visualWorktree', 'task-history.json')
     histFileSnapshot = existsSync(histFile)
@@ -98,10 +94,8 @@ describe('registerIpcHandlers', () => {
         options.onChunk('流式回答')
         return '这是流式回答'
       })
-    // getTasksSummary 模拟 Claude 任务用量汇总。
-    mock.getTasksSummary = vi.fn().mockReturnValue({})
-    // getCodexTasksSummary 模拟 Codex 任务用量汇总。
-    mock.getCodexTasksSummary = vi.fn().mockReturnValue({})
+    // runUsageSummaryWorker 模拟后台线程返回各工具独立汇总。
+    mock.runUsageSummaryWorker = vi.fn().mockResolvedValue({})
     registerIpcHandlers(mock.ipcMain, {
       getWindow: () => fakeWindow,
       shell: { openPath: () => {} },
@@ -115,8 +109,7 @@ describe('registerIpcHandlers', () => {
       dialog: mock.dialog,
       sendAiAssistantMessage: mock.sendAiAssistantMessage,
       streamAiAssistantMessage: mock.streamAiAssistantMessage,
-      getTasksSummary: mock.getTasksSummary,
-      getCodexTasksSummary: mock.getCodexTasksSummary,
+      runUsageSummaryWorker: mock.runUsageSummaryWorker,
       loadAiModelCredentials: mock.loadAiModelCredentials,
       saveAiModelCredentials: mock.saveAiModelCredentials,
       getAiModelSettings: mock.getAiModelSettings,
@@ -135,13 +128,6 @@ describe('registerIpcHandlers', () => {
       if (existsSync(histFile)) unlinkSync(histFile)
     } else {
       writeFileSync(histFile, histFileSnapshot, 'utf8')
-    }
-    // envFile 真实环境检查缓存文件路径；若 RED 阶段旧实现误写真实目录，则按快照恢复
-    const envFile = join(homedir(), '.visualWorktree', 'task-env-health.json')
-    if (envFileSnapshot === null) {
-      if (existsSync(envFile)) unlinkSync(envFile)
-    } else {
-      writeFileSync(envFile, envFileSnapshot, 'utf8')
     }
   })
 
@@ -185,8 +171,10 @@ describe('registerIpcHandlers', () => {
         cost: { usd: 2, cny: 2 },
       },
     }
-    mock.getTasksSummary.mockReturnValue(claudeSummary)
-    mock.getCodexTasksSummary.mockReturnValue(codexSummary)
+    mock.runUsageSummaryWorker.mockResolvedValue({
+      'claude-code': claudeSummary,
+      codex: codexSummary,
+    })
     saveConfig(
       {
         aiUsageTools: ['claude-code', 'codex'],
@@ -214,8 +202,15 @@ describe('registerIpcHandlers', () => {
       cacheRead: 5,
     })
     expect(result.TASK.cost).toEqual({ usd: 3, cny: 3 })
-    expect(mock.getTasksSummary).toHaveBeenCalledTimes(1)
-    expect(mock.getCodexTasksSummary).toHaveBeenCalledTimes(1)
+    expect(mock.runUsageSummaryWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskNames: ['TASK'],
+        tools: expect.arrayContaining([
+          expect.objectContaining({ toolId: 'claude-code' }),
+          expect.objectContaining({ toolId: 'codex' }),
+        ]),
+      })
+    )
   })
 
   it('SET_WINDOW_THEME updates the native window controls overlay', async () => {
@@ -258,6 +253,21 @@ describe('registerIpcHandlers', () => {
         apiKeyConfigured: true,
         apiKeyHint: '••••••••-key',
       },
+    })
+  })
+
+  it('LOAD_AI_MODEL_SETTINGS reuses summary without decrypting credentials', async () => {
+    await mock.invoke(IPC.LOAD_AI_MODEL_SETTINGS)
+    mock.loadAiModelCredentials.mockClear()
+
+    // result 存储第二次打开设置时直接从摘要返回的安全配置。
+    const result = await mock.invoke(IPC.LOAD_AI_MODEL_SETTINGS)
+
+    expect(mock.loadAiModelCredentials).not.toHaveBeenCalled()
+    expect(result.settings).toMatchObject({
+      model: 'gpt-5.6-sol',
+      apiKeyConfigured: true,
+      apiKeyHint: '••••••••-key',
     })
   })
 
@@ -619,28 +629,6 @@ describe('registerIpcHandlers', () => {
 
     expect(result).toEqual(expectedConfig)
     expect(loadConfig(dataDir)).toEqual(expectedConfig)
-  })
-
-  it('SAVE_TASK_ENV_HEALTH 写入后 LOAD_TASK_ENV_HEALTH 能读回环境检查状态', async () => {
-    // map 为环境检查结果缓存：任务名 → 上次检查状态和结果摘要
-    const map = {
-      'TASK-ENV': {
-        status: 'ok',
-        issueCount: 0,
-        taskDir: '/wt/TASK-ENV',
-        checkedAt: '2026-06-30T10:00:00.000Z',
-        result: { summary: { status: 'ok', issueCount: 0 } },
-      },
-    }
-
-    const ok = await mock.invoke(IPC.SAVE_TASK_ENV_HEALTH, map)
-    const loaded = await mock.invoke(IPC.LOAD_TASK_ENV_HEALTH)
-
-    expect(ok).toBe(true)
-    expect(loaded).toEqual(map)
-    expect(
-      JSON.parse(readFileSync(join(dataDir, 'task-env-health.json'), 'utf8'))
-    ).toEqual(map)
   })
 
   it('CHECKOUT_BRANCH 切主分支时对只有 main 的仓库兜底成功（不报 pathspec 错误）', async () => {

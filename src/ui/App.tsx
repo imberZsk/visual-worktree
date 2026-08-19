@@ -15,7 +15,6 @@ import CleanupSuggestionsModal from './components/CleanupSuggestionsModal.tsx'
 import KanbanView from './components/KanbanView.tsx'
 import WorkflowTabView from './components/WorkflowTabView.tsx'
 import AiAssistant from './components/AiAssistant.tsx'
-import EnvHealthModal from './components/EnvHealthModal.tsx'
 import OnboardingModal from './components/OnboardingModal.tsx'
 import TaskHistoryModal from './components/TaskHistoryModal.tsx'
 import BatchProgressModal from './components/BatchProgressModal.tsx'
@@ -30,7 +29,6 @@ import useWorkspaceViewData from './hooks/useWorkspaceViewData.ts'
 import useAiUsageSummary from './hooks/useAiUsageSummary.ts'
 import useWorkspaceNavigation from './hooks/useWorkspaceNavigation.ts'
 import useWorkflowExecution from './hooks/useWorkflowExecution.ts'
-import useEnvHealthCheck from './hooks/useEnvHealthCheck.ts'
 import useProjectActions from './hooks/useProjectActions.ts'
 import useTaskLifecycle from './hooks/useTaskLifecycle.ts'
 import useVisibilityTransitions from './hooks/useVisibilityTransitions.ts'
@@ -61,7 +59,6 @@ export default function App() {
     taskLinkMap,
     taskWorkflowMap,
     taskBlockerMap,
-    taskEnvHealthMap,
     runningSteps,
     taskVisibility,
     projectVisibility,
@@ -85,8 +82,6 @@ export default function App() {
     loadTaskWorkflow,
     setTaskBlocker,
     loadTaskBlockers,
-    setTaskEnvHealthMap,
-    loadTaskEnvHealth,
     startRunningStep,
     finishRunningStep,
     loadTaskVisibility,
@@ -196,14 +191,6 @@ export default function App() {
     modal,
   })
 
-  // envHealth 管理环境检查缓存、自动检查和详情弹窗状态。
-  const envHealth = useEnvHealthCheck({
-    taskEnvHealthMap,
-    tasks: workspaceViewData.visibleTasks,
-    config,
-    setTaskEnvHealthMap,
-    loadTaskEnvHealth,
-  })
   // taskLifecycle 管理任务创建、文档归档、删除及创建弹窗状态。
   const taskLifecycle = useTaskLifecycle({
     config,
@@ -216,13 +203,16 @@ export default function App() {
     scanWorktrees,
     setTaskLink,
     setActiveKeys: setWorktreeActiveKeys,
-    runEnvHealthCheck: envHealth.runCheck,
   })
   // aiUsage 管理可见任务的 AI 用量加载和工具栏总计。
   const aiUsage = useAiUsageSummary({
     tasks: workspaceViewData.visibleTasks,
     usageTools: config?.aiUsageTools,
-    tokenPricing: config?.tokenPricing,
+    pricingConfig: {
+      tokenPricing: config?.tokenPricing,
+      tokenPricingByTool: config?.tokenPricingByTool,
+    },
+    enabled: activeView === 'worktrees',
   })
 
   // workflowSteps 当前生效的工作流（需求流程）步骤清单：来自配置，规范化后兜底默认清单。
@@ -338,10 +328,9 @@ export default function App() {
                 onTaskLinkChange={setTaskLink}
                 onOpenUrl={projectActions.openUrl}
                 onAddWorktree={taskLifecycle.addWorktreeToTask}
-                onEnvCheck={envHealth.showDetails}
-                envHealthMap={envHealth.healthMap}
                 cicdLinks={config?.cicdLinks ?? {}}
                 claudeUsageMap={aiUsage.usageMap}
+                aiUsageLoading={aiUsage.loading}
                 aiUsageTools={config?.aiUsageTools ?? ['claude-code']}
                 directCnyDisplay={
                   config?.tokenPricing?.directCnyDisplay === true
@@ -509,17 +498,6 @@ export default function App() {
         open={cleanupOpen}
         onClose={() => setCleanupOpen(false)}
         onDeleted={scanWorktrees}
-      />
-
-      {/* 环境健康检查结果弹窗：展示依赖、端口、服务和 Git 检查结果。 */}
-      <EnvHealthModal
-        open={envHealth.modal.open}
-        taskName={envHealth.modal.taskName}
-        taskDir={envHealth.modal.taskDir}
-        result={envHealth.modal.result}
-        loading={envHealth.modal.loading}
-        onClose={envHealth.modal.close}
-        onRefresh={(task) => envHealth.runCheck(task, { open: true })}
       />
 
       {/* 已删除任务历史弹窗：展示任务名、链接、删除时间，支持删除单条和分页。 */}

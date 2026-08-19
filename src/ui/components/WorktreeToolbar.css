@@ -43,10 +43,15 @@
   justify-content: space-between;
 }
 
-/* 用量标签可悬停查看详情，并移除 Tag 默认外边距。 */
+/* 用量标签可悬停查看详情，使用手型提示其具备交互反馈，并移除 Tag 默认外边距。 */
 .worktree-toolbar__usage-tag {
-  cursor: help;
+  cursor: pointer !important;
   margin: 0;
+}
+
+/* 顶部费用标签的图标和文字也是实际悬停区域，统一继承手型，避免命中 AntD 子元素默认光标。 */
+.worktree-toolbar__usage-tag * {
+  cursor: pointer !important;
 }
 
 /* 排序说明使用 Ant Design 次级文字色和紧凑字号。 */

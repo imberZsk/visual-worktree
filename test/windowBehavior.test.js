@@ -50,11 +50,12 @@ describe('windowBehavior', () => {
     expect(shouldShowMainWindow(e2eEnv)).toBe(false)
   })
 
-  it('macOS 隐藏原生标题栏并保留系统交通灯', () => {
+  it('macOS 隐藏原生标题栏、保留系统交通灯并允许非活动窗口首次按下拖动', () => {
     // chromeOptions 存储 macOS 自定义标题栏窗口配置。
     const chromeOptions = getWindowChromeOptions('darwin')
 
     expect(chromeOptions).toEqual({
+      acceptFirstMouse: true,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 22 },
     })

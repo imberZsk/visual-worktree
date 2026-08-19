@@ -625,7 +625,8 @@ export default function AiAssistant({
       </Tooltip>
       <Drawer
         rootClassName="ai-assistant-drawer"
-        title="AI 智能助手"
+        title={null}
+        closable={false}
         placement="right"
         size={ASSISTANT_DRAWER_SIZE}
         open={open}
@@ -680,6 +681,14 @@ export default function AiAssistant({
                 onClick={handleCreateConversation}
               />
             </Tooltip>
+            {/* Ant Design 运行时会给 text 按钮注入水平内边距，固定宽度下会裁掉关闭图标。 */}
+            <Button
+              className="ai-assistant-close"
+              type="text"
+              aria-label="关闭对话"
+              icon={<CloseOutlined />}
+              onClick={() => setOpen(false)}
+            />
           </div>
           <div className="ai-assistant-messages" aria-live="polite">
             {!activeConversation || activeConversation.messages.length === 0 ? (

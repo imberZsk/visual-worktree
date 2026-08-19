@@ -97,12 +97,6 @@ export const IPC = {
   GET_CLAUDE_TASKS_SUMMARY: 'get-claude-tasks-summary',
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）
   GET_SAFE_TO_REMOVE_WORKTREES: 'get-safe-to-remove-worktrees',
-  // 对任务目录执行环境健康检查（依赖/端口/服务/Git）
-  CHECK_ENV_HEALTH: 'check-env-health',
-  // 读取任务环境检查缓存（~/.visualWorktree/task-env-health.json）
-  LOAD_TASK_ENV_HEALTH: 'load-task-env-health',
-  // 保存任务环境检查缓存（~/.visualWorktree/task-env-health.json）
-  SAVE_TASK_ENV_HEALTH: 'save-task-env-health',
   // 读取任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   LOAD_TASK_BLOCKERS: 'load-task-blockers',
   // 保存任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）

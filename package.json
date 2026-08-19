@@ -108,6 +108,12 @@
       "output": "release",
       "buildResources": "build"
     },
+    "extraResources": [
+      {
+        "from": "build/dock-icon.png",
+        "to": "dock-icon.png"
+      }
+    ],
     "files": [
       "electron/**/*",
       "dist/**/*",

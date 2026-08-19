@@ -36,8 +36,10 @@ function posixJoin(...parts) {
  * 而实际 opus-4-8 已降到 5/25/6.25/0.5、sonnet 系列为 3/15/3.75/0.3，统一计价会高估约 5 倍。
  */
 const MODEL_PRICING = {
-  // Sonnet 系列：输入 3 / 输出 15 / 缓存写 3.75 / 缓存读 0.3
-  'claude-sonnet-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+  // Opus 5 使用当前中转站账单口径；自定义价格仍可按服务商规则覆盖。
+  'claude-opus-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  // Sonnet 5 使用当前中转站账单口径；旧版 Sonnet 继续保留其原有内置价格。
+  'claude-sonnet-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
   'claude-sonnet-4-6': {
     input: 3,
     output: 15,
@@ -494,13 +496,14 @@ export function usdToCny(usd, exchangeRate = USD_TO_CNY) {
  * 按 Token 费用设置将美元成本换算为人民币，直接人民币模式固定使用 1:1。
  * @param {number} usd - 美元计价得到的金额
  * @param {object} [tokenPricing] - Token 费用设置
- * @returns {number} 人民币金额，保留 2 位小数
+ * @returns {number} 人民币金额；直接人民币模式保留 6 位小数，普通换算保留 2 位小数
  */
 export function tokenCostToCny(usd, tokenPricing = {}) {
-  // exchangeRate 存储当前展示模式采用的换算率；直接人民币模式忽略已保存的普通汇率。
-  const exchangeRate =
-    tokenPricing?.directCnyDisplay === true ? 1 : tokenPricing?.usdToCny
-  return usdToCny(usd, exchangeRate)
+  // 直接人民币价格需保留中转账单精度，提前保留两位会把小额实际消费显示成错误值。
+  if (tokenPricing?.directCnyDisplay === true) {
+    return Math.round(usd * 1_000_000) / 1_000_000
+  }
+  return usdToCny(usd, tokenPricing?.usdToCny)
 }
 
 /**
@@ -692,7 +695,7 @@ export function getSessionsByTask(taskName, worktreesRoot, deps = {}) {
  * 同一任务的多个会话、各会话的所有模型，token 与费用全部累加。
  * @param {Array<string>} taskNames - 任务名列表
  * @param {string} worktreesRoot - worktree 根目录路径
- * @param {object} deps - 依赖注入
+ * @param {object} deps - 依赖注入，可通过 tokenPricingByTask 指定任务级计价规则
  * @returns {object} 任务名 → { sessionCount, usage, cost } 的映射
  */
 export function getTasksSummary(taskNames, worktreesRoot, deps = {}) {
@@ -702,12 +705,17 @@ export function getTasksSummary(taskNames, worktreesRoot, deps = {}) {
   const summary = {}
 
   for (const taskName of taskNames) {
+    // taskTokenPricing 存储当前任务的专属价格；不同 API key 的同模型账单必须避免互相覆盖。
+    const taskTokenPricing =
+      deps.tokenPricingByTask?.[taskName] || deps.tokenPricing
+    // taskDeps 存储当前任务计算费用时使用的依赖，不重新扫描本地会话。
+    const taskDeps = { ...deps, tokenPricing: taskTokenPricing }
     // 该任务命中的会话（已含各自 usage/cost）
     const sessions = selectSessionsForTask(
       taskName,
       worktreesRoot,
       allSessions,
-      deps
+      taskDeps
     )
 
     // 累加所有会话的 token 用量（不分模型，全部相加）
@@ -732,7 +740,7 @@ export function getTasksSummary(taskNames, worktreesRoot, deps = {}) {
       usage: totalUsage,
       cost: {
         usd: totalUsd,
-        cny: tokenCostToCny(totalUsd, deps.tokenPricing),
+        cny: tokenCostToCny(totalUsd, taskTokenPricing),
       },
     }
   }
