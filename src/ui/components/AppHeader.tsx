@@ -93,6 +93,8 @@ export default function AppHeader({
         pathProfileOpen ? ' app-header--select-open' : ''
       }`}
     >
+      {/* macOS 顶部拖动带不受 Select 展开时 no-drag 状态影响，确保窗口失焦后仍可从最上沿直接拖动。 */}
+      <div className="app-header__drag-strip" aria-hidden="true" />
       <div className="app-header__left">
         <span className="app-header__title">Visual Worktree</span>
         <Space size={8} className="app-header__interactive">

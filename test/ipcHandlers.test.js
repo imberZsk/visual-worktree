@@ -188,7 +188,9 @@ describe('registerIpcHandlers', () => {
     )
 
     // result 存储主进程合并后的任务 Token 明细和总计。
-    const result = await mock.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, ['TASK'])
+    const result = await mock.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, ['TASK'], {
+      refreshVersion: 1,
+    })
 
     expect(result.TASK.tools).toEqual({
       'claude-code': claudeSummary.TASK,
@@ -205,6 +207,7 @@ describe('registerIpcHandlers', () => {
     expect(mock.runUsageSummaryWorker).toHaveBeenCalledWith(
       expect.objectContaining({
         taskNames: ['TASK'],
+        refreshVersion: 1,
         tools: expect.arrayContaining([
           expect.objectContaining({ toolId: 'claude-code' }),
           expect.objectContaining({ toolId: 'codex' }),

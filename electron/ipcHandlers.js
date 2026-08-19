@@ -1262,74 +1262,87 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   })
 
   // 获取全部已选 AI 工具的任务 Token 用量明细与合计。
-  ipcMain.handle(IPC.GET_CLAUDE_TASKS_SUMMARY, async (_e, taskNames) => {
-    // cfg 存储当前工作区 Token 统计设置。
-    const cfg = loadConfig(configBaseDir)
-    // usageTools 存储本次需要分别扫描并合并的工具列表。
-    const usageTools = getConfiguredUsageTools(cfg)
-    // toolRequests 存储 Worker 批量扫描所需的工具与价格配置。
-    const toolRequests = usageTools.map((toolId) => {
-      // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
-      const tokenPricing = getToolTokenPricing(cfg, toolId)
-      // tokenPricingByTask 存储批量统计中每个任务各自的 API key 价格，避免按模型全局覆盖。
-      const tokenPricingByTask = Object.fromEntries(
-        taskNames.map((taskName) => [
-          taskName,
-          getToolTokenPricing(cfg, toolId, taskName),
-        ])
-      )
-      return { toolId, tokenPricing, tokenPricingByTask }
-    })
-    // summariesByTool 存储 Worker 返回的工具标识到任务汇总映射。
-    const summariesByTool = await runUsageSummaryWorkerImpl({
-      taskNames,
-      worktreesPath: cfg.worktreesPath,
-      tools: toolRequests,
-    })
-    // combinedSummary 存储每个任务的各工具明细和合计。
-    const combinedSummary = {}
-    for (const taskName of taskNames) {
-      // tools 存储当前任务按工具拆分的统计结果。
-      const tools = Object.fromEntries(
-        usageTools.map((toolId) => [
-          toolId,
-          summariesByTool[toolId]?.[taskName] || {
-            sessionCount: 0,
-            usage: {},
-            cost: {},
-          },
-        ])
-      )
-      // combinedUsage 存储当前任务全部工具四类 Token 的合计。
-      const combinedUsage = Object.values(tools).reduce(
-        (total, toolSummary) => ({
-          input: total.input + (toolSummary?.usage?.input || 0),
-          output: total.output + (toolSummary?.usage?.output || 0),
-          cacheWrite: total.cacheWrite + (toolSummary?.usage?.cacheWrite || 0),
-          cacheRead: total.cacheRead + (toolSummary?.usage?.cacheRead || 0),
-        }),
-        { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
-      )
-      // combinedCost 存储当前任务全部工具美元与人民币费用合计。
-      const combinedCost = Object.values(tools).reduce(
-        (total, toolSummary) => ({
-          usd: total.usd + (toolSummary?.cost?.usd || 0),
-          cny: total.cny + (toolSummary?.cost?.cny || 0),
-        }),
-        { usd: 0, cny: 0 }
-      )
-      combinedSummary[taskName] = {
-        sessionCount: Object.values(tools).reduce(
-          (total, toolSummary) => total + (toolSummary?.sessionCount || 0),
-          0
-        ),
-        usage: combinedUsage,
-        cost: combinedCost,
-        tools,
+  ipcMain.handle(
+    IPC.GET_CLAUDE_TASKS_SUMMARY,
+    async (_e, taskNames, options = {}) => {
+      // cfg 存储当前工作区 Token 统计设置。
+      const cfg = loadConfig(configBaseDir)
+      // manualRefreshVersion 存储用户主动刷新携带的版本；写入 Worker 请求键以避开十秒短缓存，浏览器重载未传值时仍复用缓存。
+      const manualRefreshVersion =
+        Number.isSafeInteger(options?.refreshVersion) &&
+        options.refreshVersion > 0
+          ? options.refreshVersion
+          : undefined
+      // usageTools 存储本次需要分别扫描并合并的工具列表。
+      const usageTools = getConfiguredUsageTools(cfg)
+      // toolRequests 存储 Worker 批量扫描所需的工具与价格配置。
+      const toolRequests = usageTools.map((toolId) => {
+        // tokenPricing 存储当前工具独立单价与全局汇率组合后的配置。
+        const tokenPricing = getToolTokenPricing(cfg, toolId)
+        // tokenPricingByTask 存储批量统计中每个任务各自的 API key 价格，避免按模型全局覆盖。
+        const tokenPricingByTask = Object.fromEntries(
+          taskNames.map((taskName) => [
+            taskName,
+            getToolTokenPricing(cfg, toolId, taskName),
+          ])
+        )
+        return { toolId, tokenPricing, tokenPricingByTask }
+      })
+      // summariesByTool 存储 Worker 返回的工具标识到任务汇总映射。
+      const summariesByTool = await runUsageSummaryWorkerImpl({
+        taskNames,
+        worktreesPath: cfg.worktreesPath,
+        tools: toolRequests,
+        ...(manualRefreshVersion === undefined
+          ? {}
+          : { refreshVersion: manualRefreshVersion }),
+      })
+      // combinedSummary 存储每个任务的各工具明细和合计。
+      const combinedSummary = {}
+      for (const taskName of taskNames) {
+        // tools 存储当前任务按工具拆分的统计结果。
+        const tools = Object.fromEntries(
+          usageTools.map((toolId) => [
+            toolId,
+            summariesByTool[toolId]?.[taskName] || {
+              sessionCount: 0,
+              usage: {},
+              cost: {},
+            },
+          ])
+        )
+        // combinedUsage 存储当前任务全部工具四类 Token 的合计。
+        const combinedUsage = Object.values(tools).reduce(
+          (total, toolSummary) => ({
+            input: total.input + (toolSummary?.usage?.input || 0),
+            output: total.output + (toolSummary?.usage?.output || 0),
+            cacheWrite:
+              total.cacheWrite + (toolSummary?.usage?.cacheWrite || 0),
+            cacheRead: total.cacheRead + (toolSummary?.usage?.cacheRead || 0),
+          }),
+          { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+        )
+        // combinedCost 存储当前任务全部工具美元与人民币费用合计。
+        const combinedCost = Object.values(tools).reduce(
+          (total, toolSummary) => ({
+            usd: total.usd + (toolSummary?.cost?.usd || 0),
+            cny: total.cny + (toolSummary?.cost?.cny || 0),
+          }),
+          { usd: 0, cny: 0 }
+        )
+        combinedSummary[taskName] = {
+          sessionCount: Object.values(tools).reduce(
+            (total, toolSummary) => total + (toolSummary?.sessionCount || 0),
+            0
+          ),
+          usage: combinedUsage,
+          cost: combinedCost,
+          tools,
+        }
       }
+      return combinedSummary
     }
-    return combinedSummary
-  })
+  )
 
   // 获取可安全删除的 worktree 列表（已合并+无未提交改动）
   ipcMain.handle(IPC.GET_SAFE_TO_REMOVE_WORKTREES, async () => {

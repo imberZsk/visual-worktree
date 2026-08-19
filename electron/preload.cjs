@@ -199,8 +199,8 @@ contextBridge.exposeInMainWorld('api', {
   getClaudeSessionsByTask: (taskName) =>
     ipcRenderer.invoke(IPC.GET_CLAUDE_SESSIONS_BY_TASK, taskName),
   // 获取所有任务的已选 AI 工具用量明细与合计
-  getClaudeTasksSummary: (taskNames) =>
-    ipcRenderer.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, taskNames),
+  getClaudeTasksSummary: (taskNames, options) =>
+    ipcRenderer.invoke(IPC.GET_CLAUDE_TASKS_SUMMARY, taskNames, options),
   // 获取可安全删除的 worktree 列表
   getSafeToRemoveWorktrees: () =>
     ipcRenderer.invoke(IPC.GET_SAFE_TO_REMOVE_WORKTREES),

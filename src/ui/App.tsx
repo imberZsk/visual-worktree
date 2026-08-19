@@ -112,6 +112,8 @@ export default function App() {
   const [worktreeActiveKeys, setWorktreeActiveKeys] = useState([])
   // worktreeKeyword 存储 Worktree 视图按任务名或项目名过滤的搜索词。
   const [worktreeKeyword, setWorktreeKeyword] = useState('')
+  // aiUsageRefreshVersion 记录用户主动刷新 Worktree 后的用量统计版本，用于让同一批任务重新计算价格。
+  const [aiUsageRefreshVersion, setAiUsageRefreshVersion] = useState(0)
   // workspaceNavigation 管理主视图、首次加载、按需扫描和手动刷新。
   const workspaceNavigation = useWorkspaceNavigation({
     projects,
@@ -131,6 +133,10 @@ export default function App() {
     clearKeyword: setKeyword,
     clearWorktreeKeyword: setWorktreeKeyword,
     clearActiveTaskKeys: setWorktreeActiveKeys,
+    // 手动刷新完成后递增版本，避免任务名不变时跳过 AI 用量重新统计。
+    onWorktreesRefreshed: () => {
+      setAiUsageRefreshVersion((previousVersion) => previousVersion + 1)
+    },
     message,
   })
   // activeView 存储当前主视图，供页面组件和其他业务 hook 使用。
@@ -213,6 +219,7 @@ export default function App() {
       tokenPricingByTool: config?.tokenPricingByTool,
     },
     enabled: activeView === 'worktrees',
+    refreshVersion: aiUsageRefreshVersion,
   })
 
   // workflowSteps 当前生效的工作流（需求流程）步骤清单：来自配置，规范化后兜底默认清单。
@@ -287,6 +294,7 @@ export default function App() {
             <>
               <WorktreeToolbar
                 aiUsageTotal={aiUsage.total}
+                aiUsageLoading={aiUsage.loading}
                 aiUsageTools={config?.aiUsageTools ?? ['claude-code']}
                 directCnyDisplay={
                   config?.tokenPricing?.directCnyDisplay === true

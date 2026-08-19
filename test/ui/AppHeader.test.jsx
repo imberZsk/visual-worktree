@@ -84,6 +84,10 @@ describe('AppHeader', () => {
     expect(STYLE_SOURCE).toMatch(
       /\.app-header--select-open\.ant-layout-header[\s\S]*-webkit-app-region:\s*no-drag/
     )
+    expect(COMPONENT_SOURCE).toContain('className="app-header__drag-strip"')
+    expect(STYLE_SOURCE).toMatch(
+      /\.app-header--macos \.app-header__drag-strip[\s\S]*-webkit-app-region:\s*drag/
+    )
     expect(COMPONENT_SOURCE).toContain('onOpenChange={setPathProfileOpen}')
     expect(STYLE_SOURCE).toContain('env(titlebar-area-width, 100vw)')
     expect(STYLE_SOURCE).toMatch(
