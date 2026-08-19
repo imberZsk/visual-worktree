@@ -121,7 +121,6 @@ const DISPLAY_BADGE_DESCRIPTIONS = {
   projectCount: '任务包含的项目数。',
   taskStatus: '任务当前状态。',
   taskLinks: '任务关联的需求链接。',
-  envHealth: '任务环境检查结果。',
   claudeUsage: '任务 Token 与费用。',
 }
 
@@ -175,6 +174,17 @@ const AI_USAGE_TOOL_OPTIONS = [
 const TOKEN_MODEL_OPTIONS_BY_TOOL = {
   'claude-code': [
     {
+      label: 'Claude Opus 5',
+      value: 'claude-opus-5',
+      pricing: {
+        input: 5,
+        output: 25,
+        cacheWrite: 6.25,
+        cacheRead: 0.5,
+        multiplier: 0.4,
+      },
+    },
+    {
       label: 'Claude Opus 4.8',
       value: 'claude-opus-4-8',
       pricing: { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
@@ -182,7 +192,13 @@ const TOKEN_MODEL_OPTIONS_BY_TOOL = {
     {
       label: 'Claude Sonnet 5',
       value: 'claude-sonnet-5',
-      pricing: { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+      pricing: {
+        input: 2,
+        output: 10,
+        cacheWrite: 2.5,
+        cacheRead: 0.2,
+        multiplier: 0.4,
+      },
     },
     {
       label: 'Claude Sonnet 4.6',
@@ -196,8 +212,28 @@ const TOKEN_MODEL_OPTIONS_BY_TOOL = {
     },
   ],
   codex: [
-    { label: 'GPT-5.6 Sol', value: 'gpt-5.6-sol' },
-    { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
+    {
+      label: 'GPT-5.6 Sol',
+      value: 'gpt-5.6-sol',
+      pricing: {
+        input: 5,
+        output: 30,
+        cacheWrite: 0,
+        cacheRead: 0.5,
+        multiplier: 0.3,
+      },
+    },
+    {
+      label: 'GPT-5.6 Terra',
+      value: 'gpt-5.6-terra',
+      pricing: {
+        input: 2,
+        output: 12,
+        cacheWrite: 0,
+        cacheRead: 0.2,
+        multiplier: 0.3,
+      },
+    },
     { label: 'GPT-5.6 Luna', value: 'gpt-5.6-luna' },
     { label: 'GPT-5.5', value: 'gpt-5.5' },
   ],
@@ -685,7 +721,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       // WHY：antd Tabs 默认懒渲染，未进入「流程/工作文档/CI/CD」页时 validateFields 只返回已挂载字段，
       // 若直接保存会把这些 Form.List 当空数组写盘，导致重启后流程步骤等配置丢失。
       const values = form.getFieldsValue(true)
-      // 拆出 Form.List 字段单独处理：路径组合、cicdLinksArr 转对象、workflowSteps / workDocumentTemplates 规范化；envCheckRoles 不再暴露在 UI 中
+      // 拆出 Form.List 字段单独处理：路径组合、cicdLinksArr 转对象、workflowSteps / workDocumentTemplates 规范化。
       const {
         pathProfiles: rawPathProfiles = [],
         activePathProfileId: rawActivePathProfileId,
@@ -748,10 +784,6 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         rawKanbanSettings,
         taskStatuses
       )
-      // envCheckRoles 为历史兼容字段：新 UI 改为自动识别前后端，不再要求用户维护角色映射
-      const envCheckRoles = Array.isArray(config?.envCheckRoles)
-        ? config.envCheckRoles
-        : []
       // aiSettingsResult 存储加密保存并同步后端后的安全状态，不包含 API Key。
       const aiSettingsResult = await api.saveAiModelSettings({
         model: aiModel,
@@ -779,7 +811,6 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         taskStatuses,
         taskTags,
         kanbanSettings,
-        envCheckRoles,
       })
       // AI 后端是正式安装包之外的可选服务；离线时本地与普通设置均已保存，只提示同步状态而不判定失败。
       if (aiSettingsResult.warning) message.warning(aiSettingsResult.warning)

@@ -615,4 +615,40 @@ describe('config', () => {
       models: [],
     })
   })
+
+  it('保存后保留任务绑定的 API key 专属模型价格', () => {
+    // dir 存储任务级价格覆盖持久化测试的独立目录。
+    const dir = join(ctx.root, 'task-pricing-overrides-config')
+    // taskPricingOverrides 存储同模型不同 API key 的任务专属价格。
+    const taskPricingOverrides = {
+      测试价格3: {
+        models: [
+          {
+            model: 'claude-sonnet-5',
+            input: 2,
+            output: 10,
+            cacheWrite: 2.5,
+            cacheRead: 0.2,
+            multiplier: 0.4,
+          },
+        ],
+      },
+    }
+
+    saveConfig(
+      {
+        tokenPricingByTool: {
+          'claude-code': {
+            enabled: true,
+            taskPricingOverrides,
+          },
+        },
+      },
+      dir
+    )
+
+    expect(
+      loadConfig(dir).tokenPricingByTool['claude-code'].taskPricingOverrides
+    ).toEqual(taskPricingOverrides)
+  })
 })

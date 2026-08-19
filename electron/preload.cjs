@@ -56,9 +56,6 @@ const IPC = {
   GET_CLAUDE_SESSIONS_BY_TASK: 'get-claude-sessions-by-task',
   GET_CLAUDE_TASKS_SUMMARY: 'get-claude-tasks-summary',
   GET_SAFE_TO_REMOVE_WORKTREES: 'get-safe-to-remove-worktrees',
-  CHECK_ENV_HEALTH: 'check-env-health',
-  LOAD_TASK_ENV_HEALTH: 'load-task-env-health',
-  SAVE_TASK_ENV_HEALTH: 'save-task-env-health',
   LOAD_TASK_BLOCKERS: 'load-task-blockers',
   SAVE_TASK_BLOCKERS: 'save-task-blockers',
   LOAD_IDEA_WORKFLOWS: 'load-idea-workflows',
@@ -207,13 +204,6 @@ contextBridge.exposeInMainWorld('api', {
   // 获取可安全删除的 worktree 列表
   getSafeToRemoveWorktrees: () =>
     ipcRenderer.invoke(IPC.GET_SAFE_TO_REMOVE_WORKTREES),
-  // 对任务目录执行环境健康检查（依赖/端口/服务/Git）
-  checkEnvHealth: (taskDir) =>
-    ipcRenderer.invoke(IPC.CHECK_ENV_HEALTH, taskDir),
-  // 读取任务环境检查缓存（~/.visualWorktree/task-env-health.json）
-  loadTaskEnvHealth: () => ipcRenderer.invoke(IPC.LOAD_TASK_ENV_HEALTH),
-  // 保存任务环境检查缓存（~/.visualWorktree/task-env-health.json）
-  saveTaskEnvHealth: (map) => ipcRenderer.invoke(IPC.SAVE_TASK_ENV_HEALTH, map),
   // 读取任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）
   loadTaskBlockers: () => ipcRenderer.invoke(IPC.LOAD_TASK_BLOCKERS),
   // 保存任务备注映射（沿用 ~/.visualWorktree/task-blockers.json 兼容历史数据）

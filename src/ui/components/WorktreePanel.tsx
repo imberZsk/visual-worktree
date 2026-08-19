@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   App as AntApp,
   Collapse,
@@ -125,79 +125,6 @@ function TaskStatusControl({ taskName, statusKey, taskStatuses, onChange }) {
           {meta.label} <DownOutlined className="task-status-chevron" />
         </Tag>
       </Dropdown>
-    </span>
-  )
-}
-
-/**
- * 环境检查状态标签：展示任务级自动检查状态，点击打开详情或触发检查。
- * @param {object} props - 组件属性
- * @param {object} props.task - 任务分组项（含 task/path）
- * @param {{status?:string, issueCount?:number, error?:string}} [props.entry] - 任务环境检查状态缓存；status 支持 ok/warning/failed/checking
- * @param {(task:object)=>void} props.onClick - 点击状态标签时的回调
- * @returns {JSX.Element} 状态标签
- */
-function EnvHealthStatusTag({ task, entry, onClick }) {
-  // status 当前任务环境状态：未检查时回退为 idle
-  const status = entry?.status || 'idle'
-  // issueCount 当前任务的问题数量，warning/failed 态展示用
-  const issueCount =
-    entry?.issueCount || entry?.result?.summary?.issueCount || 0
-  // label 状态标签文案：只保留用户需要的一眼判断信息
-  const label =
-    status === 'checking'
-      ? '环境检查中'
-      : status === 'ok'
-        ? '环境正常'
-        : status === 'warning' || status === 'failed'
-          ? `${issueCount || 1} 个环境问题`
-          : '未检查'
-  // color 映射到 antd Tag 色值：成功绿色，warning 黄色，失败红色，检查中/未检查低噪音。
-  const color =
-    status === 'ok'
-      ? 'success'
-      : status === 'warning'
-        ? 'warning'
-        : status === 'failed'
-          ? 'error'
-          : status === 'checking'
-            ? 'processing'
-            : 'default'
-  // icon 根据状态展示轻量图标；检查中用 Spin 传达自动运行中
-  const icon =
-    status === 'checking' ? (
-      <Spin size="small" />
-    ) : status === 'ok' ? (
-      <CheckCircleOutlined />
-    ) : status === 'warning' || status === 'failed' ? (
-      <WarningOutlined />
-    ) : null
-  // tooltipText 鼠标悬停文案：异常时优先展示核心摘要或错误信息
-  const tooltipText =
-    status === 'warning' || status === 'failed'
-      ? entry?.error || entry?.result?.summary?.message || '点击查看环境问题'
-      : status === 'checking'
-        ? '正在自动检查环境'
-        : status === 'ok'
-          ? '点击查看环境检查详情'
-          : '点击执行环境检查'
-
-  return (
-    <span
-      onClick={(e) => e.stopPropagation()}
-      style={{ display: 'inline-flex' }}
-    >
-      <Tooltip title={tooltipText}>
-        <Tag
-          className="worktree-title-tag env-health-status-tag"
-          color={color}
-          onClick={() => onClick?.(task)}
-          style={{ cursor: 'pointer', minWidth: 92, whiteSpace: 'nowrap' }}
-        >
-          {icon}
-          <span>{label}</span>
-        </Tag>
-      </Tooltip>
     </span>
   )
 }
@@ -861,9 +788,9 @@ function wtStatusTags(wt) {
  * @param {(taskName:string, links:Array<{name:string,url:string}>|string[]|string)=>void} props.onTaskLinkChange - 设置/清除任务链接
  * @param {(url:string)=>void} props.onOpenUrl - 在浏览器中打开 URL
  * @param {(task:object)=>void} props.onAddWorktree - 为某任务追加创建 worktree
- * @param {Record<string,object>} props.envHealthMap - 任务名 → 环境检查状态 的映射
  * @param {Record<string,string>} props.cicdLinks - 项目名 → CI/CD 流水线 URL 的映射（从全局配置读取）
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
+ * @param {boolean} props.aiUsageLoading - 批量 AI 用量是否仍在计算
  * @param {Array<'claude-code'|'codex'>} props.aiUsageTools - 当前参与 Token 统计的 AI 工具
  * @param {boolean} props.directCnyDisplay - 是否按人民币 1:1 单币种展示费用
  * @param {Array<{key:string,label:string,type:string}>} props.workflowSteps - 工作流（需求流程）步骤清单（从全局配置读取）
@@ -905,10 +832,9 @@ export default function WorktreePanel({
   onTaskLinkChange,
   onOpenUrl,
   onAddWorktree,
-  onEnvCheck,
-  envHealthMap = {},
   cicdLinks = {},
   claudeUsageMap = {},
+  aiUsageLoading = false,
   aiUsageTools = ['claude-code'],
   directCnyDisplay = false,
   workflowSteps = [],
@@ -932,9 +858,15 @@ export default function WorktreePanel({
   // 取主题 token，替换写死颜色以适配明暗主题
   const { token } = theme.useToken()
   // taskVisibility 存储任务隐藏/置顶偏好，供标题与按钮判断当前状态。
-  const taskVisibility = { hidden: hiddenTaskKeys, pinned: pinnedTaskKeys }
+  const taskVisibility = useMemo(
+    () => ({ hidden: hiddenTaskKeys, pinned: pinnedTaskKeys }),
+    [hiddenTaskKeys, pinnedTaskKeys]
+  )
   // titleBadges 存储任务标题旁徽标展示开关，缺失字段默认展示。
-  const titleBadges = normalizeTaskTitleBadges(taskTitleBadges)
+  const titleBadges = useMemo(
+    () => normalizeTaskTitleBadges(taskTitleBadges),
+    [taskTitleBadges]
+  )
   // linkPopoverTask 当前打开链接配置气泡的任务名；null 表示无
   const [linkPopoverTask, setLinkPopoverTask] = useState(null)
   // linkInputVal 链接配置气泡内的输入框草稿数组（多条 Jira/飞书需求/工单链接，含展示名称和 URL）
@@ -944,7 +876,7 @@ export default function WorktreePanel({
    * 徽标溢出时把普通鼠标纵向滚轮转换为横向滚动；未溢出或触控板已提供横向增量时保持原生行为。
    * @param {React.WheelEvent<HTMLDivElement>} event - 徽标滚动区域的滚轮事件
    */
-  const handleBadgeWheel = (event) => {
+  const handleBadgeWheel = useCallback((event) => {
     // scrollContainer 存储当前任务的徽标横向滚动节点。
     const scrollContainer = event.currentTarget
     // hasHorizontalOverflow 标记徽标内容是否超出当前动态分配到的宽度。
@@ -956,34 +888,567 @@ export default function WorktreePanel({
     scrollContainer.scrollLeft += event.deltaY
     event.preventDefault()
     event.stopPropagation()
-  }
+  }, [])
 
   /**
    * 保存链接并关闭气泡
    * @param {string} taskName - 任务名
    */
-  const handleSaveLink = (taskName) => {
-    // links 存储从输入框草稿中清洗出的链接条目数组，传给上层统一持久化。
-    const links = normalizeTaskLinkItems(linkInputVal)
-    onTaskLinkChange?.(taskName, links)
-    setLinkPopoverTask(null)
-  }
+  const handleSaveLink = useCallback(
+    (taskName) => {
+      // links 存储从输入框草稿中清洗出的链接条目数组，传给上层统一持久化。
+      const links = normalizeTaskLinkItems(linkInputVal)
+      onTaskLinkChange?.(taskName, links)
+      setLinkPopoverTask(null)
+    },
+    [linkInputVal, onTaskLinkChange]
+  )
 
-  /**
-   * 判断任务是否隐藏。
-   * @param {string} taskName - 任务名
-   * @returns {boolean} 是否隐藏
-   */
-  const isTaskHidden = (taskName) =>
-    hasVisibilityKey(taskVisibility, 'hidden', taskName)
+  // 折叠面板项：每个任务一项
+  // items 缓存所有任务的折叠面板节点；展开状态变化时复用已有节点，避免同步重建整棵任务树造成首击卡顿。
+  const items = useMemo(
+    () =>
+      (tasks || []).map((t) => {
+        // taskHidden 标记当前任务是否已被用户隐藏；showHiddenTasks 打开时仍渲染用于恢复。
+        const taskHidden = hasVisibilityKey(taskVisibility, 'hidden', t.task)
+        // taskPinned 标记当前任务是否已置顶，用于标题标签和按钮图标。
+        const taskPinned = hasVisibilityKey(taskVisibility, 'pinned', t.task)
+        // taskHiding 标记当前任务是否正在播放隐藏退出动画。
+        const taskHiding = hidingTaskKeys.includes(t.task)
+        // 该任务下是否有失效 worktree，用于在标题提示
+        const hasPrunable = t.worktrees.some((w) => w.prunable || w.missing)
+        // taskLinks 该任务绑定的 Jira/飞书需求/工单链接条目列表（兼容旧版单字符串和 URL 数组）
+        const taskLinks = normalizeTaskLinkItems(taskLinkMap[t.task])
+        // taskGitlabEntries 存储当前任务下所有可打开的 GitLab 项目入口，任务级按钮使用它直开或下拉选择。
+        const taskGitlabEntries = getTaskGitlabEntries(t)
+        // hasTaskLinks 标记该任务是否已绑定至少一条需求链接
+        const hasTaskLinks = taskLinks.length > 0
+        // projectCount 存储当前任务覆盖的 worktree 项目数量，用于任务标题第一枚信息徽标
+        const projectCount = t.worktrees.length
+        // taskWorkflowSteps 存储当前任务合并通用与各项目私有配置后的实际流程步骤。
+        const taskWorkflowSteps = buildTaskWorkflowSteps(
+          workflowSteps,
+          projectWorkflowSteps,
+          t.worktrees
+        )
+        // projectCountTag 存储空心方形项目数徽标；替代 Badge 圆点，让它与状态/链接/环境等标签同级展示
+        const projectCountTag = (
+          <Tooltip title={`${projectCount} 个项目`}>
+            <Tag
+              className="worktree-title-tag"
+              aria-label={`项目数量 ${projectCount}`}
+              style={{
+                marginInlineEnd: 0,
+                background: 'transparent',
+                border: `1px solid ${token.colorPrimary}`,
+                borderRadius: 4,
+                color: token.colorPrimary,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 22,
+                minWidth: 40,
+                padding: '0 6px',
+                lineHeight: '20px',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {projectCount} 项目
+            </Tag>
+          </Tooltip>
+        )
+        // taskLinkTags 存储任务标题旁逐条展示的需求链接标签；每个标签可直接打开对应链接。
+        const taskLinkTags = taskLinks.map((item, index) => (
+          <Tooltip
+            title={item.name ? `${item.name}：${item.url}` : item.url}
+            key={`${item.url}-${index}`}
+          >
+            <Tag
+              className="worktree-title-tag task-link-title-tag"
+              color="processing"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenUrl?.(item.url)
+              }}
+              style={{ cursor: 'pointer', maxWidth: 220 }}
+            >
+              <LinkOutlined style={{ flexShrink: 0 }} />
+              <SingleLineText
+                text={item.name || item.url}
+                inline
+                style={{ maxWidth: 180 }}
+              />
+            </Tag>
+          </Tooltip>
+        ))
 
-  /**
-   * 判断任务是否置顶。
-   * @param {string} taskName - 任务名
-   * @returns {boolean} 是否置顶
-   */
-  const isTaskPinned = (taskName) =>
-    hasVisibilityKey(taskVisibility, 'pinned', taskName)
+        // 链接配置气泡内容：输入框 + 操作按钮
+        const linkPopoverContent = (
+          <Space orientation="vertical" size={4}>
+            <TaskLinksEditor
+              value={linkInputVal}
+              onChange={setLinkInputVal}
+              width={340}
+            />
+            <Space size={4}>
+              <Button size="small" onClick={() => handleSaveLink(t.task)}>
+                保存
+              </Button>
+              {hasTaskLinks && (
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => {
+                    onTaskLinkChange?.(t.task, [])
+                    setLinkPopoverTask(null)
+                  }}
+                >
+                  清除
+                </Button>
+              )}
+            </Space>
+          </Space>
+        )
+
+        /**
+         * 打开当前任务的链接管理气泡，并用现有链接初始化输入草稿。
+         */
+        const openTaskLinkPopover = () => {
+          setLinkInputVal(
+            taskLinks.length > 0 ? taskLinks : [{ name: '', url: '' }]
+          )
+          setLinkPopoverTask(t.task)
+        }
+
+        return {
+          key: t.task,
+          className: taskHiding ? 'worktree-task-hiding' : undefined,
+          label: (
+            <div className="worktree-task-title">
+              <SingleLineText
+                text={t.task}
+                inline
+                className="worktree-task-name"
+                style={{ maxWidth: 360, fontWeight: 600 }}
+              />
+              <div
+                className="worktree-task-badges-scroll"
+                onWheel={handleBadgeWheel}
+              >
+                {taskPinned && (
+                  <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+                    置顶
+                  </Tag>
+                )}
+                {taskHidden && (
+                  <Tag color="default" style={{ marginInlineEnd: 0 }}>
+                    已隐藏
+                  </Tag>
+                )}
+                {/* 徽标组独立横向滚动，任务名和右侧操作始终保持在固定区域。 */}
+                {titleBadges.taskTag && (
+                  <TaskTagControl
+                    taskName={t.task}
+                    tagKey={taskTagMap[t.task]}
+                    taskTags={taskTags}
+                    onChange={onTaskTagChange}
+                  />
+                )}
+                {titleBadges.projectCount && projectCountTag}
+                {titleBadges.taskStatus && (
+                  <TaskStatusControl
+                    taskName={t.task}
+                    statusKey={taskStatusMap[t.task]}
+                    taskStatuses={taskStatuses}
+                    onChange={onTaskStatusChange}
+                  />
+                )}
+                {titleBadges.taskLinks && hasTaskLinks && taskLinkTags}
+                {titleBadges.claudeUsage && (
+                  <span
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ display: 'inline-flex' }}
+                  >
+                    <ClaudeUsageTag
+                      taskName={t.task}
+                      summary={claudeUsageMap[t.task]}
+                      summaryLoading={aiUsageLoading}
+                      fetchWhenSummaryMissing={false}
+                      usageTools={aiUsageTools}
+                      directCnyDisplay={directCnyDisplay}
+                    />
+                  </span>
+                )}
+                {hasPrunable && (
+                  <Tooltip title="包含失效 worktree，可清理">
+                    <WarningOutlined style={{ color: '#faad14' }} />
+                  </Tooltip>
+                )}
+              </div>
+            </div>
+          ),
+          extra: (
+            <Space size={0}>
+              {/* 需求流程入口：聚合该任务的研发流程步骤，点击展开后逐步勾选/执行 */}
+              <WorkflowControl
+                taskName={t.task}
+                task={t}
+                steps={taskWorkflowSteps}
+                projectWorkflowSteps={projectWorkflowSteps}
+                onSaveProjectWorkflowSteps={onSaveProjectWorkflowSteps}
+                workflowMap={workflowMap}
+                onToggleStep={onToggleStep}
+                onRunStepAction={onRunStepAction}
+                onRunWorkflowSteps={onRunWorkflowSteps}
+                runningSteps={runningSteps}
+                lastStepOutputs={lastStepOutputs}
+                onViewLastOutput={onViewLastOutput}
+                onViewCurrentOutput={onViewCurrentOutput}
+              />
+              {/* 置顶任务：只影响展示排序，不影响任务内容和 Git 操作 */}
+              <Tooltip title={taskPinned ? '取消置顶任务' : '置顶任务'}>
+                <Button
+                  size="small"
+                  type="link"
+                  aria-label={`${taskPinned ? '取消置顶任务' : '置顶任务'} ${t.task}`}
+                  icon={taskPinned ? <PushpinFilled /> : <PushpinOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTaskPinnedChange?.(t.task, !taskPinned)
+                  }}
+                />
+              </Tooltip>
+              {/* 隐藏任务：默认从任务/看板/统计中排除；图标表达当前可见状态，tooltip/aria 表达点击动作 */}
+              <Tooltip title={taskHidden ? '恢复显示任务' : '隐藏任务'}>
+                <Button
+                  size="small"
+                  type="link"
+                  aria-label={`${taskHidden ? '恢复显示任务' : '隐藏任务'} ${t.task}`}
+                  icon={taskHidden ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                  disabled={taskHiding}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTaskHiddenChange?.(t.task, !taskHidden)
+                  }}
+                />
+              </Tooltip>
+              {/* 为此任务追加创建 worktree */}
+              <Tooltip title="为此任务添加项目 Worktree">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<PlusOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddWorktree?.(t)
+                  }}
+                />
+              </Tooltip>
+              {/* 链接配置：气泡内管理 Jira/飞书需求/工单链接名称和 URL；已绑定时图标高亮 */}
+              {/* stopPropagation 必须在 Popover 外层：rc-trigger 会覆盖子元素 onClick，
+              内层 Button 的 stopPropagation 会被丢弃，导致点击仍触发面板折叠 */}
+              <span
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: 'inline-flex' }}
+              >
+                <Popover
+                  open={linkPopoverTask === t.task}
+                  onOpenChange={(v) => {
+                    if (v) openTaskLinkPopover()
+                    else setLinkPopoverTask(null)
+                  }}
+                  content={linkPopoverContent}
+                  title="绑定需求链接"
+                  trigger="click"
+                  placement="bottomRight"
+                >
+                  <Tooltip
+                    title={
+                      hasTaskLinks
+                        ? '已绑定链接，点击管理'
+                        : '绑定 Jira/飞书需求/工单链接'
+                    }
+                  >
+                    <Button
+                      size="small"
+                      type="link"
+                      icon={
+                        <LinkOutlined
+                          style={{
+                            color: hasTaskLinks
+                              ? token.colorPrimary
+                              : undefined,
+                          }}
+                        />
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openTaskLinkPopover()
+                      }}
+                    />
+                  </Tooltip>
+                </Popover>
+              </span>
+              {/* 在 VSCode 中打开任务目录 */}
+              <Tooltip title="在 VSCode 中打开">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<VscodeIcon />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenVscode(t.path)
+                  }}
+                />
+              </Tooltip>
+              {/* GitLab 项目入口：放在 VSCode 后面；单项目直开，多项目由 TaskGitlabButton 下拉选择。 */}
+              <TaskGitlabButton
+                taskName={t.task}
+                entries={taskGitlabEntries}
+                onOpenUrl={onOpenUrl}
+              />
+              {/* 在 Finder 中打开任务目录 */}
+              <Tooltip title="在 Finder 中打开">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<FolderOpenOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenFinder(t.path)
+                  }}
+                />
+              </Tooltip>
+              {/* 复制任务目录绝对路径：stopPropagation 防止点击触发面板折叠 */}
+              <Tooltip title="复制路径">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<CopyOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onCopyPath(t.path)
+                  }}
+                />
+              </Tooltip>
+              {/* 在终端中打开任务目录：stopPropagation 防止点击触发面板折叠 */}
+              <Tooltip title="在终端中打开">
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<ConsoleSqlOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenTerminal(t.path)
+                  }}
+                />
+              </Tooltip>
+              {/* 删除整个任务：一键删除该任务目录下所有 worktree（二次确认） */}
+              <Tooltip title="删除任务">
+                <Button
+                  size="small"
+                  type="link"
+                  danger
+                  title="删除任务"
+                  aria-label="删除任务"
+                  icon={<DeleteOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemoveTask(t)
+                  }}
+                />
+              </Tooltip>
+            </Space>
+          ),
+          children: (
+            <div>
+              {/* 任务目录已创建但尚未添加项目时，给内容区一个明确入口，复用任务栏加号的追加项目流程。 */}
+              {t.worktrees.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="还没有项目 worktree"
+                  style={{ margin: '24px 0' }}
+                >
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => onAddWorktree?.(t)}
+                  >
+                    添加项目
+                  </Button>
+                </Empty>
+              ) : (
+                t.worktrees.map((wt) => (
+                  <div
+                    key={wt.path}
+                    className="worktree-project-row"
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 0',
+                      borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    }}
+                  >
+                    <Space
+                      orientation="vertical"
+                      size={0}
+                      style={{ minWidth: 0, flex: 1 }}
+                    >
+                      <Space wrap size={4}>
+                        <Tag
+                          color="geekblue"
+                          style={{ maxWidth: 220, marginInlineEnd: 0 }}
+                        >
+                          <SingleLineText
+                            text={wt.project}
+                            inline
+                            style={{ maxWidth: 200 }}
+                          />
+                        </Tag>
+                        <SingleLineText
+                          text={wt.branch || '(detached)'}
+                          as="code"
+                          inline
+                          style={{ maxWidth: 360, fontSize: 12 }}
+                        />
+                        {wtStatusTags(wt)}
+                      </Space>
+                      <SingleLineText
+                        text={wt.path}
+                        style={{
+                          color: token.colorTextSecondary,
+                          fontSize: 12,
+                        }}
+                        tooltipPlacement="bottom"
+                      />
+                    </Space>
+                    <Space size={4}>
+                      {/* 失效 worktree 提供清理按钮 */}
+                      {wt.prunable || wt.missing ? (
+                        <Button size="small" onClick={() => onPrune(wt)}>
+                          清理
+                        </Button>
+                      ) : (
+                        <>
+                          {/* CI/CD 流水线：当该项目在配置中有对应 URL 时才显示 */}
+                          {cicdLinks[wt.project] && (
+                            <Tooltip title="打开 CI/CD 流水线">
+                              <Button
+                                size="small"
+                                icon={<RocketOutlined />}
+                                onClick={() =>
+                                  onOpenUrl?.(cicdLinks[wt.project])
+                                }
+                              />
+                            </Tooltip>
+                          )}
+                          <Tooltip title="在 VSCode 中打开">
+                            <Button
+                              size="small"
+                              icon={<VscodeIcon />}
+                              onClick={() => onOpenVscode(wt.path)}
+                            />
+                          </Tooltip>
+                          {/* GitLab 项目入口：由核心层根据 origin remote 自动推导，放在 VSCode 后面方便连续操作。 */}
+                          {wt.gitlabUrl && (
+                            <Tooltip title="打开 GitLab">
+                              <Button
+                                size="small"
+                                aria-label={`打开 GitLab ${wt.project}`}
+                                icon={<GitlabOutlined />}
+                                onClick={() => onOpenUrl?.(wt.gitlabUrl)}
+                              />
+                            </Tooltip>
+                          )}
+                          <Tooltip title="在 Finder 中打开">
+                            <Button
+                              size="small"
+                              icon={<FolderOpenOutlined />}
+                              onClick={() => onOpenFinder(wt.path)}
+                            />
+                          </Tooltip>
+                          <Tooltip title="复制路径">
+                            <Button
+                              size="small"
+                              icon={<CopyOutlined />}
+                              onClick={() => onCopyPath(wt.path)}
+                            />
+                          </Tooltip>
+                          <Tooltip title="在终端中打开">
+                            <Button
+                              size="small"
+                              icon={<ConsoleSqlOutlined />}
+                              onClick={() => onOpenTerminal(wt.path)}
+                            />
+                          </Tooltip>
+                          <Tooltip title="删除此 worktree">
+                            <Button
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => onRemove(wt)}
+                            />
+                          </Tooltip>
+                        </>
+                      )}
+                    </Space>
+                  </div>
+                ))
+              )}
+            </div>
+          ),
+        }
+      }),
+    [
+      tasks,
+      hidingTaskKeys,
+      taskVisibility,
+      taskLinkMap,
+      workflowSteps,
+      projectWorkflowSteps,
+      token,
+      linkInputVal,
+      linkPopoverTask,
+      taskStatusMap,
+      taskStatuses,
+      onTaskStatusChange,
+      taskTagMap,
+      taskTags,
+      onTaskTagChange,
+      onTaskLinkChange,
+      onOpenUrl,
+      onAddWorktree,
+      cicdLinks,
+      claudeUsageMap,
+      aiUsageLoading,
+      aiUsageTools,
+      directCnyDisplay,
+      workflowMap,
+      onTaskHiddenChange,
+      onTaskPinnedChange,
+      onToggleStep,
+      onRunStepAction,
+      onRunWorkflowSteps,
+      onOpenFinder,
+      onOpenVscode,
+      onOpenTerminal,
+      onCopyPath,
+      onRemove,
+      onRemoveTask,
+      onPrune,
+      onSaveProjectWorkflowSteps,
+      runningSteps,
+      lastStepOutputs,
+      onViewLastOutput,
+      onViewCurrentOutput,
+      titleBadges,
+      handleBadgeWheel,
+      handleSaveLink,
+    ]
+  )
 
   // 无数据时不渲染 Collapse（空 Collapse 会留一条灰色边框线）：
   // 三态（loading / empty / 有数据）共用同一 minHeight 外层容器，避免加载态→空态→数据态之间的高度跳变（CLS）
@@ -1002,500 +1467,6 @@ export default function WorktreePanel({
       </div>
     )
   }
-
-  // 折叠面板项：每个任务一项
-  const items = (tasks || []).map((t) => {
-    // taskHidden 标记当前任务是否已被用户隐藏；showHiddenTasks 打开时仍渲染用于恢复。
-    const taskHidden = isTaskHidden(t.task)
-    // taskPinned 标记当前任务是否已置顶，用于标题标签和按钮图标。
-    const taskPinned = isTaskPinned(t.task)
-    // taskHiding 标记当前任务是否正在播放隐藏退出动画。
-    const taskHiding = hidingTaskKeys.includes(t.task)
-    // 该任务下是否有失效 worktree，用于在标题提示
-    const hasPrunable = t.worktrees.some((w) => w.prunable || w.missing)
-    // taskLinks 该任务绑定的 Jira/飞书需求/工单链接条目列表（兼容旧版单字符串和 URL 数组）
-    const taskLinks = normalizeTaskLinkItems(taskLinkMap[t.task])
-    // taskGitlabEntries 存储当前任务下所有可打开的 GitLab 项目入口，任务级按钮使用它直开或下拉选择。
-    const taskGitlabEntries = getTaskGitlabEntries(t)
-    // hasTaskLinks 标记该任务是否已绑定至少一条需求链接
-    const hasTaskLinks = taskLinks.length > 0
-    // projectCount 存储当前任务覆盖的 worktree 项目数量，用于任务标题第一枚信息徽标
-    const projectCount = t.worktrees.length
-    // taskWorkflowSteps 存储当前任务合并通用与各项目私有配置后的实际流程步骤。
-    const taskWorkflowSteps = buildTaskWorkflowSteps(
-      workflowSteps,
-      projectWorkflowSteps,
-      t.worktrees
-    )
-    // projectCountTag 存储空心方形项目数徽标；替代 Badge 圆点，让它与状态/链接/环境等标签同级展示
-    const projectCountTag = (
-      <Tooltip title={`${projectCount} 个项目`}>
-        <Tag
-          className="worktree-title-tag"
-          aria-label={`项目数量 ${projectCount}`}
-          style={{
-            marginInlineEnd: 0,
-            background: 'transparent',
-            border: `1px solid ${token.colorPrimary}`,
-            borderRadius: 4,
-            color: token.colorPrimary,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 22,
-            minWidth: 40,
-            padding: '0 6px',
-            lineHeight: '20px',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {projectCount} 项目
-        </Tag>
-      </Tooltip>
-    )
-    // taskLinkTags 存储任务标题旁逐条展示的需求链接标签；每个标签可直接打开对应链接。
-    const taskLinkTags = taskLinks.map((item, index) => (
-      <Tooltip
-        title={item.name ? `${item.name}：${item.url}` : item.url}
-        key={`${item.url}-${index}`}
-      >
-        <Tag
-          className="worktree-title-tag task-link-title-tag"
-          color="processing"
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenUrl?.(item.url)
-          }}
-          style={{ cursor: 'pointer', maxWidth: 220 }}
-        >
-          <LinkOutlined style={{ flexShrink: 0 }} />
-          <SingleLineText
-            text={item.name || item.url}
-            inline
-            style={{ maxWidth: 180 }}
-          />
-        </Tag>
-      </Tooltip>
-    ))
-
-    // 链接配置气泡内容：输入框 + 操作按钮
-    const linkPopoverContent = (
-      <Space orientation="vertical" size={4}>
-        <TaskLinksEditor
-          value={linkInputVal}
-          onChange={setLinkInputVal}
-          width={340}
-        />
-        <Space size={4}>
-          <Button size="small" onClick={() => handleSaveLink(t.task)}>
-            保存
-          </Button>
-          {hasTaskLinks && (
-            <Button
-              size="small"
-              danger
-              onClick={() => {
-                onTaskLinkChange?.(t.task, [])
-                setLinkPopoverTask(null)
-              }}
-            >
-              清除
-            </Button>
-          )}
-        </Space>
-      </Space>
-    )
-
-    /**
-     * 打开当前任务的链接管理气泡，并用现有链接初始化输入草稿。
-     */
-    const openTaskLinkPopover = () => {
-      setLinkInputVal(
-        taskLinks.length > 0 ? taskLinks : [{ name: '', url: '' }]
-      )
-      setLinkPopoverTask(t.task)
-    }
-
-    return {
-      key: t.task,
-      className: taskHiding ? 'worktree-task-hiding' : undefined,
-      label: (
-        <div className="worktree-task-title">
-          <SingleLineText
-            text={t.task}
-            inline
-            className="worktree-task-name"
-            style={{ maxWidth: 360, fontWeight: 600 }}
-          />
-          <div
-            className="worktree-task-badges-scroll"
-            onWheel={handleBadgeWheel}
-          >
-            {taskPinned && (
-              <Tag color="blue" style={{ marginInlineEnd: 0 }}>
-                置顶
-              </Tag>
-            )}
-            {taskHidden && (
-              <Tag color="default" style={{ marginInlineEnd: 0 }}>
-                已隐藏
-              </Tag>
-            )}
-            {/* 徽标组独立横向滚动，任务名和右侧操作始终保持在固定区域。 */}
-            {titleBadges.taskTag && (
-              <TaskTagControl
-                taskName={t.task}
-                tagKey={taskTagMap[t.task]}
-                taskTags={taskTags}
-                onChange={onTaskTagChange}
-              />
-            )}
-            {titleBadges.projectCount && projectCountTag}
-            {titleBadges.taskStatus && (
-              <TaskStatusControl
-                taskName={t.task}
-                statusKey={taskStatusMap[t.task]}
-                taskStatuses={taskStatuses}
-                onChange={onTaskStatusChange}
-              />
-            )}
-            {titleBadges.taskLinks && hasTaskLinks && taskLinkTags}
-            {titleBadges.envHealth && onEnvCheck && (
-              <EnvHealthStatusTag
-                task={t}
-                entry={envHealthMap[t.task]}
-                onClick={onEnvCheck}
-              />
-            )}
-            {titleBadges.claudeUsage && (
-              <span
-                onClick={(e) => e.stopPropagation()}
-                style={{ display: 'inline-flex' }}
-              >
-                <ClaudeUsageTag
-                  taskName={t.task}
-                  summary={claudeUsageMap[t.task]}
-                  usageTools={aiUsageTools}
-                  directCnyDisplay={directCnyDisplay}
-                />
-              </span>
-            )}
-            {hasPrunable && (
-              <Tooltip title="包含失效 worktree，可清理">
-                <WarningOutlined style={{ color: '#faad14' }} />
-              </Tooltip>
-            )}
-          </div>
-        </div>
-      ),
-      extra: (
-        <Space size={0}>
-          {/* 需求流程入口：聚合该任务的研发流程步骤，点击展开后逐步勾选/执行 */}
-          <WorkflowControl
-            taskName={t.task}
-            task={t}
-            steps={taskWorkflowSteps}
-            projectWorkflowSteps={projectWorkflowSteps}
-            onSaveProjectWorkflowSteps={onSaveProjectWorkflowSteps}
-            workflowMap={workflowMap}
-            onToggleStep={onToggleStep}
-            onRunStepAction={onRunStepAction}
-            onRunWorkflowSteps={onRunWorkflowSteps}
-            runningSteps={runningSteps}
-            lastStepOutputs={lastStepOutputs}
-            onViewLastOutput={onViewLastOutput}
-            onViewCurrentOutput={onViewCurrentOutput}
-          />
-          {/* 置顶任务：只影响展示排序，不影响任务内容和 Git 操作 */}
-          <Tooltip title={taskPinned ? '取消置顶任务' : '置顶任务'}>
-            <Button
-              size="small"
-              type="link"
-              aria-label={`${taskPinned ? '取消置顶任务' : '置顶任务'} ${t.task}`}
-              icon={taskPinned ? <PushpinFilled /> : <PushpinOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onTaskPinnedChange?.(t.task, !taskPinned)
-              }}
-            />
-          </Tooltip>
-          {/* 隐藏任务：默认从任务/看板/统计中排除；图标表达当前可见状态，tooltip/aria 表达点击动作 */}
-          <Tooltip title={taskHidden ? '恢复显示任务' : '隐藏任务'}>
-            <Button
-              size="small"
-              type="link"
-              aria-label={`${taskHidden ? '恢复显示任务' : '隐藏任务'} ${t.task}`}
-              icon={taskHidden ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-              disabled={taskHiding}
-              onClick={(e) => {
-                e.stopPropagation()
-                onTaskHiddenChange?.(t.task, !taskHidden)
-              }}
-            />
-          </Tooltip>
-          {/* 为此任务追加创建 worktree */}
-          <Tooltip title="为此任务添加项目 Worktree">
-            <Button
-              size="small"
-              type="link"
-              icon={<PlusOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onAddWorktree?.(t)
-              }}
-            />
-          </Tooltip>
-          {/* 链接配置：气泡内管理 Jira/飞书需求/工单链接名称和 URL；已绑定时图标高亮 */}
-          {/* stopPropagation 必须在 Popover 外层：rc-trigger 会覆盖子元素 onClick，
-              内层 Button 的 stopPropagation 会被丢弃，导致点击仍触发面板折叠 */}
-          <span
-            onClick={(e) => e.stopPropagation()}
-            style={{ display: 'inline-flex' }}
-          >
-            <Popover
-              open={linkPopoverTask === t.task}
-              onOpenChange={(v) => {
-                if (v) openTaskLinkPopover()
-                else setLinkPopoverTask(null)
-              }}
-              content={linkPopoverContent}
-              title="绑定需求链接"
-              trigger="click"
-              placement="bottomRight"
-            >
-              <Tooltip
-                title={
-                  hasTaskLinks
-                    ? '已绑定链接，点击管理'
-                    : '绑定 Jira/飞书需求/工单链接'
-                }
-              >
-                <Button
-                  size="small"
-                  type="link"
-                  icon={
-                    <LinkOutlined
-                      style={{
-                        color: hasTaskLinks ? token.colorPrimary : undefined,
-                      }}
-                    />
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openTaskLinkPopover()
-                  }}
-                />
-              </Tooltip>
-            </Popover>
-          </span>
-          {/* 在 VSCode 中打开任务目录 */}
-          <Tooltip title="在 VSCode 中打开">
-            <Button
-              size="small"
-              type="link"
-              icon={<VscodeIcon />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenVscode(t.path)
-              }}
-            />
-          </Tooltip>
-          {/* GitLab 项目入口：放在 VSCode 后面；单项目直开，多项目由 TaskGitlabButton 下拉选择。 */}
-          <TaskGitlabButton
-            taskName={t.task}
-            entries={taskGitlabEntries}
-            onOpenUrl={onOpenUrl}
-          />
-          {/* 在 Finder 中打开任务目录 */}
-          <Tooltip title="在 Finder 中打开">
-            <Button
-              size="small"
-              type="link"
-              icon={<FolderOpenOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenFinder(t.path)
-              }}
-            />
-          </Tooltip>
-          {/* 复制任务目录绝对路径：stopPropagation 防止点击触发面板折叠 */}
-          <Tooltip title="复制路径">
-            <Button
-              size="small"
-              type="link"
-              icon={<CopyOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onCopyPath(t.path)
-              }}
-            />
-          </Tooltip>
-          {/* 在终端中打开任务目录：stopPropagation 防止点击触发面板折叠 */}
-          <Tooltip title="在终端中打开">
-            <Button
-              size="small"
-              type="link"
-              icon={<ConsoleSqlOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenTerminal(t.path)
-              }}
-            />
-          </Tooltip>
-          {/* 删除整个任务：一键删除该任务目录下所有 worktree（二次确认） */}
-          <Tooltip title="删除任务">
-            <Button
-              size="small"
-              type="link"
-              danger
-              title="删除任务"
-              aria-label="删除任务"
-              icon={<DeleteOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemoveTask(t)
-              }}
-            />
-          </Tooltip>
-        </Space>
-      ),
-      children: (
-        <div>
-          {/* 任务目录已创建但尚未添加项目时，给内容区一个明确入口，复用任务栏加号的追加项目流程。 */}
-          {t.worktrees.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="还没有项目 worktree"
-              style={{ margin: '24px 0' }}
-            >
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => onAddWorktree?.(t)}
-              >
-                添加项目
-              </Button>
-            </Empty>
-          ) : (
-            t.worktrees.map((wt) => (
-              <div
-                key={wt.path}
-                className="worktree-project-row"
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 0',
-                  borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                }}
-              >
-                <Space
-                  orientation="vertical"
-                  size={0}
-                  style={{ minWidth: 0, flex: 1 }}
-                >
-                  <Space wrap size={4}>
-                    <Tag
-                      color="geekblue"
-                      style={{ maxWidth: 220, marginInlineEnd: 0 }}
-                    >
-                      <SingleLineText
-                        text={wt.project}
-                        inline
-                        style={{ maxWidth: 200 }}
-                      />
-                    </Tag>
-                    <SingleLineText
-                      text={wt.branch || '(detached)'}
-                      as="code"
-                      inline
-                      style={{ maxWidth: 360, fontSize: 12 }}
-                    />
-                    {wtStatusTags(wt)}
-                  </Space>
-                  <SingleLineText
-                    text={wt.path}
-                    style={{ color: token.colorTextSecondary, fontSize: 12 }}
-                    tooltipPlacement="bottom"
-                  />
-                </Space>
-                <Space size={4}>
-                  {/* 失效 worktree 提供清理按钮 */}
-                  {wt.prunable || wt.missing ? (
-                    <Button size="small" onClick={() => onPrune(wt)}>
-                      清理
-                    </Button>
-                  ) : (
-                    <>
-                      {/* CI/CD 流水线：当该项目在配置中有对应 URL 时才显示 */}
-                      {cicdLinks[wt.project] && (
-                        <Tooltip title="打开 CI/CD 流水线">
-                          <Button
-                            size="small"
-                            icon={<RocketOutlined />}
-                            onClick={() => onOpenUrl?.(cicdLinks[wt.project])}
-                          />
-                        </Tooltip>
-                      )}
-                      <Tooltip title="在 VSCode 中打开">
-                        <Button
-                          size="small"
-                          icon={<VscodeIcon />}
-                          onClick={() => onOpenVscode(wt.path)}
-                        />
-                      </Tooltip>
-                      {/* GitLab 项目入口：由核心层根据 origin remote 自动推导，放在 VSCode 后面方便连续操作。 */}
-                      {wt.gitlabUrl && (
-                        <Tooltip title="打开 GitLab">
-                          <Button
-                            size="small"
-                            aria-label={`打开 GitLab ${wt.project}`}
-                            icon={<GitlabOutlined />}
-                            onClick={() => onOpenUrl?.(wt.gitlabUrl)}
-                          />
-                        </Tooltip>
-                      )}
-                      <Tooltip title="在 Finder 中打开">
-                        <Button
-                          size="small"
-                          icon={<FolderOpenOutlined />}
-                          onClick={() => onOpenFinder(wt.path)}
-                        />
-                      </Tooltip>
-                      <Tooltip title="复制路径">
-                        <Button
-                          size="small"
-                          icon={<CopyOutlined />}
-                          onClick={() => onCopyPath(wt.path)}
-                        />
-                      </Tooltip>
-                      <Tooltip title="在终端中打开">
-                        <Button
-                          size="small"
-                          icon={<ConsoleSqlOutlined />}
-                          onClick={() => onOpenTerminal(wt.path)}
-                        />
-                      </Tooltip>
-                      <Tooltip title="删除此 worktree">
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => onRemove(wt)}
-                        />
-                      </Tooltip>
-                    </>
-                  )}
-                </Space>
-              </div>
-            ))
-          )}
-        </div>
-      ),
-    }
-  })
 
   return (
     <Collapse

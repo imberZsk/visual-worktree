@@ -137,10 +137,17 @@ body,
   overflow: hidden;
 }
 
-/* 小屏下折叠头允许标题区缩小，右侧操作区保留可用空间，标题内部继续横向滑动。 */
+/* 任务行由 Collapse header 承担展开/折叠点击；补齐手型光标，避免可点击整行仍显示默认箭头。 */
 .worktree-task-collapse .ant-collapse-header {
+  cursor: pointer;
   min-width: 0;
   overflow: hidden;
+}
+
+/* 计算中 Spin 和完成态图标都有自身节点；统一覆盖整个费用标签子树，避免悬停到子节点时退回箭头。 */
+.worktree-task-collapse .ant-collapse-header .claude-usage-tag,
+.worktree-task-collapse .ant-collapse-header .claude-usage-tag * {
+  cursor: pointer !important;
 }
 
 /* 任务标题填满 AntD 标题 flex 项；右侧操作区已从该项宽度中扣除，内部只让徽标区收缩。 */
@@ -206,30 +213,16 @@ body,
   }
 }
 
-/* Claude 用量标签字号略小但高度与其他任务标题徽标保持一致 */
+/* Claude 用量标签可悬浮查看账单详情，使用手型提示其具备交互反馈。 */
 .claude-usage-tag {
-  cursor: help;
+  cursor: pointer !important;
   font-size: 11px;
   text-align: center;
 }
 
-/* 环境检查刷新遮罩默认跟随亮色浮层背景；暗色主题在下方用根主题属性覆盖，避免 React 状态切换瞬间闪白 */
-.env-health-refresh-overlay {
-  background: rgba(255, 255, 255, 0.72);
-}
-
-/* 暗色主题下给环境检查 Modal 自定义内容区兜底暗色背景，防止 portal/动画首帧露出默认白底 */
-html[data-theme='dark'] .env-health-modal .ant-modal-content,
-html[data-theme='dark'] .env-health-modal .ant-modal-header,
-html[data-theme='dark'] .env-health-modal .ant-modal-body,
-html[data-theme='dark'] .env-health-modal .ant-modal-footer,
-html[data-theme='dark'] .env-health-result-shell {
-  background: #141414;
-}
-
-/* 暗色主题下刷新遮罩也使用暗色半透明层，避免“重新检查”时旧结果区域闪成白色 */
-html[data-theme='dark'] .env-health-refresh-overlay {
-  background: rgba(20, 20, 20, 0.78);
+/* 费用标签内部的 Spinner、图标和文字也属于悬停区域，统一继承手型。 */
+.claude-usage-tag * {
+  cursor: pointer !important;
 }
 
 /* 隐藏项目在“显示隐藏项目”模式下仍可恢复，视觉上轻微降权以免误当作常规项目 */

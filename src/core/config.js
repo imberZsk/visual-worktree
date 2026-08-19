@@ -59,7 +59,6 @@ const DEFAULT_WORKSPACE_SETTINGS = {
   terminalApp: process.platform === 'win32' ? 'wt' : 'Terminal',
   workflowSteps: DEFAULT_WORKFLOW_STEPS.map((step) => ({ ...step })),
   projectWorkflowSteps: {},
-  envCheckRoles: [],
   workDocumentTemplates: DEFAULT_WORK_DOCUMENT_TEMPLATES.map((template) => ({
     ...template,
   })),
@@ -68,7 +67,6 @@ const DEFAULT_WORKSPACE_SETTINGS = {
     projectCount: true,
     taskStatus: true,
     taskLinks: true,
-    envHealth: true,
     claudeUsage: true,
   },
   taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),

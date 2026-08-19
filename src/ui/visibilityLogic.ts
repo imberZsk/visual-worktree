@@ -18,7 +18,6 @@ export const TASK_TITLE_BADGE_ITEMS = [
   { key: 'projectCount', label: '项目数量' },
   { key: 'taskStatus', label: '任务状态' },
   { key: 'taskLinks', label: '需求链接' },
-  { key: 'envHealth', label: '环境状态' },
   { key: 'claudeUsage', label: 'Token 消耗' },
 ]
 

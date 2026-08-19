@@ -328,8 +328,8 @@ describe('claudeService', () => {
   })
 
   describe('calculateCost', () => {
-    it('按 sonnet-5 单价计算（3/15/3.75/0.3，默认档位）', () => {
-      // 定价：input $3/M, output $15/M, cacheWrite $3.75/M, cacheRead $0.3/M
+    it('按 sonnet-5 单价计算（2/10/2.5/0.2，默认档位）', () => {
+      // 定价：input $2/M, output $10/M, cacheWrite $2.5/M, cacheRead $0.2/M
       const usage = {
         input: 10000,
         output: 1000,
@@ -337,8 +337,8 @@ describe('claudeService', () => {
         cacheRead: 20000,
       }
       const cost = calculateCost(usage, 'claude-sonnet-5')
-      // 预期：10K*3/M + 1K*15/M + 5K*3.75/M + 20K*0.3/M = 0.03+0.015+0.01875+0.006 = 0.06975
-      expect(cost).toBeCloseTo(0.06975, 6)
+      // 预期：10K*2/M + 1K*10/M + 5K*2.5/M + 20K*0.2/M = 0.0465。
+      expect(cost).toBeCloseTo(0.0465, 6)
     })
 
     it('按 opus-4-8 单价计算（5/25/6.25/0.5）', () => {
@@ -437,6 +437,12 @@ describe('claudeService', () => {
     it('直接人民币模式固定按一比一换算', () => {
       expect(tokenCostToCny(10, { usdToCny: 8, directCnyDisplay: true })).toBe(
         10
+      )
+    })
+
+    it('直接人民币模式保留中转账单的小额精度', () => {
+      expect(tokenCostToCny(0.091378, { directCnyDisplay: true })).toBe(
+        0.091378
       )
     })
   })
@@ -866,9 +872,33 @@ describe('claudeService', () => {
       const summary = getTasksSummary(['task-A'], '/mock/worktrees', deps)
       expect(summary['task-A'].sessionCount).toBe(2)
       expect(summary['task-A'].usage.input).toBe(15000) // 10000 + 5000
-      // 费用 = sonnet(10K*3/M+1K*15/M) + opus(5K*5/M+0.5K*25/M) = 0.045 + 0.0375 = 0.0825
-      expect(summary['task-A'].cost.usd).toBeCloseTo(0.0825, 4)
-      expect(summary['task-A'].cost.cny).toBe(0.08)
+      // 费用 = sonnet(10K*2/M+1K*10/M) + opus(5K*5/M+0.5K*25/M) = 0.03 + 0.0375 = 0.0675。
+      expect(summary['task-A'].cost.usd).toBeCloseTo(0.0675, 4)
+      expect(summary['task-A'].cost.cny).toBe(0.07)
+
+      // taskPricingSummary 存储任务专属 API key 价格重新计算后的汇总，其他任务不会受影响。
+      const taskPricingSummary = getTasksSummary(
+        ['task-A'],
+        '/mock/worktrees',
+        {
+          ...deps,
+          tokenPricingByTask: {
+            'task-A': {
+              enabled: true,
+              input: 1,
+              output: 2,
+              cacheWrite: 0,
+              cacheRead: 0,
+              multiplier: 1,
+              directCnyDisplay: true,
+            },
+          },
+        }
+      )
+      expect(taskPricingSummary['task-A'].cost).toEqual({
+        usd: 0.018,
+        cny: 0.018,
+      })
     })
   })
 })

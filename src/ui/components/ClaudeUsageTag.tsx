@@ -8,6 +8,8 @@ const USAGE_TOOL_LABELS = {
   'claude-code': 'Claude',
   codex: 'Codex',
 }
+// DIRECT_CNY_COST_PRECISION 存储中转账单直接人民币显示时保留的小数位数。
+const DIRECT_CNY_COST_PRECISION = 6
 
 /**
  * 按当前币种模式格式化费用，小额费用保留更多小数避免显示为零。
@@ -20,9 +22,13 @@ function formatCost(cost, directCnyDisplay) {
   const costValue = directCnyDisplay ? cost?.cny || 0 : cost?.usd || 0
   // costSymbol 存储当前展示模式使用的货币符号。
   const costSymbol = directCnyDisplay ? '¥' : '$'
-  return costValue >= 0.01
-    ? `${costSymbol}${costValue.toFixed(3)}`
-    : `${costSymbol}${costValue.toFixed(4)}`
+  // costPrecision 存储当前金额展示所需的小数位数，直接人民币模式需与中转账单一致。
+  const costPrecision = directCnyDisplay
+    ? DIRECT_CNY_COST_PRECISION
+    : costValue >= 0.01
+      ? 3
+      : 4
+  return `${costSymbol}${costValue.toFixed(costPrecision)}`
 }
 
 // Claude Code 用量标签：显示任务关联的 token 用量和费用
@@ -33,6 +39,8 @@ function formatCost(cost, directCnyDisplay) {
  * @param {object} props - 组件属性
  * @param {string} props.taskName - 任务名
  * @param {object} [props.summary] - 用量汇总数据（预加载时传入，避免重复请求）
+ * @param {boolean} [props.summaryLoading] - 外部批量汇总是否仍在计算
+ * @param {boolean} [props.fetchWhenSummaryMissing] - 缺少汇总时是否允许单任务兜底查询
  * @param {Array<'claude-code'|'codex'>} [props.usageTools] - 当前统计工具
  * @param {boolean} [props.directCnyDisplay] - 是否按人民币 1:1 单币种展示费用
  * @returns {JSX.Element|null} 用量标签（无数据时返回 null）
@@ -40,6 +48,8 @@ function formatCost(cost, directCnyDisplay) {
 export default function ClaudeUsageTag({
   taskName,
   summary,
+  summaryLoading = false,
+  fetchWhenSummaryMissing = true,
   usageTools = ['claude-code'],
   directCnyDisplay = false,
 }) {
@@ -56,6 +66,13 @@ export default function ClaudeUsageTag({
       setUsage(summary)
       setLoading(false)
       return
+    }
+
+    // Worktree 页面由一次批量 Worker 扫描提供所有任务价格；禁止每个标签再次同步扫描主进程，避免首屏重复读盘卡顿。
+    if (!fetchWhenSummaryMissing) {
+      setUsage(undefined)
+      setLoading(summaryLoading)
+      return undefined
     }
 
     let cancelled = false
@@ -138,7 +155,13 @@ export default function ClaudeUsageTag({
     return () => {
       cancelled = true
     }
-  }, [taskName, summary, usageToolsKey])
+  }, [
+    taskName,
+    summary,
+    summaryLoading,
+    fetchWhenSummaryMissing,
+    usageToolsKey,
+  ])
 
   // 加载中显示 loading 状态
   // minWidth 固定标签宽度：loading 态与有数据态共用同一最小宽度，避免三态（loading→null→数据）切换时标题行内其他徽标横向跳动（CLS）
@@ -158,13 +181,6 @@ export default function ClaudeUsageTag({
   // 无用量数据时不显示标签
   if (!usage || usage.sessionCount === 0) return null
 
-  // totalTokens 总 token 数（input + output + cacheWrite + cacheRead）
-  const totalTokens =
-    (usage.usage?.input || 0) +
-    (usage.usage?.output || 0) +
-    (usage.usage?.cacheWrite || 0) +
-    (usage.usage?.cacheRead || 0)
-
   // 格式化 token 数（大于 1000 时显示为 K）
   const formatTokens = (n) => {
     if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
@@ -181,10 +197,11 @@ export default function ClaudeUsageTag({
         : ['claude-code']
     ),
   ]
-  // toolCostParts 存储双选时各工具独立费用文本。
+  // toolCostParts 存储双选时各工具独立的 Token 用量和费用文本。
   const toolCostParts = selectedUsageTools.map((toolId) => ({
     toolId,
     label: USAGE_TOOL_LABELS[toolId] || toolId,
+    usage: usage.tools?.[toolId]?.usage || {},
     costText: formatCost(usage.tools?.[toolId]?.cost, directCnyDisplay),
   }))
   // showToolBreakdown 标记是否需要同时展示两个工具及合计。
@@ -206,14 +223,43 @@ export default function ClaudeUsageTag({
     <div style={{ fontSize: 12, minWidth: 180, lineHeight: 1.8 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>AI 用量统计</div>
       {row('会话数', usage.sessionCount)}
-      {row('Input tokens', formatTokens(usage.usage?.input || 0))}
-      {row('Output tokens', formatTokens(usage.usage?.output || 0))}
-      {row('Cache write', formatTokens(usage.usage?.cacheWrite || 0))}
-      {row('Cache read', formatTokens(usage.usage?.cacheRead || 0))}
-      {showToolBreakdown &&
-        toolCostParts.map((toolPart) =>
-          row(`${toolPart.label} 费用`, toolPart.costText, toolPart.toolId)
-        )}
+      {showToolBreakdown ? (
+        toolCostParts.map((toolPart) => (
+          <React.Fragment key={toolPart.toolId}>
+            <div style={{ fontWeight: 600, marginTop: 4 }}>
+              {toolPart.label}
+            </div>
+            {row(
+              'Input tokens',
+              formatTokens(toolPart.usage.input || 0),
+              `${toolPart.toolId}-input`
+            )}
+            {row(
+              'Output tokens',
+              formatTokens(toolPart.usage.output || 0),
+              `${toolPart.toolId}-output`
+            )}
+            {row(
+              'Cache write',
+              formatTokens(toolPart.usage.cacheWrite || 0),
+              `${toolPart.toolId}-cache-write`
+            )}
+            {row(
+              'Cache read',
+              formatTokens(toolPart.usage.cacheRead || 0),
+              `${toolPart.toolId}-cache-read`
+            )}
+            {row('费用', toolPart.costText, `${toolPart.toolId}-cost`)}
+          </React.Fragment>
+        ))
+      ) : (
+        <>
+          {row('Input tokens', formatTokens(usage.usage?.input || 0))}
+          {row('Output tokens', formatTokens(usage.usage?.output || 0))}
+          {row('Cache write', formatTokens(usage.usage?.cacheWrite || 0))}
+          {row('Cache read', formatTokens(usage.usage?.cacheRead || 0))}
+        </>
+      )}
       <div
         style={{
           display: 'flex',
@@ -241,11 +287,7 @@ export default function ClaudeUsageTag({
         color="purple"
         style={{ minWidth: 72 }}
       >
-        {showToolBreakdown
-          ? `${toolCostParts
-              .map((toolPart) => `${toolPart.label} ${toolPart.costText}`)
-              .join(' · ')} · 合计 ${costText}`
-          : `${formatTokens(totalTokens)} · ${costText}`}
+        {costText}
       </Tag>
     </Tooltip>
   )

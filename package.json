@@ -1,6 +1,6 @@
 {
   "name": "visual-worktree",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "可视化管理多仓库 Git 状态与按任务组织的 Worktree",
   "author": "imber",
   "license": "MIT",
@@ -108,6 +108,12 @@
       "output": "release",
       "buildResources": "build"
     },
+    "extraResources": [
+      {
+        "from": "build/dock-icon.png",
+        "to": "dock-icon.png"
+      }
+    ],
     "files": [
       "electron/**/*",
       "dist/**/*",

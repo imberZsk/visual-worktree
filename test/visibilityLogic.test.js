@@ -95,9 +95,8 @@ describe('task title badge visibility', () => {
   })
 
   it('respects explicit false values and fills missing keys with defaults', () => {
-    // badges 存储用户在设置里关闭了环境与 token 后的展示配置。
+    // badges 存储用户关闭 Token 徽标后的展示配置。
     const badges = normalizeTaskTitleBadges({
-      envHealth: false,
       claudeUsage: false,
     })
 
@@ -105,7 +104,6 @@ describe('task title badge visibility', () => {
     expect(badges.taskTag).toBe(true)
     expect(badges.taskStatus).toBe(true)
     expect(badges.taskLinks).toBe(true)
-    expect(badges.envHealth).toBe(false)
     expect(badges.claudeUsage).toBe(false)
   })
 })

@@ -4,7 +4,9 @@ import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   AI_MODEL_CREDENTIALS_FILENAME,
+  AI_MODEL_SETTINGS_SUMMARY_FILENAME,
   loadAiModelCredentials,
+  loadAiModelSettingsSummary,
   maskAiModelApiKey,
   normalizeAiModelCredentials,
   saveAiModelCredentials,
@@ -61,6 +63,18 @@ describe('aiModelCredentialStore', () => {
       baseUrl: 'https://gateway.example.com/v1',
       apiKey: 'secret-api-key',
       clearApiKey: false,
+    })
+    // summaryFile 存储设置页直接读取的非敏感摘要，不能包含完整 API Key。
+    const summaryFile = readFileSync(
+      join(dataDir, AI_MODEL_SETTINGS_SUMMARY_FILENAME),
+      'utf8'
+    )
+    expect(summaryFile).not.toContain('secret-api-key')
+    expect(loadAiModelSettingsSummary({ dataDir })).toEqual({
+      model: 'gpt-5.6-sol',
+      baseUrl: 'https://gateway.example.com/v1',
+      apiKeyConfigured: true,
+      apiKeyHint: '••••••••-key',
     })
   })
 

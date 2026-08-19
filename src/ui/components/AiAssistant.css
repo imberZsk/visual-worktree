@@ -19,7 +19,9 @@
 .ai-assistant-drawer .ant-drawer-body {
   height: 100%;
   min-height: 0;
-  padding: 0;
+  /* Ant Design 的动态按钮样式会后注入 15px 水平内边距，固定宽度下会直接裁掉关闭图标。 */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 /* 聊天区域采用 Tab、消息阅读区与底部输入面板三段结构。 */
@@ -55,11 +57,12 @@
   display: none;
 }
 
-/* 单个 Tab 使用弱背景和底边状态，避免一排厚重的卡片边框。 */
+/* 单个 Tab 使用中性底色区分会话，避免品牌色抢占聊天内容的视觉焦点。 */
 .ai-assistant-drawer .ai-assistant-tab {
   align-items: center;
   background: transparent;
-  border-bottom: 2px solid transparent;
+  border: 1px solid transparent;
+  border-radius: var(--ai-assistant-radius);
   display: flex;
   flex: 0 0 auto;
   height: var(--ai-assistant-tab-height);
@@ -72,8 +75,8 @@
 }
 
 .ai-assistant-drawer .ai-assistant-tab.is-active {
-  background: var(--ant-color-fill-quaternary);
-  border-bottom-color: var(--ant-color-primary);
+  background: var(--ant-color-fill-secondary);
+  border-color: var(--ant-color-border-secondary);
 }
 
 .ai-assistant-drawer .ai-assistant-tab-select,
@@ -125,6 +128,22 @@
 
 .ai-assistant-drawer .ai-assistant-new-tab {
   flex: 0 0 auto;
+}
+
+.ai-assistant-drawer .ai-assistant-close {
+  align-items: center;
+  border-radius: var(--ai-assistant-radius);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: var(--ai-assistant-tab-height);
+  justify-content: center;
+  margin-left: var(--ai-assistant-space-sm);
+  min-width: var(--ai-assistant-tab-height);
+  /* Ant Design 会在组件样式之后注入 text 按钮内边距，需在专用类上覆盖以保留完整方形点击区。 */
+  padding: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: var(--ai-assistant-tab-height);
 }
 
 /* 消息列表独立滚动，并给正文保留适合长回答阅读的水平留白。 */

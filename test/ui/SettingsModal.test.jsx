@@ -74,7 +74,6 @@ function makeConfig() {
       projectCount: true,
       taskStatus: true,
       taskLinks: true,
-      envHealth: true,
       claudeUsage: true,
     },
     taskStatuses: DEFAULT_TASK_STATUSES.map((status) => ({ ...status })),
@@ -353,7 +352,6 @@ describe('SettingsModal 流程配置布局', () => {
       '项目数量',
       '任务状态',
       '需求链接',
-      '环境状态',
       'Token 消耗',
     ].forEach((label) =>
       expect(screen.getByLabelText(`${label}说明`)).toBeTruthy()
@@ -645,8 +643,8 @@ describe('SettingsModal 流程配置布局', () => {
     const panel = screen.getByTestId('display-settings-panel')
     // grid 存储展示项卡片网格，避免页面退回到左侧单列堆叠。
     const grid = screen.getByTestId('display-badge-grid')
-    // envCard 存储环境状态展示项卡片，用于验证问号和开关被组织在同一张卡片里。
-    const envCard = screen.getByTestId('display-badge-card-envHealth')
+    // tokenCard 存储 Token 展示项卡片，用于验证问号和开关被组织在同一张卡片里。
+    const tokenCard = screen.getByTestId('display-badge-card-claudeUsage')
 
     expect(within(panel).getByText('任务标题展示偏好')).toBeTruthy()
     expect(
@@ -655,16 +653,12 @@ describe('SettingsModal 流程配置布局', () => {
       )
     ).toBeNull()
     expect(grid.classList.contains('settings-display-grid')).toBe(true)
-    expect(
-      within(envCard).queryByText(
-        '展示自动环境检查结果，快速发现依赖、端口或服务问题。'
-      )
-    ).toBeNull()
-    expect(within(envCard).getByLabelText('环境状态说明')).toBeTruthy()
-    expect(within(envCard).getByRole('switch')).toBeTruthy()
+    expect(within(tokenCard).queryByText('展示任务 Token 与费用。')).toBeNull()
+    expect(within(tokenCard).getByLabelText('Token 消耗说明')).toBeTruthy()
+    expect(within(tokenCard).getByRole('switch')).toBeTruthy()
   })
 
-  it('展示 Tab 可关闭任务标题旁的环境状态和 Token 消耗徽标并保存', async () => {
+  it('展示 Tab 可关闭任务标题旁的 Token 消耗徽标并保存', async () => {
     mockApi.saveConfig.mockResolvedValueOnce(makeConfig())
     renderWithApp(
       <SettingsModal
@@ -681,11 +675,8 @@ describe('SettingsModal 流程配置布局', () => {
       expect(screen.getByTestId('display-settings-panel')).toBeTruthy()
     })
 
-    // envCard 存储“环境状态”开关所在卡片，用于只点击这一项的 switch。
-    const envCard = screen.getByTestId('display-badge-card-envHealth')
     // tokenCard 存储“Token 消耗”开关所在卡片，用于只点击这一项的 switch。
     const tokenCard = screen.getByTestId('display-badge-card-claudeUsage')
-    fireEvent.click(within(envCard).getByRole('switch'))
     fireEvent.click(within(tokenCard).getByRole('switch'))
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
 
@@ -698,7 +689,6 @@ describe('SettingsModal 流程配置布局', () => {
       projectCount: true,
       taskStatus: true,
       taskLinks: true,
-      envHealth: false,
       claudeUsage: false,
     })
   })

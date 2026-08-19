@@ -5,6 +5,8 @@ import { join } from 'path'
 export const DEFAULT_AI_MODEL = 'gpt-5.6-sol'
 // AI_MODEL_CREDENTIALS_FILENAME 存储独立于普通配置文件的加密凭据文件名。
 export const AI_MODEL_CREDENTIALS_FILENAME = 'ai-model-credentials.enc'
+// AI_MODEL_SETTINGS_SUMMARY_FILENAME 存储不含 API Key 的设置摘要，设置页读取它不会触发 macOS 钥匙串授权。
+export const AI_MODEL_SETTINGS_SUMMARY_FILENAME = 'ai-model-settings.json'
 
 /**
  * 生成可展示但不能还原完整凭据的 API Key 掩码。
@@ -18,6 +20,54 @@ export function maskAiModelApiKey(apiKey) {
   // visibleSuffix 存储允许设置页确认凭据的末四位字符。
   const visibleSuffix = normalizedApiKey.slice(-4)
   return `••••••••${visibleSuffix}`
+}
+
+/**
+ * 读取不含敏感凭据的 AI 模型设置摘要。
+ * @param {{dataDir:string}} options - 本地数据目录
+ * @returns {{model:string,baseUrl:string,apiKeyConfigured:boolean,apiKeyHint:string}|null} 设置摘要；文件不存在或损坏时返回 null
+ */
+export function loadAiModelSettingsSummary({ dataDir }) {
+  // summaryPath 存储设置摘要文件的绝对路径。
+  const summaryPath = join(dataDir, AI_MODEL_SETTINGS_SUMMARY_FILENAME)
+  if (!existsSync(summaryPath)) return null
+  try {
+    // summary 存储从本地 JSON 文件解析出的非敏感设置摘要。
+    const summary = JSON.parse(readFileSync(summaryPath, 'utf8'))
+    return {
+      model: String(summary?.model || DEFAULT_AI_MODEL),
+      baseUrl: String(summary?.baseUrl || ''),
+      apiKeyConfigured: summary?.apiKeyConfigured === true,
+      apiKeyHint: String(summary?.apiKeyHint || ''),
+    }
+  } catch {
+    // 摘要损坏时允许调用方从加密凭据迁移恢复，避免设置页永久无法打开。
+    return null
+  }
+}
+
+/**
+ * 保存不含完整 API Key 的 AI 模型设置摘要。
+ * @param {object} credentials - 已规范化的完整模型配置
+ * @param {{dataDir:string}} options - 本地数据目录
+ * @returns {{model:string,baseUrl:string,apiKeyConfigured:boolean,apiKeyHint:string}} 已保存的安全摘要
+ */
+export function saveAiModelSettingsSummary(credentials, { dataDir }) {
+  // summary 存储允许渲染进程展示且不能还原完整 Key 的字段。
+  const summary = {
+    model: credentials?.model || DEFAULT_AI_MODEL,
+    baseUrl: credentials?.baseUrl || '',
+    apiKeyConfigured: Boolean(credentials?.apiKey),
+    apiKeyHint: maskAiModelApiKey(credentials?.apiKey),
+  }
+  // summaryPath 存储设置摘要文件的绝对路径。
+  const summaryPath = join(dataDir, AI_MODEL_SETTINGS_SUMMARY_FILENAME)
+  mkdirSync(dataDir, { recursive: true })
+  writeFileSync(summaryPath, JSON.stringify(summary, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  return summary
 }
 
 /**
@@ -89,5 +139,6 @@ export function saveAiModelCredentials(value, { dataDir, safeStorage }) {
     encoding: 'utf8',
     mode: 0o600,
   })
+  saveAiModelSettingsSummary(credentials, { dataDir })
   return credentials
 }

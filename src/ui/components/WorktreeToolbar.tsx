@@ -17,6 +17,8 @@ const USAGE_TOOL_LABELS = {
   'claude-code': 'Claude',
   codex: 'Codex',
 }
+// DIRECT_CNY_COST_PRECISION 存储中转账单直接人民币显示时保留的小数位数。
+const DIRECT_CNY_COST_PRECISION = 6
 
 /**
  * 按当前币种模式格式化工具栏费用。
@@ -25,7 +27,8 @@ const USAGE_TOOL_LABELS = {
  * @returns {string} 格式化后的费用文本
  */
 function formatToolbarCost(cost, directCnyDisplay) {
-  if (directCnyDisplay) return `¥${(cost?.cny || 0).toFixed(3)}`
+  if (directCnyDisplay)
+    return `¥${(cost?.cny || 0).toFixed(DIRECT_CNY_COST_PRECISION)}`
   return `$${(cost?.usd || 0).toFixed(3)} / ¥${(cost?.cny || 0).toFixed(2)}`
 }
 
@@ -73,14 +76,16 @@ export default function WorktreeToolbar({
       directCnyDisplay
     ),
     primaryCostText: directCnyDisplay
-      ? `¥${(aiUsageTotal.byTool?.[toolId]?.cny || 0).toFixed(3)}`
+      ? `¥${(aiUsageTotal.byTool?.[toolId]?.cny || 0).toFixed(
+          DIRECT_CNY_COST_PRECISION
+        )}`
       : `$${(aiUsageTotal.byTool?.[toolId]?.usd || 0).toFixed(3)}`,
   }))
   // combinedCostText 存储全部统计工具费用合计文本。
   const combinedCostText = formatToolbarCost(aiUsageTotal, directCnyDisplay)
   // combinedPrimaryCostText 存储顶部标签使用的紧凑合计费用。
   const combinedPrimaryCostText = directCnyDisplay
-    ? `¥${aiUsageTotal.cny.toFixed(3)}`
+    ? `¥${aiUsageTotal.cny.toFixed(DIRECT_CNY_COST_PRECISION)}`
     : `$${aiUsageTotal.usd.toFixed(3)}`
   return (
     <div className="worktree-toolbar">
@@ -134,21 +139,7 @@ export default function WorktreeToolbar({
               color="purple"
               className="worktree-toolbar__usage-tag"
             >
-              总计{' '}
-              {aiUsageTotal.tokens >= 1000
-                ? `${(aiUsageTotal.tokens / 1000).toFixed(1)}K`
-                : aiUsageTotal.tokens}{' '}
-              ·{' '}
-              {showToolBreakdown
-                ? `${toolCostParts
-                    .map(
-                      (toolPart) =>
-                        `${toolPart.label} ${toolPart.primaryCostText}`
-                    )
-                    .join(' · ')} · 合计 ${combinedPrimaryCostText}`
-                : directCnyDisplay
-                  ? `¥${aiUsageTotal.cny.toFixed(3)}`
-                  : `$${aiUsageTotal.usd.toFixed(3)}`}
+              总计 {combinedPrimaryCostText}
             </Tag>
           </Tooltip>
         )}

@@ -2,20 +2,23 @@
 .kanban-view {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 96px);
+  height: calc(100vh - 96px);
+  min-height: 0;
 }
 
-/* 横向滚动层撑满看板可用高度，任务较少时下方空白区域仍可响应触控板左右滑动。 */
+/* 看板使用同一个视口承接横纵滚动，避免列内滚动与外层裁切冲突。 */
 .kanban-board-scroll {
   flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   padding-block-end: 8px;
 }
 
 .kanban-board {
-  align-items: flex-start;
+  /* 所有状态列拉伸到最高列，保证空列的 sticky 标题也拥有完整纵向固定范围。 */
+  align-items: stretch;
   box-sizing: border-box;
   display: flex;
   gap: 16px;
@@ -31,11 +34,16 @@
 }
 
 .kanban-column-header {
-  background: var(--ant-color-fill-quaternary);
+  /* 固定标题使用不透明容器背景，避免滚动中的任务卡片从标题下方透出。 */
+  background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: var(--ant-border-radius);
   margin-block-end: 12px;
   padding: 8px 12px;
+  /* 看板改为外层统一纵向滚动后，列标题必须相对该滚动视口固定，避免状态随任务卡片移出顶部。 */
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .kanban-column-status-tag,
@@ -44,6 +52,5 @@
 }
 
 .kanban-column-content {
-  max-height: calc(100vh - 260px);
-  overflow-y: auto;
+  overflow: visible;
 }

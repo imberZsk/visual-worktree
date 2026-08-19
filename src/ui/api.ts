@@ -277,38 +277,8 @@ const browserFallback = {
   },
   getClaudeSessionsByTask: async () => [],
   getClaudeTasksSummary: async () => ({}),
-  // 浏览器降级：无主进程，可安全删除列表/环境检查/备注/想法工作流均返回空或成功兜底
+  // 浏览器降级：无主进程，可安全删除列表、备注和想法工作流均返回空或成功兜底。
   getSafeToRemoveWorktrees: async () => [],
-  checkEnvHealth: async () => ({
-    deps: { status: 'ok', message: '非 Electron 环境', fixes: [] },
-    ports: { status: 'ok', message: '非 Electron 环境', fixes: [] },
-    services: { status: 'ok', message: '非 Electron 环境', fixes: [] },
-    git: { status: 'ok', message: '非 Electron 环境', fixes: [] },
-    summary: {
-      status: 'ok',
-      projectCount: 0,
-      issueCount: 0,
-      failedProjects: [],
-      message: '非 Electron 环境',
-    },
-    projects: [],
-  }),
-  loadTaskEnvHealth: async () => {
-    try {
-      const r = localStorage.getItem('vw-task-env-health')
-      return r ? JSON.parse(r) : {}
-    } catch {
-      return {}
-    }
-  },
-  saveTaskEnvHealth: async (map) => {
-    try {
-      localStorage.setItem('vw-task-env-health', JSON.stringify(map || {}))
-      return true
-    } catch {
-      return false
-    }
-  },
   loadTaskBlockers: async () => {
     try {
       const r = localStorage.getItem('vw-task-blockers')

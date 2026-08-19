@@ -174,12 +174,14 @@ app.whenReady().then(() => {
   warmSshAuthSock()
   // 先注入 CSP，再加载页面
   setupCSP()
-  // 开发模式下设置 Dock 图标为自定义 logo（打包后的 app 由 icns 提供图标，无需此步）
-  if (isDev && process.platform === 'darwin' && app.dock) {
-    // devIconPath 指向 build 目录下的 png 图标
-    const devIconPath = join(__dirname, '../build/icon.png')
+  // macOS 安装版直接使用传统 ICNS 时会被新版系统套上灰黑底；开发版与安装版统一用透明 Dock PNG 覆盖。
+  if (process.platform === 'darwin' && app.dock) {
+    // dockIconPath 存储当前运行形态下的 Dock PNG：开发期读取 build，安装版读取额外打包资源。
+    const dockIconPath = app.isPackaged
+      ? join(process.resourcesPath, 'dock-icon.png')
+      : join(__dirname, '../build/dock-icon.png')
     try {
-      app.dock.setIcon(devIconPath)
+      app.dock.setIcon(dockIconPath)
     } catch (e) {
       // 图标设置失败不影响启动
     }

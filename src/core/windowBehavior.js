@@ -63,6 +63,8 @@ export function getTitleBarOverlayOptions(themeMode = 'dark') {
 export function getWindowChromeOptions(platform = process.platform) {
   if (platform === 'darwin') {
     return {
+      // macOS 默认会吞掉非活动窗口的首次按下，导致窗口虽在上层却必须先点一下才能拖动自定义标题栏。
+      acceptFirstMouse: true,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: MACOS_TRAFFIC_LIGHT_POSITION,
     }
