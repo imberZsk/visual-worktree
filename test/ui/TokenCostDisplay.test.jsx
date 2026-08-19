@@ -77,6 +77,20 @@ describe('Token 费用币种展示', () => {
     expect(mockApi.getClaudeSessionsByTask).not.toHaveBeenCalled()
   })
 
+  it('批量重新计算时已有旧价格也优先显示等待标签', () => {
+    render(
+      <ClaudeUsageTag
+        taskName="TASK-REFRESHING"
+        summary={TASK_USAGE}
+        summaryLoading
+        fetchWhenSummaryMissing={false}
+      />
+    )
+
+    expect(screen.getByText('AI 用量')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('¥0.020000')
+  })
+
   it('直接人民币模式下任务徽标只显示人民币费用', () => {
     render(
       <ClaudeUsageTag

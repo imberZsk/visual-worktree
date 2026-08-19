@@ -1,5 +1,6 @@
 /* 应用内 Header 同时承担自定义标题栏拖动区域，背景和边界沿用 Ant Design 主题变量。 */
 .app-header.ant-layout-header {
+  --app-header-drag-strip-height: 8px;
   align-items: center;
   background: var(--ant-color-bg-container);
   border-bottom: 1px solid var(--ant-color-border-secondary);
@@ -14,6 +15,7 @@
       100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 16px
     )
   );
+  position: relative;
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -21,6 +23,20 @@
 /* macOS 隐藏标题栏后保留交通灯区域和 27px 视觉缓冲，避免标题贴近最右侧窗口按钮。 */
 .app-header--macos.ant-layout-header {
   padding-inline-start: 96px;
+}
+
+/* macOS 下拉状态会临时把 Header 设为 no-drag；最上沿独立拖动带保证窗口失焦或被遮挡后仍能直接拖动。 */
+.app-header__drag-strip {
+  display: none;
+}
+
+.app-header--macos .app-header__drag-strip {
+  display: block;
+  height: var(--app-header-drag-strip-height);
+  inset: 0 0 auto;
+  position: absolute;
+  z-index: 1;
+  -webkit-app-region: drag;
 }
 
 /* Select 展开时让 Header 空白区接收外部点击以关闭弹层；关闭后恢复原生窗口拖动。 */

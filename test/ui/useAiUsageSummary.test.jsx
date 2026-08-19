@@ -70,6 +70,34 @@ describe('useAiUsageSummary 启动调度', () => {
     expect(mockApi.getClaudeTasksSummary).toHaveBeenCalledWith(['TASK-B'])
   })
 
+  it('手动刷新后即使任务列表未变化也会重新统计价格', async () => {
+    // renderResult 存储测试挂载结果，用于模拟顶部刷新按钮递增统计版本。
+    const renderResult = render(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+        refreshVersion={0}
+      />
+    )
+
+    await act(async () => vi.advanceTimersByTimeAsync(1500))
+    renderResult.rerender(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+        refreshVersion={1}
+      />
+    )
+    await act(async () => vi.advanceTimersByTimeAsync(1500))
+
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenCalledTimes(2)
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenLastCalledWith(['TASK-A'], {
+      refreshVersion: 1,
+    })
+  })
+
   it('非 Worktree 页面不启动用量扫描', async () => {
     render(
       <UsageSummaryHarness

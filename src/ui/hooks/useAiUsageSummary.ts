@@ -3,6 +3,8 @@ import { api } from '../api.ts'
 
 // USAGE_SCAN_DEBOUNCE_MS 存储首屏与配置变化后的统计等待时间，让窗口渲染和 Git 扫描先完成。
 const USAGE_SCAN_DEBOUNCE_MS = 1500
+// INITIAL_USAGE_REFRESH_VERSION 存储非手动刷新时的默认版本；此时允许复用 Command+R 的短时结果缓存。
+const INITIAL_USAGE_REFRESH_VERSION = 0
 
 /**
  * 加载可见任务的 AI 用量，并计算工具栏总计。
@@ -11,6 +13,7 @@ const USAGE_SCAN_DEBOUNCE_MS = 1500
  * @param {string[]} options.usageTools - 当前选择的用量统计工具。
  * @param {object} options.pricingConfig - 当前全部 Token 计价配置。
  * @param {boolean} [options.enabled] - 是否在当前页面启动用量扫描。
+ * @param {number} [options.refreshVersion] - 用户手动刷新 Worktree 后递增的统计版本。
  * @returns {{usageMap:Record<string,object>,loading:boolean,total:{tokens:number,usd:number,cny:number}}} 任务用量映射、加载状态与总计。
  */
 export default function useAiUsageSummary({
@@ -18,6 +21,7 @@ export default function useAiUsageSummary({
   usageTools,
   pricingConfig,
   enabled = true,
+  refreshVersion = INITIAL_USAGE_REFRESH_VERSION,
 }) {
   // usageMap 存储任务名到 AI 用量汇总的映射。
   const [usageMap, setUsageMap] = useState({})
@@ -44,10 +48,15 @@ export default function useAiUsageSummary({
     let cancelled = false
     // taskNames 存储本次需要查询用量的可见任务名。
     const taskNames = taskNamesKey.split('\u0000')
+    // isManualRefresh 标记是否由顶部刷新按钮触发；该请求需要绕过短时结果缓存读取最新会话。
+    const isManualRefresh = refreshVersion > INITIAL_USAGE_REFRESH_VERSION
     // scanTimer 延迟启动磁盘密集型会话扫描；依赖连续变化时 cleanup 会取消旧任务，避免并发 Worker 抢占启动资源。
     const scanTimer = window.setTimeout(() => {
-      api
-        .getClaudeTasksSummary(taskNames)
+      // summaryRequest 存储本次统计请求；仅手动刷新附带版本，Command+R 继续复用已有快速缓存。
+      const summaryRequest = isManualRefresh
+        ? api.getClaudeTasksSummary(taskNames, { refreshVersion })
+        : api.getClaudeTasksSummary(taskNames)
+      summaryRequest
         .then((summary) => {
           if (!cancelled) {
             setUsageMap(summary || {})
@@ -65,7 +74,7 @@ export default function useAiUsageSummary({
       cancelled = true
       window.clearTimeout(scanTimer)
     }
-  }, [enabled, taskNamesKey, usageToolsKey, pricingConfigKey])
+  }, [enabled, taskNamesKey, usageToolsKey, pricingConfigKey, refreshVersion])
 
   // total 存储所有可见任务的 Token 和费用总计。
   const total = useMemo(() => {

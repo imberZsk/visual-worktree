@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Input, Segmented, Space, Tag, Tooltip } from 'antd'
+import { Button, Input, Segmented, Space, Spin, Tag, Tooltip } from 'antd'
 import {
   DeleteOutlined,
   HistoryOutlined,
@@ -36,6 +36,7 @@ function formatToolbarCost(cost, directCnyDisplay) {
  * 渲染 Worktree 视图的历史、清理、用量、显隐和排序操作。
  * @param {object} props - 组件属性
  * @param {{tokens:number,usd:number,cny:number}} props.aiUsageTotal - 全部任务 AI 用量汇总
+ * @param {boolean} [props.aiUsageLoading] - 全部任务 AI 用量是否正在重新计算
  * @param {Array<'claude-code'|'codex'>} props.aiUsageTools - 当前参与统计的工具
  * @param {boolean} props.directCnyDisplay - 是否按人民币 1:1 单币种展示费用
  * @param {boolean} props.hasHiddenTasks - 是否存在隐藏任务
@@ -51,6 +52,7 @@ function formatToolbarCost(cost, directCnyDisplay) {
  */
 export default function WorktreeToolbar({
   aiUsageTotal,
+  aiUsageLoading = false,
   aiUsageTools = ['claude-code'],
   directCnyDisplay = false,
   hasHiddenTasks,
@@ -135,11 +137,15 @@ export default function WorktreeToolbar({
             }
           >
             <Tag
-              icon={<ThunderboltOutlined />}
+              icon={
+                aiUsageLoading ? <Spin size="small" /> : <ThunderboltOutlined />
+              }
               color="purple"
               className="worktree-toolbar__usage-tag"
             >
-              总计 {combinedPrimaryCostText}
+              {aiUsageLoading
+                ? '总计 计算中'
+                : `总计 ${combinedPrimaryCostText}`}
             </Tag>
           </Tooltip>
         )}

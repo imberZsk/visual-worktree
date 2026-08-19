@@ -8,6 +8,7 @@ const DEFAULT_ACTIVE_VIEW = 'worktrees'
 /**
  * 管理主视图切换、首次数据加载、按需扫描与手动刷新。
  * @param {object} options - 页面导航和数据加载依赖。
+ * @param {() => void} [options.onWorktreesRefreshed] - Worktree 手动刷新完成后的通知回调。
  * @returns {object} 当前视图、加载状态及导航刷新操作。
  */
 export default function useWorkspaceNavigation({
@@ -28,6 +29,7 @@ export default function useWorkspaceNavigation({
   clearKeyword,
   clearWorktreeKeyword,
   clearActiveTaskKeys,
+  onWorktreesRefreshed,
   message,
 }) {
   // activeView 存储当前主视图，并从本地偏好恢复。
@@ -122,6 +124,8 @@ export default function useWorkspaceNavigation({
       return
     }
     clearActiveTaskKeys([])
+    // 手动刷新时 Git 状态扫描可能持续较久；先通知用量统计重新计算，避免价格请求被整个目录扫描阻塞。
+    onWorktreesRefreshed?.()
     await scanWorktrees()
   }
 

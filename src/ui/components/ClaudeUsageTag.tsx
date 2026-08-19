@@ -62,17 +62,17 @@ export default function ClaudeUsageTag({
 
   // 加载该任务的用量数据（仅在未预加载时请求）
   useEffect(() => {
+    // Worktree 批量刷新时旧 summary 仍然存在；必须优先展示 loading，避免旧价格让用户误以为没有重新计算。
+    if (!fetchWhenSummaryMissing) {
+      setUsage(summary)
+      setLoading(summaryLoading)
+      return undefined
+    }
+
     if (summary) {
       setUsage(summary)
       setLoading(false)
       return
-    }
-
-    // Worktree 页面由一次批量 Worker 扫描提供所有任务价格；禁止每个标签再次同步扫描主进程，避免首屏重复读盘卡顿。
-    if (!fetchWhenSummaryMissing) {
-      setUsage(undefined)
-      setLoading(summaryLoading)
-      return undefined
     }
 
     let cancelled = false
