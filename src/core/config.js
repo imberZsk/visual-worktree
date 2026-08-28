@@ -52,7 +52,7 @@ const DEFAULT_TOKEN_PRICING_BY_TOOL = Object.fromEntries(
 const DEFAULT_WORKSPACE_SETTINGS = {
   onboardingCompleted: false,
   mainBranches: ['master', 'main'],
-  gitlabMergeTargetBranch: 'test',
+  gitlabMergeTargetBranches: ['test'],
   ignoredProjects: [],
   autoFetch: false,
   cicdLinks: {},
@@ -171,9 +171,24 @@ function normalizeWorkspaceSettings(settings) {
   normalizedSettings.tokenPricing = normalizeTokenPricing(
     normalizedSettings.tokenPricing
   )
-  // gitlabMergeTargetBranch 存储 GitLab 新建 Merge Request 默认使用的目标分支；空配置回退 test。
-  normalizedSettings.gitlabMergeTargetBranch =
-    String(normalizedSettings.gitlabMergeTargetBranch || '').trim() || 'test'
+  // requestedGitlabTargetBranches 存储新版多目标分支配置；旧版单值配置会迁移为单元素数组。
+  const requestedGitlabTargetBranches = Array.isArray(
+    settings?.gitlabMergeTargetBranches
+  )
+    ? settings.gitlabMergeTargetBranches
+    : [settings?.gitlabMergeTargetBranch]
+  // gitlabMergeTargetBranches 存储去空、去重后的 MR 目标分支列表；无有效配置时回退 test。
+  const gitlabMergeTargetBranches = [
+    ...new Set(
+      requestedGitlabTargetBranches
+        .map((branch) => String(branch || '').trim())
+        .filter(Boolean)
+    ),
+  ]
+  normalizedSettings.gitlabMergeTargetBranches =
+    gitlabMergeTargetBranches.length > 0 ? gitlabMergeTargetBranches : ['test']
+  // 旧版单值字段完成迁移后不再向运行时和磁盘配置扩散。
+  delete normalizedSettings.gitlabMergeTargetBranch
   // legacyUsageTool 存储旧版单选配置，用于把既有单价迁移到原来选中的工具。
   const legacyUsageTool =
     settings?.aiUsageTool === 'codex' ? 'codex' : DEFAULT_AI_USAGE_TOOL

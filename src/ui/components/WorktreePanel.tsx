@@ -156,16 +156,16 @@ function getTaskGitlabEntries(task) {
  * @param {object} props - 组件属性
  * @param {string} props.taskName - 任务名，用于无障碍标签区分任务入口
  * @param {Array<{key:string,label:string,url:string,branch:string}>} props.entries - 当前任务可操作的 GitLab 项目入口列表
- * @param {string} props.targetBranch - GitLab Merge Request 目标分支
+ * @param {string[]} props.targetBranches - GitLab Merge Request 目标分支列表
  * @param {(url:string)=>void} props.onOpenUrl - 打开外部 URL 的回调
  * @returns {JSX.Element|null} GitLab 图标按钮或空
  */
-function TaskGitlabButton({ taskName, entries, targetBranch, onOpenUrl }) {
+function TaskGitlabButton({ taskName, entries, targetBranches, onOpenUrl }) {
   return (
     <GitlabActionsButton
       ariaLabel={`GitLab 操作 ${taskName}`}
       entries={entries}
-      targetBranch={targetBranch}
+      targetBranches={targetBranches}
       onOpenUrl={onOpenUrl}
       type="link"
     />
@@ -738,7 +738,7 @@ function wtStatusTags(wt) {
  * @param {Record<string,string|string[]|Array<{name?:string,url?:string}>>} props.taskLinkMap - 任务名 → Jira/飞书需求/工单链接条目列表 的映射
  * @param {(taskName:string, links:Array<{name:string,url:string}>|string[]|string)=>void} props.onTaskLinkChange - 设置/清除任务链接
  * @param {(url:string)=>void} props.onOpenUrl - 在浏览器中打开 URL
- * @param {string} props.gitlabMergeTargetBranch - GitLab Merge Request 目标分支
+ * @param {string[]} props.gitlabMergeTargetBranches - GitLab Merge Request 目标分支列表
  * @param {(task:object)=>void} props.onAddWorktree - 为某任务追加创建 worktree
  * @param {Record<string,string>} props.cicdLinks - 项目名 → CI/CD 流水线 URL 的映射（从全局配置读取）
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
@@ -783,7 +783,7 @@ export default function WorktreePanel({
   taskLinkMap = {},
   onTaskLinkChange,
   onOpenUrl,
-  gitlabMergeTargetBranch = 'test',
+  gitlabMergeTargetBranches = ['test'],
   onAddWorktree,
   cicdLinks = {},
   claudeUsageMap = {},
@@ -1158,7 +1158,7 @@ export default function WorktreePanel({
               <TaskGitlabButton
                 taskName={t.task}
                 entries={taskGitlabEntries}
-                targetBranch={gitlabMergeTargetBranch}
+                targetBranches={gitlabMergeTargetBranches}
                 onOpenUrl={onOpenUrl}
               />
               {/* 在 Finder 中打开任务目录 */}
@@ -1318,7 +1318,7 @@ export default function WorktreePanel({
                                   branch: wt.branch,
                                 },
                               ]}
-                              targetBranch={gitlabMergeTargetBranch}
+                              targetBranches={gitlabMergeTargetBranches}
                               onOpenUrl={onOpenUrl}
                             />
                           )}
@@ -1379,7 +1379,7 @@ export default function WorktreePanel({
       onTaskTagChange,
       onTaskLinkChange,
       onOpenUrl,
-      gitlabMergeTargetBranch,
+      gitlabMergeTargetBranches,
       onAddWorktree,
       cicdLinks,
       claudeUsageMap,

@@ -128,7 +128,8 @@ const DISPLAY_BADGE_DESCRIPTIONS = {
 const SETTINGS_HELP_TEXT = {
   currentPathProfile: '切换项目和 Worktree 使用的路径组合。',
   mainBranches: '用于识别和切换仓库主分支，如 master、main。',
-  gitlabMergeTargetBranch: 'GitLab 新建 Merge Request 时预填的目标分支。',
+  gitlabMergeTargetBranches:
+    'GitLab 新建 Merge Request 时可选择的目标分支，可配置多个。',
   ignoredProjects: '扫描时跳过指定目录名。',
   autoFetch: '同步远程引用，状态更准确但耗时更长。',
   editorCommand: '编辑器启动命令，{path} 代表项目路径。',
@@ -663,8 +664,12 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       const pathProfileState = normalizePathProfilesForForm(config)
       form.setFieldsValue({
         ...config,
-        // 旧配置对象缺少 MR 目标分支时在表单边界补默认值，避免用户升级后保存其它设置被必填校验拦截。
-        gitlabMergeTargetBranch: config.gitlabMergeTargetBranch || 'test',
+        // 旧版单值配置在表单边界迁移为数组，避免升级后保存其它设置时丢失用户原目标分支。
+        gitlabMergeTargetBranches: Array.isArray(
+          config.gitlabMergeTargetBranches
+        )
+          ? config.gitlabMergeTargetBranches
+          : [config.gitlabMergeTargetBranch || 'test'],
         ...pathProfileState,
         cicdLinksArr,
         workflowSteps,
@@ -1088,14 +1093,23 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
             />
           </Form.Item>
           <Form.Item
-            label="GitLab MR 目标分支"
-            name="gitlabMergeTargetBranch"
-            tooltip={SETTINGS_HELP_TEXT.gitlabMergeTargetBranch}
+            label="GitLab MR 目标分支（可多个）"
+            name="gitlabMergeTargetBranches"
+            tooltip={SETTINGS_HELP_TEXT.gitlabMergeTargetBranches}
             rules={[
-              { required: true, whitespace: true, message: '请输入目标分支' },
+              {
+                required: true,
+                type: 'array',
+                min: 1,
+                message: '请至少配置一个目标分支',
+              },
             ]}
           >
-            <Input placeholder="test" />
+            <Select
+              mode="tags"
+              placeholder="test, master, gamma"
+              tokenSeparators={[',']}
+            />
           </Form.Item>
           <Form.Item
             label="忽略的项目目录"

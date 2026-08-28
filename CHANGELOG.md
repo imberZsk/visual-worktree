@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.11.3] - 2026-08-28
+
+### 修复
+
+- GitLab Merge Request 目标分支由单值改为可配置多个，悬停菜单可分别选择 `test`、`master`、`gamma` 等目标分支；升级时自动保留 `1.11.2` 已保存的单目标分支。
+
 ## [1.11.2] - 2026-08-28
 
 ### 新增
