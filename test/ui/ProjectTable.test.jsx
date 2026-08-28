@@ -192,7 +192,7 @@ describe('ProjectTable visibility actions', () => {
     )
   })
 
-  it('GitLab 图标紧跟 VSCode 后面，悬停可创建合并到配置分支的 MR', async () => {
+  it('GitLab 图标紧跟 VSCode 后面，悬停可选择多个目标分支创建 MR', async () => {
     // gitlabUrl 存储 alpha 项目的 GitLab 网页地址。
     const gitlabUrl = 'https://gitlab.example.com/team/alpha'
     // onOpenUrl 间谍，验证项目 Tab 的 GitLab 按钮打开项目仓库地址。
@@ -203,7 +203,7 @@ describe('ProjectTable visibility actions', () => {
         {...baseProps({
           data: [{ ...makeProjects()[0], gitlabUrl }],
           onOpenUrl,
-          gitlabMergeTargetBranch: 'release/test',
+          gitlabMergeTargetBranches: ['test', 'master', 'gamma'],
         })}
       />
     )
@@ -224,9 +224,9 @@ describe('ProjectTable visibility actions', () => {
     expect(gitlabButtonIndex).toBe(vscodeButtonIndex + 1)
     fireEvent.mouseEnter(buttons[gitlabButtonIndex])
     // createMrItem 存储悬停菜单中的新建 MR 操作。
-    const createMrItem = await screen.findByText(
-      '创建合并到 release/test 的 MR'
-    )
+    expect(await screen.findByText('创建合并到 test 的 MR')).toBeTruthy()
+    expect(screen.getByText('创建合并到 master 的 MR')).toBeTruthy()
+    const createMrItem = screen.getByText('创建合并到 gamma 的 MR')
     fireEvent.click(createMrItem)
     // openedUrl 存储回调收到的 GitLab 新建 MR 地址。
     const openedUrl = new URL(onOpenUrl.mock.calls[0][0])
@@ -235,7 +235,7 @@ describe('ProjectTable visibility actions', () => {
       'feat/alpha'
     )
     expect(openedUrl.searchParams.get('merge_request[target_branch]')).toBe(
-      'release/test'
+      'gamma'
     )
   })
 })

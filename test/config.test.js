@@ -32,7 +32,7 @@ describe('config', () => {
     const cfg = loadConfig(join(ctx.root, 'cfgdir'))
     expect(cfg.onboardingCompleted).toBe(false)
     expect(cfg.mainBranches).toEqual(['master', 'main'])
-    expect(cfg.gitlabMergeTargetBranch).toBe('test')
+    expect(cfg.gitlabMergeTargetBranches).toEqual(['test'])
     expect(cfg.sourceProjectsPath).toBe(
       join(homedir(), 'Desktop', 'work', 'projects')
     )
@@ -176,12 +176,48 @@ describe('config', () => {
     expect(cfg.mainBranches).toEqual(['master', 'main'])
   })
 
-  it('持久化 GitLab Merge Request 目标分支并清理首尾空白', () => {
-    // dir 存储 GitLab MR 目标分支配置测试使用的隔离目录。
+  it('持久化多个 GitLab Merge Request 目标分支并清理空白与重复值', () => {
+    // dir 存储 GitLab MR 多目标分支配置测试使用的隔离目录。
     const dir = join(ctx.root, 'gitlab-merge-target')
-    saveConfig({ gitlabMergeTargetBranch: '  release/test  ' }, dir)
+    saveConfig(
+      {
+        gitlabMergeTargetBranches: [' test ', 'master', 'gamma', 'master', ''],
+      },
+      dir
+    )
 
-    expect(loadConfig(dir).gitlabMergeTargetBranch).toBe('release/test')
+    expect(loadConfig(dir).gitlabMergeTargetBranches).toEqual([
+      'test',
+      'master',
+      'gamma',
+    ])
+  })
+
+  it('将 1.11.2 的 GitLab MR 单目标分支配置迁移为数组', () => {
+    // dir 存储旧版 GitLab MR 单目标分支迁移测试使用的隔离目录。
+    const dir = join(ctx.root, 'legacy-gitlab-merge-target')
+    // file 存储 1.11.2 配置文件路径，用真实磁盘结构验证读取迁移而不是经过新版写入白名单。
+    const { file } = getConfigPaths(dir)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      file,
+      JSON.stringify({
+        activePathProfileId: 'default',
+        pathProfiles: [
+          {
+            id: 'default',
+            name: '工作路径',
+            sourceProjectsPath: '/legacy/source',
+            worktreesPath: '/legacy/worktrees',
+            settings: { gitlabMergeTargetBranch: ' gamma ' },
+          },
+        ],
+      }),
+      'utf8'
+    )
+
+    expect(loadConfig(dir).gitlabMergeTargetBranches).toEqual(['gamma'])
+    expect(loadConfig(dir).gitlabMergeTargetBranch).toBeUndefined()
   })
 
   it('does not migrate the previous flat config structure', () => {

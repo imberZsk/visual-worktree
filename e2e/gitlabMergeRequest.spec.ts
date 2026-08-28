@@ -6,7 +6,7 @@ import { prepareWorkspace } from './helpers/workspaceFixture.ts'
 // execFileAsync 存储 Promise 化的进程执行函数，用于给隔离测试仓库增加 GitLab remote。
 const execFileAsync = promisify(execFile)
 
-test('GitLab 图标悬停可创建合并到设置分支的 MR', async ({
+test('GitLab 图标悬停可选择多个设置分支创建 MR', async ({
   appPage,
   e2eHomePath,
 }, testInfo) => {
@@ -33,18 +33,29 @@ test('GitLab 图标悬停可创建合并到设置分支的 MR', async ({
   await expect(gitlabButton).toBeVisible()
 
   await appPage.getByRole('button', { name: '设置', exact: true }).click()
-  // targetBranchInput 存储设置页中的 MR 目标分支输入框。
-  const targetBranchInput = appPage.getByRole('textbox', {
-    name: 'GitLab MR 目标分支',
+  // targetBranchSelect 存储设置页中的 MR 多目标分支 tags 选择器。
+  const targetBranchSelect = appPage.getByRole('combobox', {
+    name: 'GitLab MR 目标分支（可多个）',
   })
-  await expect(targetBranchInput).toHaveValue('test')
-  await targetBranchInput.fill('release/test')
+  await expect(appPage.locator('.ant-select-selection-item')).toContainText([
+    'test',
+  ])
+  await targetBranchSelect.fill('master')
+  await targetBranchSelect.press('Enter')
+  await targetBranchSelect.fill('gamma')
+  await targetBranchSelect.press('Enter')
   await appPage.locator('.ant-drawer-footer button').last().click()
   await expect(appPage.getByRole('dialog', { name: '设置' })).toBeHidden()
 
   await gitlabButton.hover()
   await expect(
-    appPage.getByText('创建合并到 release/test 的 MR', { exact: true })
+    appPage.getByText('创建合并到 test 的 MR', { exact: true })
+  ).toBeVisible()
+  await expect(
+    appPage.getByText('创建合并到 master 的 MR', { exact: true })
+  ).toBeVisible()
+  await expect(
+    appPage.getByText('创建合并到 gamma 的 MR', { exact: true })
   ).toBeVisible()
   // screenshotPath 存储实际 Electron 界面中的 GitLab hover 菜单截图。
   const screenshotPath = testInfo.outputPath('gitlab-merge-request-hover.png')

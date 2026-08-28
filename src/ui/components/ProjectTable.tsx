@@ -30,7 +30,7 @@ import GitlabActionsButton from './GitlabActionsButton.tsx'
  * @param {(project:object)=>void} props.onOpenFinder - 打开 Finder 回调
  * @param {(project:object)=>void} props.onOpenVscode - 打开 VSCode 回调
  * @param {(url:string)=>void} props.onOpenUrl - 打开外部链接回调
- * @param {string} props.gitlabMergeTargetBranch - GitLab Merge Request 目标分支
+ * @param {string[]} props.gitlabMergeTargetBranches - GitLab Merge Request 目标分支列表
  * @param {(project:object)=>void} props.onOpenTerminal - 打开终端回调
  * @param {(project:object)=>void} props.onCopyPath - 复制路径回调
  * @param {string[]} [props.hiddenProjectKeys] - 已隐藏项目路径列表
@@ -52,7 +52,7 @@ export default function ProjectTable({
   onOpenFinder,
   onOpenVscode,
   onOpenUrl,
-  gitlabMergeTargetBranch = 'test',
+  gitlabMergeTargetBranches = ['test'],
   onOpenTerminal,
   onCopyPath,
   hiddenProjectKeys = [],
@@ -226,7 +226,7 @@ export default function ProjectTable({
                   branch: record.currentBranch,
                 },
               ]}
-              targetBranch={gitlabMergeTargetBranch}
+              targetBranches={gitlabMergeTargetBranches}
               onOpenUrl={onOpenUrl}
             />
           )}
