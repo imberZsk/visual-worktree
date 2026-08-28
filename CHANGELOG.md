@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.11.2] - 2026-08-28
+
+### 新增
+
+- GitLab 项目入口支持悬停或点击后创建 Merge Request，自动带入当前分支，并按工作区持久化可配置的目标分支；默认目标分支为 `test`。
+
 ## [1.11.1] - 2026-08-19
 
 ### 修复
