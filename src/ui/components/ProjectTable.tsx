@@ -7,13 +7,13 @@ import {
   CopyOutlined,
   PushpinFilled,
   PushpinOutlined,
-  GitlabOutlined,
   ConsoleSqlOutlined,
 } from '@ant-design/icons'
 import { statusTags } from '../projectLogic.ts'
 import { hasVisibilityKey } from '../visibilityLogic.ts'
 import { VscodeIcon } from '../icons.tsx'
 import SingleLineText from './SingleLineText.tsx'
+import GitlabActionsButton from './GitlabActionsButton.tsx'
 
 // 项目列表表格组件：展示项目名、当前分支、状态标签、操作按钮，支持多选。
 
@@ -30,6 +30,7 @@ import SingleLineText from './SingleLineText.tsx'
  * @param {(project:object)=>void} props.onOpenFinder - 打开 Finder 回调
  * @param {(project:object)=>void} props.onOpenVscode - 打开 VSCode 回调
  * @param {(url:string)=>void} props.onOpenUrl - 打开外部链接回调
+ * @param {string} props.gitlabMergeTargetBranch - GitLab Merge Request 目标分支
  * @param {(project:object)=>void} props.onOpenTerminal - 打开终端回调
  * @param {(project:object)=>void} props.onCopyPath - 复制路径回调
  * @param {string[]} [props.hiddenProjectKeys] - 已隐藏项目路径列表
@@ -51,6 +52,7 @@ export default function ProjectTable({
   onOpenFinder,
   onOpenVscode,
   onOpenUrl,
+  gitlabMergeTargetBranch = 'test',
   onOpenTerminal,
   onCopyPath,
   hiddenProjectKeys = [],
@@ -214,14 +216,19 @@ export default function ProjectTable({
           </Tooltip>
           {/* GitLab 项目入口：由核心层根据 origin remote 自动推导，紧跟 VSCode 方便项目级跳转。 */}
           {record.gitlabUrl && (
-            <Tooltip title="打开 GitLab">
-              <Button
-                size="small"
-                aria-label={`打开 GitLab ${record.name}`}
-                icon={<GitlabOutlined />}
-                onClick={() => onOpenUrl?.(record.gitlabUrl)}
-              />
-            </Tooltip>
+            <GitlabActionsButton
+              ariaLabel={`GitLab 操作 ${record.name}`}
+              entries={[
+                {
+                  key: record.gitlabUrl,
+                  label: record.name,
+                  url: record.gitlabUrl,
+                  branch: record.currentBranch,
+                },
+              ]}
+              targetBranch={gitlabMergeTargetBranch}
+              onOpenUrl={onOpenUrl}
+            />
           )}
           <Tooltip title="在终端中打开">
             <Button

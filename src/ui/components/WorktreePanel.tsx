@@ -34,7 +34,6 @@ import {
   FileTextOutlined,
   PushpinFilled,
   PushpinOutlined,
-  GitlabOutlined,
   ConsoleSqlOutlined,
   EditOutlined,
   ClockCircleOutlined,
@@ -70,6 +69,7 @@ import SingleLineText from './SingleLineText.tsx'
 import { withConfirmDefaults } from '../modalDefaults.ts'
 import './WorktreePanel.css'
 import TaskTagControl from './TaskTagControl.tsx'
+import GitlabActionsButton from './GitlabActionsButton.tsx'
 
 // PRIVATE_WORKFLOW_EDITOR_Z_INDEX 存储项目私有流程编辑弹层层级，需高于外层需求流程弹层。
 const PRIVATE_WORKFLOW_EDITOR_Z_INDEX = 1200
@@ -132,7 +132,7 @@ function TaskStatusControl({ taskName, statusKey, taskStatuses, onChange }) {
 /**
  * 从任务下的 worktree 列表中收集可打开的 GitLab 项目入口，并按 URL 去重。
  * @param {object} task - 任务分组项（含 worktrees）
- * @returns {Array<{key:string,label:string,url:string}>} GitLab 菜单/按钮入口列表
+ * @returns {Array<{key:string,label:string,url:string,branch:string}>} GitLab 菜单/按钮入口列表
  */
 function getTaskGitlabEntries(task) {
   // seenUrls 存储已收集过的 GitLab URL，避免同一项目重复出现在任务级入口中。
@@ -146,78 +146,29 @@ function getTaskGitlabEntries(task) {
     seenUrls.add(url)
     // label 存储下拉菜单或 tooltip 中展示的项目名，项目名缺失时回退 URL。
     const label = wt?.project || url
-    entries.push({ key: url, label, url })
+    entries.push({ key: url, label, url, branch: wt?.branch || '' })
   }
   return entries
 }
 
 /**
- * 任务级 GitLab 打开按钮：单项目直接打开，多项目以下拉菜单选择具体项目。
+ * 任务级 GitLab 操作按钮：悬停后按项目打开 GitLab 或创建 Merge Request。
  * @param {object} props - 组件属性
  * @param {string} props.taskName - 任务名，用于无障碍标签区分任务入口
- * @param {Array<{key:string,label:string,url:string}>} props.entries - 当前任务可打开的 GitLab 项目入口列表
+ * @param {Array<{key:string,label:string,url:string,branch:string}>} props.entries - 当前任务可操作的 GitLab 项目入口列表
+ * @param {string} props.targetBranch - GitLab Merge Request 目标分支
  * @param {(url:string)=>void} props.onOpenUrl - 打开外部 URL 的回调
  * @returns {JSX.Element|null} GitLab 图标按钮或空
  */
-function TaskGitlabButton({ taskName, entries, onOpenUrl }) {
-  // validEntries 存储有效 GitLab 入口列表，避免外部传入 null/undefined 时渲染出错。
-  const validEntries = entries || []
-  if (validEntries.length === 0) return null
-  if (validEntries.length === 1) {
-    // entry 存储单项目任务的唯一 GitLab 入口，点击图标即可直接打开。
-    const entry = validEntries[0]
-    return (
-      <Tooltip title={`打开 GitLab：${entry.label}`}>
-        <Button
-          size="small"
-          type="link"
-          aria-label={`打开 GitLab ${taskName} ${entry.label}`}
-          icon={<GitlabOutlined />}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenUrl?.(entry.url)
-          }}
-        />
-      </Tooltip>
-    )
-  }
-  // menuItems 存储多项目任务的 GitLab 下拉菜单项，每项打开对应项目仓库。
-  const menuItems = validEntries.map((entry) => ({
-    key: entry.key,
-    label: entry.label,
-  }))
-
-  /**
-   * 处理多项目任务 GitLab 菜单点击。
-   * @param {{key:string}} info - antd Dropdown 传入的菜单点击信息
-   */
-  const handleMenuClick = ({ key }) => {
-    // entry 存储用户在下拉菜单中选择的项目入口。
-    const entry = validEntries.find((item) => item.key === key)
-    if (entry) onOpenUrl?.(entry.url)
-  }
-
+function TaskGitlabButton({ taskName, entries, targetBranch, onOpenUrl }) {
   return (
-    // stopPropagation 放在 Dropdown 外层，避免点击图标或菜单触发 Collapse 展开/收起。
-    <span
-      onClick={(e) => e.stopPropagation()}
-      style={{ display: 'inline-flex' }}
-    >
-      <Dropdown
-        trigger={['click']}
-        menu={{ items: menuItems, onClick: handleMenuClick }}
-      >
-        <Tooltip title="打开 GitLab">
-          <Button
-            size="small"
-            type="link"
-            aria-label={`打开 GitLab ${taskName}`}
-            icon={<GitlabOutlined />}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </Tooltip>
-      </Dropdown>
-    </span>
+    <GitlabActionsButton
+      ariaLabel={`GitLab 操作 ${taskName}`}
+      entries={entries}
+      targetBranch={targetBranch}
+      onOpenUrl={onOpenUrl}
+      type="link"
+    />
   )
 }
 
@@ -787,6 +738,7 @@ function wtStatusTags(wt) {
  * @param {Record<string,string|string[]|Array<{name?:string,url?:string}>>} props.taskLinkMap - 任务名 → Jira/飞书需求/工单链接条目列表 的映射
  * @param {(taskName:string, links:Array<{name:string,url:string}>|string[]|string)=>void} props.onTaskLinkChange - 设置/清除任务链接
  * @param {(url:string)=>void} props.onOpenUrl - 在浏览器中打开 URL
+ * @param {string} props.gitlabMergeTargetBranch - GitLab Merge Request 目标分支
  * @param {(task:object)=>void} props.onAddWorktree - 为某任务追加创建 worktree
  * @param {Record<string,string>} props.cicdLinks - 项目名 → CI/CD 流水线 URL 的映射（从全局配置读取）
  * @param {Record<string,object>} props.claudeUsageMap - 任务名 → Claude 用量汇总 {sessionCount, usage, cost} 的映射
@@ -831,6 +783,7 @@ export default function WorktreePanel({
   taskLinkMap = {},
   onTaskLinkChange,
   onOpenUrl,
+  gitlabMergeTargetBranch = 'test',
   onAddWorktree,
   cicdLinks = {},
   claudeUsageMap = {},
@@ -1205,6 +1158,7 @@ export default function WorktreePanel({
               <TaskGitlabButton
                 taskName={t.task}
                 entries={taskGitlabEntries}
+                targetBranch={gitlabMergeTargetBranch}
                 onOpenUrl={onOpenUrl}
               />
               {/* 在 Finder 中打开任务目录 */}
@@ -1354,14 +1308,19 @@ export default function WorktreePanel({
                           </Tooltip>
                           {/* GitLab 项目入口：由核心层根据 origin remote 自动推导，放在 VSCode 后面方便连续操作。 */}
                           {wt.gitlabUrl && (
-                            <Tooltip title="打开 GitLab">
-                              <Button
-                                size="small"
-                                aria-label={`打开 GitLab ${wt.project}`}
-                                icon={<GitlabOutlined />}
-                                onClick={() => onOpenUrl?.(wt.gitlabUrl)}
-                              />
-                            </Tooltip>
+                            <GitlabActionsButton
+                              ariaLabel={`GitLab 操作 ${wt.project}`}
+                              entries={[
+                                {
+                                  key: wt.gitlabUrl,
+                                  label: wt.project,
+                                  url: wt.gitlabUrl,
+                                  branch: wt.branch,
+                                },
+                              ]}
+                              targetBranch={gitlabMergeTargetBranch}
+                              onOpenUrl={onOpenUrl}
+                            />
                           )}
                           <Tooltip title="在 Finder 中打开">
                             <Button
@@ -1420,6 +1379,7 @@ export default function WorktreePanel({
       onTaskTagChange,
       onTaskLinkChange,
       onOpenUrl,
+      gitlabMergeTargetBranch,
       onAddWorktree,
       cicdLinks,
       claudeUsageMap,

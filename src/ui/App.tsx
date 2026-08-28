@@ -335,6 +335,9 @@ export default function App() {
                 taskLinkMap={taskLinkMap}
                 onTaskLinkChange={setTaskLink}
                 onOpenUrl={projectActions.openUrl}
+                gitlabMergeTargetBranch={
+                  config?.gitlabMergeTargetBranch ?? 'test'
+                }
                 onAddWorktree={taskLifecycle.addWorktreeToTask}
                 cicdLinks={config?.cicdLinks ?? {}}
                 claudeUsageMap={aiUsage.usageMap}
@@ -420,6 +423,9 @@ export default function App() {
                 onOpenFinder={projectActions.openFinder}
                 onOpenVscode={projectActions.openVscode}
                 onOpenUrl={projectActions.openUrl}
+                gitlabMergeTargetBranch={
+                  config?.gitlabMergeTargetBranch ?? 'test'
+                }
                 onOpenTerminal={projectActions.openTerminal}
                 onCopyPath={projectActions.copyPath}
                 hiddenProjectKeys={projectVisibility.hidden}
