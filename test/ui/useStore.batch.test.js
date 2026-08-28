@@ -104,6 +104,24 @@ describe('useStore runBatch selection behavior', () => {
 
     expect(mockApi.batchOperate).toHaveBeenCalledWith(['/repo/a'], 'stash', {})
   })
+
+  it('切换项目状态页签时清空上一页签的项目勾选', () => {
+    useStore.getState().setSelectedPaths(['/repo/a', '/repo/b'])
+
+    useStore.getState().setFilter('can-pull')
+
+    expect(useStore.getState().filter).toBe('can-pull')
+    expect(useStore.getState().selectedPaths).toEqual([])
+  })
+
+  it('重复选择当前项目状态页签时保留项目勾选', () => {
+    useStore.getState().setFilter('can-pull')
+    useStore.getState().setSelectedPaths(['/repo/a'])
+
+    useStore.getState().setFilter('can-pull')
+
+    expect(useStore.getState().selectedPaths).toEqual(['/repo/a'])
+  })
 })
 
 describe('useStore task link behavior', () => {

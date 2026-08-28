@@ -343,10 +343,15 @@ export const useStore = create((set, get) => ({
   },
 
   /**
-   * 设置筛选类型
-   * @param {string} filter - 筛选类型
+   * 设置筛选类型；切换状态页签时同步清空上一页签的项目勾选。
+   * @param {string} filter - 目标筛选类型
    */
-  setFilter: (filter) => set({ filter }),
+  setFilter: (filter) => {
+    // currentFilter 存储切换前的筛选类型；历史实现只更新筛选条件，导致上一页签的全局勾选被批量操作继续使用。
+    const currentFilter = get().filter
+    if (filter === currentFilter) return
+    set({ filter, selectedPaths: [] })
+  },
 
   /**
    * 设置搜索关键词
