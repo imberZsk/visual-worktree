@@ -32,6 +32,7 @@ describe('config', () => {
     const cfg = loadConfig(join(ctx.root, 'cfgdir'))
     expect(cfg.onboardingCompleted).toBe(false)
     expect(cfg.mainBranches).toEqual(['master', 'main'])
+    expect(cfg.gitlabMergeTargetBranch).toBe('test')
     expect(cfg.sourceProjectsPath).toBe(
       join(homedir(), 'Desktop', 'work', 'projects')
     )
@@ -173,6 +174,14 @@ describe('config', () => {
     expect(cfg.ignoredProjects).toEqual(['a'])
     // unspecified fields fall back to defaults
     expect(cfg.mainBranches).toEqual(['master', 'main'])
+  })
+
+  it('持久化 GitLab Merge Request 目标分支并清理首尾空白', () => {
+    // dir 存储 GitLab MR 目标分支配置测试使用的隔离目录。
+    const dir = join(ctx.root, 'gitlab-merge-target')
+    saveConfig({ gitlabMergeTargetBranch: '  release/test  ' }, dir)
+
+    expect(loadConfig(dir).gitlabMergeTargetBranch).toBe('release/test')
   })
 
   it('does not migrate the previous flat config structure', () => {

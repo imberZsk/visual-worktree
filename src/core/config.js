@@ -52,6 +52,7 @@ const DEFAULT_TOKEN_PRICING_BY_TOOL = Object.fromEntries(
 const DEFAULT_WORKSPACE_SETTINGS = {
   onboardingCompleted: false,
   mainBranches: ['master', 'main'],
+  gitlabMergeTargetBranch: 'test',
   ignoredProjects: [],
   autoFetch: false,
   cicdLinks: {},
@@ -170,6 +171,9 @@ function normalizeWorkspaceSettings(settings) {
   normalizedSettings.tokenPricing = normalizeTokenPricing(
     normalizedSettings.tokenPricing
   )
+  // gitlabMergeTargetBranch 存储 GitLab 新建 Merge Request 默认使用的目标分支；空配置回退 test。
+  normalizedSettings.gitlabMergeTargetBranch =
+    String(normalizedSettings.gitlabMergeTargetBranch || '').trim() || 'test'
   // legacyUsageTool 存储旧版单选配置，用于把既有单价迁移到原来选中的工具。
   const legacyUsageTool =
     settings?.aiUsageTool === 'codex' ? 'codex' : DEFAULT_AI_USAGE_TOOL

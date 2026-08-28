@@ -174,7 +174,7 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
     expect(onOpenVscode).toHaveBeenCalledWith('/wt/TASK-A')
   })
 
-  it('任务级 GitLab 图标紧跟 VSCode 后面，单项目时点击打开该项目 GitLab', () => {
+  it('任务级 GitLab 图标紧跟 VSCode 后面，悬停可创建合并到默认分支的 MR', async () => {
     // gitlabUrl 存储 TASK-A 下 projA 对应的 GitLab 网页地址。
     const gitlabUrl = 'https://gitlab.example.com/team/projA'
     // onOpenUrl 间谍，验证任务级 GitLab 按钮打开的是项目仓库地址。
@@ -222,8 +222,18 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
     )
 
     expect(gitlabButtonIndex).toBe(vscodeButtonIndex + 1)
-    fireEvent.click(buttons[gitlabButtonIndex])
-    expect(onOpenUrl).toHaveBeenCalledWith(gitlabUrl)
+    fireEvent.mouseEnter(buttons[gitlabButtonIndex])
+    // createMrItem 存储任务级 GitLab 悬停菜单中的新建 MR 操作。
+    const createMrItem = await screen.findByText('创建合并到 test 的 MR')
+    fireEvent.click(createMrItem)
+    // openedUrl 存储任务级回调收到的新建 MR 页面地址。
+    const openedUrl = new URL(onOpenUrl.mock.calls[0][0])
+    expect(openedUrl.searchParams.get('merge_request[source_branch]')).toBe(
+      'feat-a'
+    )
+    expect(openedUrl.searchParams.get('merge_request[target_branch]')).toBe(
+      'test'
+    )
   })
 
   it('worktree 级（展开后）渲染 Finder/VSCode 图标按钮，点击传 worktree 路径', () => {
@@ -251,7 +261,7 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
     expect(onOpenVscode).toHaveBeenCalledWith('/wt/TASK-A/projA')
   })
 
-  it('worktree 级 GitLab 图标紧跟 VSCode 后面，点击打开该项目 GitLab', () => {
+  it('worktree 级 GitLab 图标紧跟 VSCode 后面', () => {
     // gitlabUrl 存储 projA 对应的 GitLab 网页地址。
     const gitlabUrl = 'https://gitlab.example.com/team/projA'
     // onOpenUrl 间谍，验证项目行 GitLab 按钮打开项目仓库地址。
@@ -297,8 +307,6 @@ describe('WorktreePanel 终端与复制路径按钮', () => {
     )
 
     expect(gitlabButtonIndex).toBe(vscodeButtonIndex + 1)
-    fireEvent.click(buttons[gitlabButtonIndex])
-    expect(onOpenUrl).toHaveBeenCalledWith(gitlabUrl)
   })
 
   it('worktree 级（展开后）渲染复制路径/终端图标按钮，点击传 worktree 路径', () => {
