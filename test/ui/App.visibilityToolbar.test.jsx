@@ -418,6 +418,36 @@ describe('App 显示隐藏项工具栏', () => {
     expect(mockApi.scanProjects).toHaveBeenCalledTimes(1)
   })
 
+  it('项目筛选 Tab 之间隔离表格勾选和批量操作数量', async () => {
+    localStorage.setItem('vw-active-view', 'projects')
+    // filterProjects 存储包含可拉取项目的列表，用于复现项目同时存在于“全部”和“可拉取” Tab。
+    const filterProjects = [
+      { ...projects[0], canPull: true, behind: 1 },
+      { ...projects[1] },
+    ]
+    mockApi.scanProjects.mockResolvedValue(filterProjects)
+    mockApi.loadProjectVisibility.mockResolvedValue({ hidden: [], pinned: [] })
+    renderApp()
+
+    await waitFor(() => expect(screen.getByText('alpha')).toBeTruthy())
+    // allTabCheckboxes 存储“全部” Tab 的全选和项目勾选框。
+    const allTabCheckboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(allTabCheckboxes[1])
+    expect(screen.getByRole('button', { name: /批量操作（1）/ })).toBeTruthy()
+
+    fireEvent.click(screen.getByText('可拉取', { exact: true }))
+    // canPullCheckboxes 存储“可拉取” Tab 的全选和项目勾选框。
+    const canPullCheckboxes = screen.getAllByRole('checkbox')
+    expect(canPullCheckboxes[1].checked).toBe(false)
+    expect(screen.getByRole('button', { name: /批量操作（0）/ }).disabled).toBe(
+      true
+    )
+
+    fireEvent.click(screen.getByText('全部', { exact: true }))
+    expect(screen.getAllByRole('checkbox')[1].checked).toBe(true)
+    expect(screen.getByRole('button', { name: /批量操作（1）/ })).toBeTruthy()
+  })
+
   it('项目较多且刷新未完成时只在项目表区域展示 loading', async () => {
     // manyProjects 存储长项目列表，复现列表内容过长时 loading 被推到可视区外的问题。
     const manyProjects = Array.from({ length: 40 }, (_, index) => ({

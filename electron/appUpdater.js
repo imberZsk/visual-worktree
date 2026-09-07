@@ -54,16 +54,37 @@ export function registerAppUpdater(ipcMain, updater, isPackaged) {
     })
   }
   ipcMain.handle('app-update:check', async () => {
-    // 开发环境不访问发布服务；打包环境若更新模块导出异常也降级为无更新，不能让桌面应用启动崩溃。
-    if (!isPackaged || !updater) return { available: false }
-    // result 存储 GitHub Release 检查结果。
-    const result = await updater.checkForUpdates()
+    // 版本检查只访问 GitHub Release API，开发版也必须真实检查；是否打包仅影响后续下载安装能力。
+    // result 存储 GitHub Release 检查结果。electron-updater 需要 latest.yml 才能检查，
+    // 但版本提示本身只读取 GitHub API，避免用户仅为查看版本而依赖额外元数据文件。
+    const response = await fetch(
+      'https://api.github.com/repos/imberZsk/visual-worktree/releases/latest',
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'Visual-Worktree',
+        },
+      }
+    )
+    if (!response.ok)
+      throw new Error(`检查应用更新失败（HTTP ${response.status}）`)
+    const release = await response.json()
     // version 存储远端最新版本号；仅在 electron-updater 已完成当前版本比较后使用。
-    const version = result?.updateInfo?.version
-    // Bug 修复：updateInfo 在当前版本已是最新时仍然存在，必须使用 isUpdateAvailable，避免同版本错误展示下载入口。
-    return result?.isUpdateAvailable && version
-      ? { available: true, version, downloaded }
-      : { available: false }
+    const version = String(release?.tag_name || '').replace(/^v/, '')
+    const currentVersion = String(
+      process.env.VISUAL_WORKTREE_VERSION || ''
+    ).replace(/^v/, '')
+    const newer = version && currentVersion && version !== currentVersion
+    if (!currentVersion) return { available: false }
+    return {
+      available: Boolean(newer),
+      version: newer ? version : null,
+      currentVersion,
+      latestVersion: version,
+      checkedAt: new Date().toISOString(),
+      canInstall: Boolean(isPackaged && updater),
+      downloaded,
+    }
   })
   ipcMain.handle('app-update:download', async (event) => {
     if (!updater) throw new Error('应用更新模块不可用')

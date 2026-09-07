@@ -96,6 +96,13 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  // macOS 全屏会隐藏交通灯，通知渲染进程释放标题左侧避让空间；退出后恢复。
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow?.webContents.send('window-fullscreen-changed', true)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow?.webContents.send('window-fullscreen-changed', false)
+  })
   return mainWindow
 }
 
@@ -112,6 +119,7 @@ const appUpdater = await loadAutoUpdater(
   () => import('electron-updater'),
   app.isPackaged
 )
+process.env.VISUAL_WORKTREE_VERSION = app.getVersion()
 registerAppUpdater(ipcMain, appUpdater, app.isPackaged)
 
 // PM_SMOKE 冒烟模式自检：验证窗口与渲染进程后打印 SMOKE_OK 并退出。

@@ -1,8 +1,26 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import AppHeader from '../../src/ui/components/AppHeader.tsx'
+
+// mockApi 存储 Header 依赖的窗口平台和全屏 API 替身。
+const mockApi = vi.hoisted(() => ({
+  platform: 'darwin',
+  getWindowFullscreen: vi.fn().mockResolvedValue(false),
+  onWindowFullscreenChanged: vi.fn(() => () => {}),
+}))
+
+// FULLSCREEN_SESSION_STORAGE_KEY 存储 Header 重载前的全屏状态测试键。
+const FULLSCREEN_SESSION_STORAGE_KEY = 'visual-worktree-window-fullscreen'
+
+vi.mock('../../src/ui/api.ts', () => ({ api: mockApi }))
 
 // COMPONENT_SOURCE 存储 Header 组件源码，用于阻止固定行内视觉规则和重复文字按钮 Tooltip 回归。
 const COMPONENT_SOURCE = readFileSync(
@@ -22,6 +40,10 @@ const BASE_PROPS = {
   activePathProfileId: 'default',
   pathProfileSwitching: false,
   updateVersion: null,
+  updateError: '',
+  updateChecked: false,
+  updateChecking: false,
+  onCheckUpdate: () => {},
   updateDownloading: false,
   updateDownloadPercent: 0,
   loading: false,
@@ -35,7 +57,12 @@ const BASE_PROPS = {
   onOpenSettings: () => {},
 }
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  mockApi.getWindowFullscreen.mockReset().mockResolvedValue(false)
+  mockApi.onWindowFullscreenChanged.mockClear()
+  sessionStorage.removeItem(FULLSCREEN_SESSION_STORAGE_KEY)
+})
 
 describe('AppHeader', () => {
   it('刷新按钮保留可访问名称和点击行为，但不再包裹重复 Tooltip', () => {
@@ -93,5 +120,32 @@ describe('AppHeader', () => {
     expect(STYLE_SOURCE).toMatch(
       /\.app-header--macos\.ant-layout-header\s*\{[\s\S]*padding-inline-start:\s*96px/
     )
+  })
+
+  it('挂载时已全屏也会立即释放交通灯占位', async () => {
+    mockApi.getWindowFullscreen.mockResolvedValue(true)
+    // container 存储 Header 挂载容器，用于断言全屏样式类。
+    const { container } = render(<AppHeader {...BASE_PROPS} />)
+
+    await waitFor(() =>
+      expect(
+        container
+          .querySelector('.app-header')
+          ?.classList.contains('app-header--fullscreen')
+      ).toBe(true)
+    )
+  })
+
+  it('Command+R 后首帧沿用全屏布局避免标题横向抖动', () => {
+    sessionStorage.setItem(FULLSCREEN_SESSION_STORAGE_KEY, 'true')
+    mockApi.getWindowFullscreen.mockImplementation(() => new Promise(() => {}))
+    // container 存储 Header 挂载容器，用于验证 IPC 返回前的第一帧已是全屏布局。
+    const { container } = render(<AppHeader {...BASE_PROPS} />)
+
+    expect(
+      container
+        .querySelector('.app-header')
+        ?.classList.contains('app-header--fullscreen')
+    ).toBe(true)
   })
 })

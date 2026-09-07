@@ -98,6 +98,59 @@ describe('useAiUsageSummary 启动调度', () => {
     })
   })
 
+  it('删除任务时只裁剪已有结果，不重新扫描剩余任务', async () => {
+    // renderResult 存储测试挂载结果，用于模拟删除 TASK-B 后任务列表刷新。
+    const renderResult = render(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }, { task: 'TASK-B' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+      />
+    )
+
+    await act(async () => vi.advanceTimersByTimeAsync(1500))
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenCalledTimes(1)
+
+    renderResult.rerender(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+      />
+    )
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('新增任务时只统计新任务并保留已有任务结果', async () => {
+    mockApi.getClaudeTasksSummary
+      .mockResolvedValueOnce({ 'TASK-A': { cost: { cny: 1 } } })
+      .mockResolvedValueOnce({ 'TASK-B': { cost: { cny: 2 } } })
+    // renderResult 存储测试挂载结果，用于模拟新建 TASK-B 后的任务列表刷新。
+    const renderResult = render(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+      />
+    )
+
+    await act(async () => vi.advanceTimersByTimeAsync(1500))
+    renderResult.rerender(
+      <UsageSummaryHarness
+        tasks={[{ task: 'TASK-A' }, { task: 'TASK-B' }]}
+        usageTools={['claude-code']}
+        pricingConfig={{}}
+      />
+    )
+    await act(async () => vi.advanceTimersByTimeAsync(1500))
+
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenCalledTimes(2)
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenNthCalledWith(1, ['TASK-A'])
+    expect(mockApi.getClaudeTasksSummary).toHaveBeenNthCalledWith(2, ['TASK-B'])
+  })
+
   it('非 Worktree 页面不启动用量扫描', async () => {
     render(
       <UsageSummaryHarness

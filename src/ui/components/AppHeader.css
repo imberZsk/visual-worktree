@@ -25,6 +25,10 @@
   padding-inline-start: 96px;
 }
 
+.app-header--macos.app-header--fullscreen.ant-layout-header {
+  padding-inline-start: 16px;
+}
+
 /* macOS 下拉状态会临时把 Header 设为 no-drag；最上沿独立拖动带保证窗口失焦或被遮挡后仍能直接拖动。 */
 .app-header__drag-strip {
   display: none;
@@ -83,4 +87,16 @@
 .app-header__update-progress {
   margin: 0;
   width: 96px;
+}
+
+.app-header__update-error {
+  color: var(--ant-color-error);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-header__update-ok {
+  color: var(--ant-color-success);
+  font-size: 12px;
+  white-space: nowrap;
 }

@@ -494,7 +494,21 @@ function getTerminalOptions(platform) {
  * @param {(cfg:object)=>void} props.onSaved - 保存成功回调
  * @returns {JSX.Element} 抽屉元素
  */
-export default function SettingsModal({ open, config, onClose, onSaved }) {
+export default function SettingsModal({
+  open,
+  config,
+  updateVersion,
+  updateError,
+  updateChecked,
+  updateChecking,
+  updateCheckDetails,
+  updateDownloading,
+  updateDownloadPercent,
+  onCheckUpdate,
+  onDownloadUpdate,
+  onClose,
+  onSaved,
+}) {
   // antd 表单实例
   const [form] = Form.useForm()
   // watchedTaskStatuses 存储表单中的动态任务状态，用于实时清洗看板列设置。
@@ -598,10 +612,60 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
   const [aiApiKeyConfigured, setAiApiKeyConfigured] = useState(false)
   // aiApiKeyHint 存储由主进程生成的 Key 末四位掩码，不包含完整凭据。
   const [aiApiKeyHint, setAiApiKeyHint] = useState('')
+  // cliVersions 存储 AI CLI 版本检查和更新状态。
+  const [cliVersions, setCliVersions] = useState({})
+  // loadedAiSettingsRef 存储打开设置时读取到的安全 AI 配置，用于判断普通设置保存是否需要访问凭据存储。
+  const loadedAiSettingsRef = useRef({ model: '', baseUrl: '' })
+  // aiSettingsReadyRef 存储当前设置打开周期的安全摘要加载任务，保存时等待它完成以避免竞态。
+  const aiSettingsReadyRef = useRef(Promise.resolve())
   // resetting 标记恢复默认设置是否正在进行，避免重复点击确认造成并发写配置。
   const [resetting, setResetting] = useState(false)
   // 从 AntApp 上下文取 message，使提示跟随明暗主题
   const { message, modal } = AntApp.useApp()
+  /** 检查 AI CLI 版本。 */
+  const checkCli = async (toolId) => {
+    setCliVersions((s) => ({
+      ...s,
+      [toolId]: { ...(s[toolId] || {}), loading: true },
+    }))
+    try {
+      const result = await api.checkCliVersion(toolId)
+      setCliVersions((s) => ({ ...s, [toolId]: { ...result, loading: false } }))
+    } catch (error) {
+      setCliVersions((s) => ({
+        ...s,
+        [toolId]: {
+          ...(s[toolId] || {}),
+          loading: false,
+          error: error?.message || '检查失败',
+        },
+      }))
+    }
+  }
+  /** 更新 AI CLI 版本。 */
+  const updateCli = async (toolId) => {
+    setCliVersions((s) => ({
+      ...s,
+      [toolId]: { ...(s[toolId] || {}), updating: true },
+    }))
+    try {
+      const result = await api.updateCliVersion(toolId)
+      setCliVersions((s) => ({
+        ...s,
+        [toolId]: { ...result, updating: false },
+      }))
+      message.success(`${result.name} 已更新到 ${result.version}`)
+    } catch (error) {
+      setCliVersions((s) => ({
+        ...s,
+        [toolId]: {
+          ...(s[toolId] || {}),
+          updating: false,
+          error: error?.message || '更新失败',
+        },
+      }))
+    }
+  }
   // 已扫描到的项目列表，用于 CI/CD Tab 的"项目目录名"下拉选项
   const projects = useStore((s) => s.projects)
   // projectLoading 标记源项目扫描是否正在进行，用于 CI/CD 项目下拉显示 loading 状态。
@@ -702,6 +766,10 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       const settings = result.settings || {}
       setAiApiKeyConfigured(Boolean(settings.apiKeyConfigured))
       setAiApiKeyHint(settings.apiKeyHint || '')
+      loadedAiSettingsRef.current = {
+        model: settings.model || 'gpt-5.6-sol',
+        baseUrl: settings.baseUrl || '',
+      }
       form.setFieldsValue({
         aiModel: settings.model || 'gpt-5.6-sol',
         aiBaseUrl: settings.baseUrl || '',
@@ -709,8 +777,10 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         clearAiApiKey: false,
       })
     }
-    loadAiSettings().catch((error) => {
-      if (!canceled) message.error(`读取 AI 模型配置失败：${error.message}`)
+    aiSettingsReadyRef.current = loadAiSettings().catch((error) => {
+      if (!canceled) {
+        message.error(`读取 AI 模型配置失败：${error.message}`)
+      }
     })
     return () => {
       canceled = true
@@ -724,6 +794,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
     if (saving) return
     setSaving(true)
     try {
+      await aiSettingsReadyRef.current
       await form.validateFields()
       // values 为表单收集的所有 Tab 下的配置值；getFieldsValue(true) 会包含未打开 Tab 中尚未挂载的字段。
       // WHY：antd Tabs 默认懒渲染，未进入「流程/工作文档/CI/CD」页时 validateFields 只返回已挂载字段，
@@ -792,19 +863,28 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         rawKanbanSettings,
         taskStatuses
       )
-      // aiSettingsResult 存储加密保存并同步后端后的安全状态，不包含 API Key。
-      const aiSettingsResult = await api.saveAiModelSettings({
-        model: aiModel,
-        baseUrl: aiBaseUrl,
-        apiKey: aiApiKey,
-        clearApiKey: clearAiApiKey,
-      })
-      if (!aiSettingsResult?.success)
-        throw new Error(aiSettingsResult?.error || '保存 AI 模型配置失败')
-      setAiApiKeyConfigured(
-        Boolean(aiSettingsResult.settings?.apiKeyConfigured)
-      )
-      setAiApiKeyHint(aiSettingsResult.settings?.apiKeyHint || '')
+      // aiSettingsChanged 标记模型配置是否实际变化；普通设置保存必须完全跳过钥匙串读写。
+      const aiSettingsChanged =
+        Boolean(aiApiKey || clearAiApiKey) ||
+        aiModel !== loadedAiSettingsRef.current.model ||
+        aiBaseUrl !== loadedAiSettingsRef.current.baseUrl
+      // aiSettingsResult 仅在 AI 配置变化时保存；null 表示本次只保存普通设置。
+      const aiSettingsResult = aiSettingsChanged
+        ? await api.saveAiModelSettings({
+            model: aiModel,
+            baseUrl: aiBaseUrl,
+            apiKey: aiApiKey,
+            clearApiKey: clearAiApiKey,
+          })
+        : null
+      if (aiSettingsResult && !aiSettingsResult.success)
+        throw new Error(aiSettingsResult.error || '保存 AI 模型配置失败')
+      if (aiSettingsResult) {
+        setAiApiKeyConfigured(
+          Boolean(aiSettingsResult.settings?.apiKeyConfigured)
+        )
+        setAiApiKeyHint(aiSettingsResult.settings?.apiKeyHint || '')
+      }
       const saved = await api.saveConfig({
         ...rest,
         onboardingCompleted: true,
@@ -821,7 +901,7 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
         kanbanSettings,
       })
       // AI 后端是正式安装包之外的可选服务；离线时本地与普通设置均已保存，只提示同步状态而不判定失败。
-      if (aiSettingsResult.warning) message.warning(aiSettingsResult.warning)
+      if (aiSettingsResult?.warning) message.warning(aiSettingsResult.warning)
       else message.success('配置已保存')
       onSaved(saved)
       onClose()
@@ -1170,6 +1250,84 @@ export default function SettingsModal({ open, config, onClose, onSaved }) {
       label: 'AI 助手',
       children: (
         <div className="settings-form-stack">
+          <div className="settings-app-update-row">
+            <div>
+              <Text strong>Visual Worktree 更新</Text>
+              <div
+                className={`settings-helper-text${updateError ? ' settings-update-error' : ''}`}
+              >
+                {updateError ||
+                  (updateVersion
+                    ? `发现新版本 v${updateVersion}`
+                    : updateChecked
+                      ? `当前 v${updateCheckDetails?.currentVersion || '-'} / 远端 v${updateCheckDetails?.latestVersion || '-'}，检查于 ${updateCheckDetails?.checkedAt ? new Date(updateCheckDetails.checkedAt).toLocaleTimeString() : '-'}`
+                      : '尚未检查')}
+              </div>
+            </div>
+            <Space>
+              {updateVersion && !updateDownloading && (
+                <Button type="primary" onClick={onDownloadUpdate}>
+                  下载并安装
+                </Button>
+              )}
+              {updateDownloading && (
+                <Text type="secondary">
+                  下载中 {Math.round(updateDownloadPercent)}%
+                </Text>
+              )}
+              <Button
+                htmlType="button"
+                danger={Boolean(updateError)}
+                loading={updateChecking}
+                disabled={updateDownloading}
+                onClick={onCheckUpdate}
+              >
+                {updateChecking ? '检查中…' : '检查更新'}
+              </Button>
+            </Space>
+          </div>
+          <div className="settings-cli-versions">
+            {['claude', 'codex'].map((toolId) => {
+              const state = cliVersions[toolId] || {}
+              const canUpdate =
+                state.version &&
+                state.latestVersion &&
+                state.version !== state.latestVersion
+              return (
+                <div className="settings-cli-version-row" key={toolId}>
+                  <div>
+                    <Text strong>
+                      {toolId === 'claude' ? 'Claude Code' : 'Codex'}
+                    </Text>
+                    <div className="settings-helper-text">
+                      {state.version
+                        ? `当前 ${state.version} / 最新 ${state.latestVersion}`
+                        : '尚未检查版本'}
+                    </div>
+                    {state.error && <Text type="danger">{state.error}</Text>}
+                  </div>
+                  <Space>
+                    <Button
+                      disabled={state.updating}
+                      loading={state.loading}
+                      onClick={() => checkCli(toolId)}
+                    >
+                      检查
+                    </Button>
+                    {canUpdate && (
+                      <Button
+                        type="primary"
+                        loading={state.updating}
+                        onClick={() => updateCli(toolId)}
+                      >
+                        更新
+                      </Button>
+                    )}
+                  </Space>
+                </div>
+              )
+            })}
+          </div>
           <Form.Item
             label="模型"
             name="aiModel"

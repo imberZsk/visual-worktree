@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Table, Tag, Button, Space, Tooltip } from 'antd'
 import {
   EyeInvisibleOutlined,
@@ -14,6 +14,11 @@ import { hasVisibilityKey } from '../visibilityLogic.ts'
 import { VscodeIcon } from '../icons.tsx'
 import SingleLineText from './SingleLineText.tsx'
 import GitlabActionsButton from './GitlabActionsButton.tsx'
+
+// 表格内容列宽约束，避免短内容浪费空间或长内容挤压固定操作列。
+const PROJECT_NAME_WIDTH = { min: 140, max: 420, character: 9, padding: 72 }
+const BRANCH_WIDTH = { min: 130, max: 360, character: 8, padding: 32 }
+const STATUS_WIDTH = { min: 110, max: 320, tag: 72, padding: 24 }
 
 // 项目列表表格组件：展示项目名、当前分支、状态标签、操作按钮，支持多选。
 
@@ -104,13 +109,54 @@ export default function ProjectTable({
     return classNames.join(' ')
   }
 
-  // 表格列定义
+  // contentColumnWidths 根据当前页真实内容计算三列宽度，并在窗口变化时由表格分配剩余空间。
+  const contentColumnWidths = useMemo(() => {
+    const projects = Array.isArray(data) ? data : []
+    const longestNameLength = Math.max(
+      '项目名称'.length,
+      ...projects.map((project) => String(project?.name || '').length)
+    )
+    const longestBranchLength = Math.max(
+      '当前分支'.length,
+      ...projects.map((project) => String(project?.currentBranch || '').length)
+    )
+    const mostStatusTags = Math.max(
+      1,
+      ...projects.map((project) => statusTags(project).length)
+    )
+    return {
+      name: Math.min(
+        PROJECT_NAME_WIDTH.max,
+        Math.max(
+          PROJECT_NAME_WIDTH.min,
+          longestNameLength * PROJECT_NAME_WIDTH.character +
+            PROJECT_NAME_WIDTH.padding
+        )
+      ),
+      branch: Math.min(
+        BRANCH_WIDTH.max,
+        Math.max(
+          BRANCH_WIDTH.min,
+          longestBranchLength * BRANCH_WIDTH.character + BRANCH_WIDTH.padding
+        )
+      ),
+      status: Math.min(
+        STATUS_WIDTH.max,
+        Math.max(
+          STATUS_WIDTH.min,
+          mostStatusTags * STATUS_WIDTH.tag + STATUS_WIDTH.padding
+        )
+      ),
+    }
+  }, [data])
+
+  // 表格列定义。
   const columns = [
     {
       title: '项目名称',
       dataIndex: 'name',
       key: 'name',
-      width: 220,
+      width: contentColumnWidths.name,
       fixed: 'left',
       sorter: (a, b) => {
         // aPinned/bPinned 标记项目是否置顶；用户点击表头排序时也保持置顶在最上方。
@@ -123,7 +169,7 @@ export default function ProjectTable({
         <Space size={4} style={{ maxWidth: '100%', minWidth: 0 }}>
           <SingleLineText
             text={name}
-            style={{ maxWidth: 150, fontWeight: 500 }}
+            style={{ maxWidth: '100%', fontWeight: 500 }}
           />
           {isProjectPinned(record) && (
             <Tag color="blue" style={{ marginInlineEnd: 0 }}>
@@ -142,7 +188,7 @@ export default function ProjectTable({
       title: '当前分支',
       dataIndex: 'currentBranch',
       key: 'currentBranch',
-      width: 200,
+      width: contentColumnWidths.branch,
       ellipsis: { showTitle: false },
       render: (branch, record) =>
         record.isGitRepo ? (
@@ -154,7 +200,7 @@ export default function ProjectTable({
     {
       title: '状态',
       key: 'status',
-      width: 240,
+      width: contentColumnWidths.status,
       render: (_, record) => (
         <Space size={4} wrap>
           {statusTags(record).map((t) => (
@@ -314,7 +360,13 @@ export default function ProjectTable({
       pagination={false}
       rowClassName={getProjectRowClassName}
       // 横向滚动：窄屏保持列宽，左右列固定；纵向由外层 Content 处理，不再设 scroll.y
-      scroll={{ x: 950 }}
+      scroll={{
+        x:
+          contentColumnWidths.name +
+          contentColumnWidths.branch +
+          contentColumnWidths.status +
+          390,
+      }}
     />
   )
 }

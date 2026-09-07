@@ -1,15 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { Button, Layout, Segmented, Select, Space, Tooltip } from 'antd'
 import {
-  Button,
-  Layout,
-  Progress,
-  Segmented,
-  Select,
-  Space,
-  Tooltip,
-} from 'antd'
-import {
-  DownloadOutlined,
   MoonOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -30,6 +21,8 @@ const MAIN_VIEW_OPTIONS = [
 ]
 // MACOS_HEADER_CLASS 存储 macOS 隐藏标题栏后用于避让系统窗口按钮的样式类。
 const MACOS_HEADER_CLASS = api.platform === 'darwin' ? ' app-header--macos' : ''
+// FULLSCREEN_SESSION_STORAGE_KEY 存储当前窗口的全屏状态，用于 Command+R 后首帧保持布局。
+const FULLSCREEN_SESSION_STORAGE_KEY = 'visual-worktree-window-fullscreen'
 
 /**
  * 渲染应用标题、视图切换和全局快捷操作。
@@ -39,9 +32,6 @@ const MACOS_HEADER_CLASS = api.platform === 'darwin' ? ' app-header--macos' : ''
  * @param {Array<object>} props.pathProfileOptions - 路径组合选项
  * @param {string} props.activePathProfileId - 当前路径组合 id
  * @param {boolean} props.pathProfileSwitching - 是否正在切换路径组合
- * @param {string|null} props.updateVersion - 可下载的新版本号
- * @param {boolean} props.updateDownloading - 是否正在下载更新
- * @param {number} props.updateDownloadPercent - 更新下载百分比
  * @param {boolean} props.loading - 当前视图是否正在刷新
  * @param {'light'|'dark'} props.themeMode - 当前主题模式
  * @param {(view:string) => void} props.onViewChange - 主视图切换回调
@@ -59,14 +49,10 @@ export default function AppHeader({
   pathProfileOptions,
   activePathProfileId,
   pathProfileSwitching,
-  updateVersion,
-  updateDownloading,
-  updateDownloadPercent,
   loading,
   themeMode,
   onViewChange,
   onPathProfileChange,
-  onDownloadUpdate,
   onCreateWorktree,
   onRefresh,
   onToggleTheme,
@@ -77,6 +63,45 @@ export default function AppHeader({
     activeView === 'worktrees' || activeView === 'kanban'
   // pathProfileOpen 标记路径组合下拉是否展开；展开时临时停用 Header 原生拖动，让空白区域点击能关闭弹层。
   const [pathProfileOpen, setPathProfileOpen] = useState(false)
+  // isFullscreen 存储 macOS 原生全屏状态；全屏隐藏交通灯后标题可贴近左侧。
+  // 初始化函数从当前页面会话恢复状态，避免 Command+R 时先渲染非全屏间距造成横向抖动。
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    if (api.platform !== 'darwin') return false
+    try {
+      return sessionStorage.getItem(FULLSCREEN_SESSION_STORAGE_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    /**
+     * 同步当前原生全屏状态到 React 和页面会话。
+     * @param {boolean} nextFullscreen - 窗口是否已进入 macOS 原生全屏
+     * @returns {void}
+     */
+    const applyFullscreenState = (nextFullscreen) => {
+      // normalizedFullscreen 存储规范化后的布尔状态，防止 IPC 异常值污染布局。
+      const normalizedFullscreen = Boolean(nextFullscreen)
+      setIsFullscreen(normalizedFullscreen)
+      try {
+        sessionStorage.setItem(
+          FULLSCREEN_SESSION_STORAGE_KEY,
+          String(normalizedFullscreen)
+        )
+      } catch {
+        // 会话存储不可用时仍保留当前 React 状态，不影响全屏切换。
+      }
+    }
+    // unsubscribe 存储全屏变化监听的取消函数，避免 Header 卸载后继续更新状态。
+    const unsubscribe = api.onWindowFullscreenChanged?.(applyFullscreenState)
+    // 主动读取初始状态，修复 Header 挂载前已进入全屏时错过事件的问题。
+    api
+      .getWindowFullscreen?.()
+      .then(applyFullscreenState)
+      .catch(() => undefined)
+    return unsubscribe
+  }, [])
 
   /**
    * 关闭工作区下拉后再触发异步切换，避免 Select 被 loading 禁用时丢失关闭事件并让 Header 残留 no-drag。
@@ -89,7 +114,7 @@ export default function AppHeader({
 
   return (
     <Header
-      className={`app-header${MACOS_HEADER_CLASS}${
+      className={`app-header${MACOS_HEADER_CLASS}${isFullscreen ? ' app-header--fullscreen' : ''}${
         pathProfileOpen ? ' app-header--select-open' : ''
       }`}
     >
@@ -120,25 +145,6 @@ export default function AppHeader({
         </Space>
       </div>
       <Space className="app-header__interactive">
-        {updateVersion && (
-          <Tooltip title={`新版本 v${updateVersion}`}>
-            {updateDownloading ? (
-              <Progress
-                percent={Math.round(updateDownloadPercent)}
-                size="small"
-                className="app-header__update-progress"
-              />
-            ) : (
-              <Button
-                size="small"
-                type="text"
-                icon={<DownloadOutlined />}
-                aria-label="下载更新"
-                onClick={onDownloadUpdate}
-              />
-            )}
-          </Tooltip>
-        )}
         {canCreateWorktree && (
           <Button
             type="primary"

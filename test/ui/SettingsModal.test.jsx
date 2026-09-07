@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -20,6 +21,8 @@ const mockApi = vi.hoisted(() => ({
   scanProjects: vi.fn(),
   loadAiModelSettings: vi.fn(),
   saveAiModelSettings: vi.fn(),
+  checkCliVersion: vi.fn(),
+  updateCliVersion: vi.fn(),
 }))
 
 vi.mock('../../src/ui/api.ts', () => ({
@@ -30,6 +33,8 @@ vi.mock('../../src/ui/api.ts', () => ({
     scanProjects: mockApi.scanProjects,
     loadAiModelSettings: mockApi.loadAiModelSettings,
     saveAiModelSettings: mockApi.saveAiModelSettings,
+    checkCliVersion: mockApi.checkCliVersion,
+    updateCliVersion: mockApi.updateCliVersion,
   },
 }))
 
@@ -191,6 +196,8 @@ describe('SettingsModal 流程配置布局', () => {
         apiKeyHint: '••••••••-key',
       },
     })
+    mockApi.checkCliVersion.mockReset()
+    mockApi.updateCliVersion.mockReset()
     // 大多数用例只需验证设置 UI，默认保持扫描未完成，避免无关的 Store 异步更新越过 act 边界。
     mockApi.scanProjects
       .mockReset()
@@ -213,25 +220,75 @@ describe('SettingsModal 流程配置布局', () => {
     expect(await screen.findByText('••••••••-key')).toBeTruthy()
   })
 
-  it('AI 后端离线时仍保存普通配置并关闭设置页', async () => {
+  it('Claude Code 更新期间禁用本行检查按钮', async () => {
+    mockApi.checkCliVersion.mockResolvedValue({
+      toolId: 'claude',
+      name: 'Claude Code',
+      version: '1.0.0',
+      latestVersion: '1.1.0',
+    })
+    // resolveUpdate 存储更新请求的完成函数，用于在断言按钮状态后结束异步流程。
+    let resolveUpdate
+    mockApi.updateCliVersion.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpdate = resolve
+        })
+    )
+    renderWithApp(
+      <SettingsModal
+        open
+        config={makeConfig()}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 助手' }))
+    // claudeRow 存储 Claude Code 版本操作行，避免与 Codex 的同名按钮混淆。
+    const claudeRow = screen
+      .getByText('Claude Code')
+      .closest('.settings-cli-version-row')
+    // codexRow 存储 Codex 版本操作行，用于确认禁用状态不会跨工具传播。
+    const codexRow = screen
+      .getByText('Codex', { selector: 'strong' })
+      .closest('.settings-cli-version-row')
+    fireEvent.click(within(claudeRow).getByRole('button', { name: /检\s*查/ }))
+    await screen.findByText('当前 1.0.0 / 最新 1.1.0')
+    fireEvent.click(within(claudeRow).getByRole('button', { name: /更\s*新/ }))
+
+    await waitFor(() => {
+      expect(
+        within(claudeRow).getByRole('button', { name: /检\s*查/ }).disabled
+      ).toBe(true)
+    })
+    expect(
+      within(codexRow).getByRole('button', { name: /检\s*查/ }).disabled
+    ).toBe(false)
+
+    await act(async () => {
+      resolveUpdate({
+        toolId: 'claude',
+        name: 'Claude Code',
+        version: '1.1.0',
+        latestVersion: '1.1.0',
+      })
+    })
+    await waitFor(() =>
+      expect(
+        within(claudeRow).getByRole('button', { name: /检\s*查/ }).disabled
+      ).toBe(false)
+    )
+  })
+
+  it('普通配置保存不访问 AI 凭据或后端并关闭设置页', async () => {
     // savedConfig 存储主进程完成普通设置持久化后返回的新配置。
     const savedConfig = makeConfig()
-    // onSaved 存储设置页成功回调，用于验证离线警告不阻断外层状态更新。
+    // onSaved 存储设置页成功回调，用于验证普通配置保存结果。
     const onSaved = vi.fn()
     // onClose 存储关闭回调，用于验证保存流程正常结束。
     const onClose = vi.fn()
     mockApi.saveConfig.mockResolvedValueOnce(savedConfig)
-    mockApi.saveAiModelSettings.mockResolvedValueOnce({
-      success: true,
-      settings: {
-        model: 'gpt-5.6-sol',
-        baseUrl: '',
-        apiKeyConfigured: true,
-        apiKeyHint: '••••••••-key',
-      },
-      backendSynchronized: false,
-      warning: '配置已保存；AI 后端未连接，模型设置将在使用时同步',
-    })
 
     renderWithApp(
       <SettingsModal
@@ -245,11 +302,8 @@ describe('SettingsModal 流程配置布局', () => {
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
 
     await waitFor(() => expect(mockApi.saveConfig).toHaveBeenCalledTimes(1))
-    expect(
-      await screen.findByText(
-        '配置已保存；AI 后端未连接，模型设置将在使用时同步'
-      )
-    ).toBeTruthy()
+    expect(mockApi.saveAiModelSettings).not.toHaveBeenCalled()
+    expect(await screen.findByText('配置已保存')).toBeTruthy()
     expect(onSaved).toHaveBeenCalledWith(savedConfig)
     expect(onClose).toHaveBeenCalledTimes(1)
   })

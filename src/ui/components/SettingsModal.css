@@ -27,6 +27,47 @@
   gap: var(--settings-space-lg);
 }
 
+.settings-cli-versions {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding-bottom: 16px;
+}
+
+.settings-app-update-row {
+  align-items: center;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-bottom: 12px;
+}
+
+.settings-update-error {
+  color: var(--ant-color-error);
+}
+.settings-cli-version-row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.settings-cli-versions {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding-bottom: 16px;
+}
+.settings-cli-version-row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .settings-surface .settings-form-stack > .ant-form-item {
   margin-bottom: 0;
 }

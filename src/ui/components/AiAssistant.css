@@ -20,8 +20,7 @@
   height: 100%;
   min-height: 0;
   /* Ant Design 的动态按钮样式会后注入 15px 水平内边距，固定宽度下会直接裁掉关闭图标。 */
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  padding: 0 !important;
 }
 
 /* 聊天区域采用 Tab、消息阅读区与底部输入面板三段结构。 */

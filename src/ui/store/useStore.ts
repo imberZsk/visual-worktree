@@ -43,6 +43,8 @@ export const useStore = create((set, get) => ({
   keyword: '',
   // 表格选中的项目路径数组
   selectedPaths: [],
+  // selectedPathsByFilter 存储每个项目筛选 Tab 独立的选中路径数组。
+  selectedPathsByFilter: {},
   // 批量操作进度 { done, total, current }，null 表示无进行中操作
   batchProgress: null,
   // 应用配置
@@ -246,12 +248,21 @@ export const useStore = create((set, get) => ({
       projectPath,
       hidden
     )
-    // selectedPaths 存储隐藏后仍可保留的勾选路径；被隐藏的项目要从批量选择中剔除。
-    const selectedPaths = hidden
-      ? get().selectedPaths.filter((path) => path !== projectPath)
-      : get().selectedPaths
+    // selectedPathsByFilter 存储剔除隐藏项目后的各 Tab 选中集合，避免切换 Tab 后恢复已隐藏项目。
+    const selectedPathsByFilter = hidden
+      ? Object.fromEntries(
+          Object.entries(get().selectedPathsByFilter).map(
+            ([filterKey, filterSelectedPaths]) => [
+              filterKey,
+              filterSelectedPaths.filter((path) => path !== projectPath),
+            ]
+          )
+        )
+      : get().selectedPathsByFilter
+    // selectedPaths 存储当前 Tab 隐藏后仍可保留的勾选路径。
+    const selectedPaths = selectedPathsByFilter[get().filter] || []
     api.saveProjectVisibility(next)
-    set({ projectVisibility: next, selectedPaths })
+    set({ projectVisibility: next, selectedPaths, selectedPathsByFilter })
   },
 
   /**
@@ -346,7 +357,11 @@ export const useStore = create((set, get) => ({
    * 设置筛选类型
    * @param {string} filter - 筛选类型
    */
-  setFilter: (filter) => set({ filter }),
+  setFilter: (filter) => {
+    // selectedPaths 存储目标 Tab 自己的选中路径，首次进入时为空。
+    const selectedPaths = get().selectedPathsByFilter[filter] || []
+    set({ filter, selectedPaths })
+  },
 
   /**
    * 设置搜索关键词
@@ -358,7 +373,14 @@ export const useStore = create((set, get) => ({
    * 设置选中的项目路径
    * @param {string[]} selectedPaths - 选中路径数组
    */
-  setSelectedPaths: (selectedPaths) => set({ selectedPaths }),
+  setSelectedPaths: (selectedPaths) =>
+    set((state) => ({
+      selectedPaths,
+      selectedPathsByFilter: {
+        ...state.selectedPathsByFilter,
+        [state.filter]: selectedPaths,
+      },
+    })),
 
   /**
    * 扫描项目并更新列表
@@ -426,8 +448,18 @@ export const useStore = create((set, get) => ({
     const unsub = api.onBatchProgress((p) => set({ batchProgress: p }))
     try {
       const results = await api.batchOperate(paths, operation, args)
-      // 批量拉取完成后清空项目 Tab 勾选，避免下一次误操作同一批项目。
-      if (operation === 'pull') set({ selectedPaths: [] })
+      // 批量拉取完成后只清空当前项目 Tab 的勾选，其他 Tab 的独立选择保持不变。
+      if (operation === 'pull') {
+        // currentFilter 存储执行批量拉取时的项目筛选 Tab。
+        const currentFilter = get().filter
+        set((state) => ({
+          selectedPaths: [],
+          selectedPathsByFilter: {
+            ...state.selectedPathsByFilter,
+            [currentFilter]: [],
+          },
+        }))
+      }
       return results
     } finally {
       unsub?.()

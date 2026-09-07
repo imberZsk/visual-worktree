@@ -13,6 +13,7 @@ import { CodeOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { api } from '../api.ts'
 import { statusTags } from '../projectLogic.ts'
 import { hasVisibilityKey } from '../visibilityLogic.ts'
+import './ProjectDetail.css'
 
 // 项目详情抽屉：展示提交历史、变更文件、worktree 列表。
 
@@ -78,10 +79,13 @@ export default function ProjectDetail({
   const [commits, setCommits] = useState([])
   // worktrees 存储 worktree 列表
   const [worktrees, setWorktrees] = useState([])
+  // displayedProject 存储最后一次打开的项目，关闭动画期间保留内容避免 Drawer 被立即卸载。
+  const [displayedProject, setDisplayedProject] = useState(project)
 
   // 项目变化时加载详情数据
   useEffect(() => {
     if (!project) return
+    setDisplayedProject(project)
     // 拉取提交历史与 worktree（失败静默）
     api
       .getCommits(project.path, 15)
@@ -93,7 +97,9 @@ export default function ProjectDetail({
       .catch(() => setWorktrees([]))
   }, [project])
 
-  if (!project) return null
+  // activeProject 存储当前渲染的项目；关闭期间回退最后一次项目以完成退出动画。
+  const activeProject = project || displayedProject
+  if (!activeProject) return null
 
   // taskVisibility 存储任务隐藏/置顶偏好，用于过滤该项目下的 worktree。
   const taskVisibility = { hidden: hiddenTaskKeys, pinned: pinnedTaskKeys }
@@ -114,7 +120,8 @@ export default function ProjectDetail({
     // parts 存储路径片段；任务名可包含斜杠，因此只去掉最后一个项目目录片段。
     const parts = relPath.split('/').filter(Boolean)
     if (parts.length < 2) return ''
-    if (project?.name && parts[parts.length - 1] !== project.name) return ''
+    if (activeProject?.name && parts[parts.length - 1] !== activeProject.name)
+      return ''
     return parts.slice(0, -1).join('/')
   }
 
@@ -160,7 +167,7 @@ export default function ProjectDetail({
   // 工作区文件 Tab 内容：包含已跟踪改动与未跟踪文件，名称避免被误解为仅 git diff。
   const filesTab = (
     <DetailList
-      items={project.changedFiles || []}
+      items={activeProject.changedFiles || []}
       emptyDescription="工作区干净"
       getItemKey={(file, index) => file.path || index}
       renderItem={(file) => (
@@ -237,21 +244,26 @@ export default function ProjectDetail({
 
   return (
     <Drawer
-      title={project.name}
+      rootClassName="project-detail-drawer"
+      title={activeProject.name}
       open={!!project}
       onClose={onClose}
+      afterOpenChange={(isOpen) => {
+        // 退出动画结束后再清理旧内容，行为与设置抽屉一致。
+        if (!isOpen && !project) setDisplayedProject(null)
+      }}
       size={drawerWidth}
       extra={
         <Space>
           <Button
             icon={<CodeOutlined />}
-            onClick={() => onOpenVscode(project.path)}
+            onClick={() => onOpenVscode(activeProject.path)}
           >
             VSCode
           </Button>
           <Button
             icon={<FolderOpenOutlined />}
-            onClick={() => onOpenFinder(project.path)}
+            onClick={() => onOpenFinder(activeProject.path)}
           >
             Finder
           </Button>
@@ -260,14 +272,14 @@ export default function ProjectDetail({
     >
       <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
         <Descriptions.Item label="当前分支">
-          {project.currentBranch || '-'}
+          {activeProject.currentBranch || '-'}
         </Descriptions.Item>
         <Descriptions.Item label="跟踪分支">
-          {project.tracking || '-'}
+          {activeProject.tracking || '-'}
         </Descriptions.Item>
         <Descriptions.Item label="状态">
           <Space size={4} wrap>
-            {statusTags(project).map((t) => (
+            {statusTags(activeProject).map((t) => (
               <Tag color={t.color} key={t.text}>
                 {t.text}
               </Tag>
@@ -276,7 +288,7 @@ export default function ProjectDetail({
         </Descriptions.Item>
         <Descriptions.Item label="路径">
           <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
-            {project.path}
+            {activeProject.path}
           </span>
         </Descriptions.Item>
       </Descriptions>
@@ -285,7 +297,7 @@ export default function ProjectDetail({
           { key: 'commits', label: '提交历史', children: commitsTab },
           {
             key: 'files',
-            label: `工作区文件 (${(project.changedFiles || []).length})`,
+            label: `工作区文件 (${(activeProject.changedFiles || []).length})`,
             children: filesTab,
           },
           {

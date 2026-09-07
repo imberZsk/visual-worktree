@@ -17,6 +17,21 @@ const TASK_WORKFLOW_OUTPUT_STORAGE_KEY = 'vw-task-workflow-output'
 const browserFallback = {
   // 浏览器降级环境没有原生窗口标题栏，只需保持接口一致。
   setWindowTheme: async () => false,
+  // 浏览器降级环境没有原生全屏窗口。
+  getWindowFullscreen: async () => false,
+  checkCliVersion: async () => ({
+    toolId: '',
+    name: '',
+    version: '',
+    latestVersion: '',
+  }),
+  updateCliVersion: async () => ({
+    toolId: '',
+    name: '',
+    version: '',
+    latestVersion: '',
+  }),
+  onWindowFullscreenChanged: () => () => {},
   checkAppUpdate: async () => ({ available: false }),
   downloadAppUpdate: async () => ({ downloaded: false }),
   installAppUpdate: async () => false,
