@@ -145,19 +145,14 @@ describe('CreateWorktreeModal 表单校验', () => {
     expect(linkInput.style.minWidth).toBe('0')
   })
 
-  it('填入任务名后展示路径预览 Alert', async () => {
+  it('创建弹窗不展示重复的目标路径预览', async () => {
     render(<CreateWorktreeModal {...baseProps()} />)
-    // 初始无预览
     expect(screen.queryByText('将创建到')).toBeNull()
-    // 输入任务名后应出现预览，含 worktreesPath 与任务名拼接路径
     fireEvent.change(screen.getByPlaceholderText('PROJ-1234-需求简述'), {
       target: { value: 'TASK-X' },
     })
     await waitFor(() => {
-      expect(screen.getByText('将创建到')).toBeTruthy()
-      // 未选择项目时预览描述应落到任务目录本身
-      expect(screen.getByText(/\/wt\/TASK-X/)).toBeTruthy()
-      expect(screen.getByText(/暂不创建项目 worktree/)).toBeTruthy()
+      expect(screen.queryByText('将创建到')).toBeNull()
     })
   })
 

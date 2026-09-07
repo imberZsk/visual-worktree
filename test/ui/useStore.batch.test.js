@@ -79,6 +79,19 @@ describe('useStore runBatch selection behavior', () => {
     expect(useStore.getState().selectedPaths).toEqual([])
   })
 
+  it('不同项目筛选 Tab 保持独立勾选状态', () => {
+    useStore.getState().setSelectedPaths(['/repo/all'])
+
+    useStore.getState().setFilter('can-pull')
+    expect(useStore.getState().selectedPaths).toEqual([])
+    useStore.getState().setSelectedPaths(['/repo/pull'])
+
+    useStore.getState().setFilter('all')
+    expect(useStore.getState().selectedPaths).toEqual(['/repo/all'])
+    useStore.getState().setFilter('can-pull')
+    expect(useStore.getState().selectedPaths).toEqual(['/repo/pull'])
+  })
+
   it('非拉取批量操作结束后保留项目勾选', async () => {
     // selectedPaths 为用户在项目 Tab 中批量勾选的项目路径。
     const selectedPaths = ['/repo/a', '/repo/b']

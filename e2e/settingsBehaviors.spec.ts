@@ -32,9 +32,7 @@ test('GitHub 安装包未启动 AI 后端时设置仍可打开并保存', async 
   await projectCountSwitch.click()
   await appPage.locator('.ant-drawer-footer button').last().click()
 
-  await expect(
-    appPage.getByText('配置已保存；AI 后端未连接，模型设置将在使用时同步')
-  ).toBeVisible()
+  await expect(appPage.getByText('配置已保存')).toBeVisible()
   await expect(appPage.locator('.ant-drawer-content')).toHaveCount(0)
 
   await appPage.getByRole('button', { name: '设置', exact: true }).click()

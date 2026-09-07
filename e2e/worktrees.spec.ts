@@ -27,7 +27,7 @@ test('按任务为多个项目创建真实 Worktree 并展示任务', async ({
     .locator('.ant-select-dropdown:visible .ant-select-item-option')
     .filter({ hasText: 'beta-project' })
     .click()
-  await expect(appPage.getByText(/将创建到/)).toBeVisible()
+  await expect(appPage.getByText(/将创建到/)).toHaveCount(0)
   await appPage.getByRole('button', { name: /^创\s*建$/ }).click()
 
   await expect(

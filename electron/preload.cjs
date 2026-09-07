@@ -65,6 +65,10 @@ const IPC = {
   SEND_AI_ASSISTANT_MESSAGE: 'send-ai-assistant-message',
   STREAM_AI_ASSISTANT_MESSAGE: 'stream-ai-assistant-message',
   SET_WINDOW_THEME: 'set-window-theme',
+  GET_WINDOW_FULLSCREEN: 'get-window-fullscreen',
+  CHECK_CLI_VERSION: 'check-cli-version',
+  UPDATE_CLI_VERSION: 'update-cli-version',
+  WINDOW_FULLSCREEN_CHANGED: 'window-fullscreen-changed',
   AI_ASSISTANT_STREAM_CHUNK: 'ai-assistant-stream-chunk',
 }
 
@@ -73,6 +77,8 @@ contextBridge.exposeInMainWorld('api', {
   // setWindowTheme 同步 Windows/Linux 原生窗口控件覆盖层的主题。
   setWindowTheme: (themeMode) =>
     ipcRenderer.invoke(IPC.SET_WINDOW_THEME, themeMode),
+  // 读取当前原生全屏状态，避免渲染层错过全屏切换事件。
+  getWindowFullscreen: () => ipcRenderer.invoke(IPC.GET_WINDOW_FULLSCREEN),
   // checkAppUpdate 检查 GitHub Release 新版本。
   checkAppUpdate: () => ipcRenderer.invoke('app-update:check'),
   // downloadAppUpdate 下载完整安装包。
@@ -235,6 +241,19 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on(IPC.AI_ASSISTANT_STREAM_CHUNK, listener)
     return () =>
       ipcRenderer.removeListener(IPC.AI_ASSISTANT_STREAM_CHUNK, listener)
+  },
+  // 检查 AI CLI 本地版本与 npm 最新版本。
+  checkCliVersion: (toolId) =>
+    ipcRenderer.invoke(IPC.CHECK_CLI_VERSION, toolId),
+  // 更新 AI CLI 到 npm 最新版本。
+  updateCliVersion: (toolId) =>
+    ipcRenderer.invoke(IPC.UPDATE_CLI_VERSION, toolId),
+  // 订阅 macOS 原生全屏状态，返回取消订阅函数。
+  onWindowFullscreenChanged: (callback) => {
+    const listener = (_event, isFullscreen) => callback(isFullscreen)
+    ipcRenderer.on(IPC.WINDOW_FULLSCREEN_CHANGED, listener)
+    return () =>
+      ipcRenderer.removeListener(IPC.WINDOW_FULLSCREEN_CHANGED, listener)
   },
   // 订阅批量进度事件，返回取消订阅函数
   onBatchProgress: (callback) => {

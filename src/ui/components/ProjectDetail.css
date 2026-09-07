@@ -1,0 +1,17 @@
+/* 项目详情覆盖应用 Header 时必须退出 Electron 拖动区域，否则 macOS 会吞掉顶部按钮点击。 */
+.project-detail-drawer {
+  -webkit-app-region: no-drag;
+}
+
+/* 默认关闭入口保持稳定的方形点击区域，避免标题或右侧操作较宽时压缩按钮。 */
+.project-detail-drawer .ant-drawer-close {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  margin-inline-end: 8px;
+  padding: 0;
+  width: 32px;
+  -webkit-app-region: no-drag;
+}

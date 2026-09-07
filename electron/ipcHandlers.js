@@ -44,6 +44,7 @@ import { dirname, join, resolve } from 'path'
 import { existsSync, rmSync, readdirSync } from 'fs'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { homedir } from 'os'
+import { checkCliVersion, updateCli } from '../src/core/cliVersionService.js'
 
 /**
  * 获取当前配置中有效且至少包含一项的 Token 统计工具。
@@ -519,6 +520,13 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     apiKeyHint: maskAiModelApiKey(credentials?.apiKey),
   })
 
+  // 读取原生窗口实时全屏状态，修复渲染层晚于 enter-full-screen 事件挂载时仍保留交通灯间距的问题。
+  ipcMain.handle(IPC.GET_WINDOW_FULLSCREEN, () => {
+    // window 存储当前主窗口，窗口未创建或已销毁时按非全屏处理。
+    const window = getWindow?.()
+    return Boolean(window && !window.isDestroyed?.() && window.isFullScreen?.())
+  })
+
   // 扫描项目：读取配置中的源路径与忽略列表
   ipcMain.handle(IPC.SCAN_PROJECTS, async (_e, opts = {}) => {
     const cfg = loadConfig(configBaseDir)
@@ -717,6 +725,11 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
     }
   })
 
+  ipcMain.handle(IPC.CHECK_CLI_VERSION, (_event, toolId) =>
+    checkCliVersion(toolId)
+  )
+  ipcMain.handle(IPC.UPDATE_CLI_VERSION, (_event, toolId) => updateCli(toolId))
+
   // 设置页只读取本机安全投影，不访问可选的 FastAPI 服务，避免正式安装包离线时打开设置就报错。
   ipcMain.handle(IPC.LOAD_AI_MODEL_SETTINGS, async () => {
     try {
@@ -749,10 +762,16 @@ export function registerIpcHandlers(ipcMain, deps = {}) {
   ipcMain.handle(IPC.SAVE_AI_MODEL_SETTINGS, async (_event, request = {}) => {
     try {
       // currentCredentials 存储更新前的加密配置，空 Key 保存时用于保留原凭据。
-      const currentCredentials = loadAiModelCredentialsImpl({
-        dataDir: aiCredentialsBaseDir,
-        safeStorage,
-      })
+      // 只有需要保留或清除旧 Key 时才读取钥匙串；仅修改普通字段不会触发系统授权弹窗。
+      const needsStoredCredentials = Boolean(
+        request.clearApiKey || !request.apiKey
+      )
+      const currentCredentials = needsStoredCredentials
+        ? loadAiModelCredentialsImpl({
+            dataDir: aiCredentialsBaseDir,
+            safeStorage,
+          })
+        : null
       // submittedCredentials 存储经过格式校验的本次表单字段。
       const submittedCredentials = normalizeAiModelCredentials({
         model: request.model || DEFAULT_AI_MODEL,

@@ -133,6 +133,8 @@ jobs:
           path: |
             release/*.dmg
             release/*.exe
+            release/latest*.yml
+            release/*.blockmap
           # 至少要有安装包，全为空说明打包异常，直接失败
           if-no-files-found: error
           retention-days: 3
@@ -156,7 +158,7 @@ jobs:
         run: |
           mkdir -p dist-release
           # WHY 三层都使用显式白名单：artifact 上传配置未来若误放宽，汇总阶段仍只接收普通用户安装包。
-          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} dist-release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name 'latest*.yml' -o -name '*.blockmap' \) -exec cp {} dist-release/ \;
           ls -la dist-release
 
       # 发布前精确验证资产集合：1 个 macOS DMG、1 个 Windows Setup、1 个 Windows portable。
@@ -171,9 +173,12 @@ jobs:
           # portable_files 存储待发布的 Windows portable 安装包。
           portable_files=(dist-release/*portable*.exe)
           # all_files 存储汇总目录中的全部文件，用于阻止额外后缀或重复产物发布。
+          # all_files 存储汇总目录中的全部文件，用于失败时输出实际产物，便于定位打包问题。
           all_files=(dist-release/*)
-          if [ "${#dmg_files[@]}" -ne 1 ] || [ "${#setup_files[@]}" -ne 1 ] || [ "${#portable_files[@]}" -ne 1 ] || [ "${#all_files[@]}" -ne 3 ]; then
-            echo "Release 资产必须精确为 1 个 DMG、1 个 Setup EXE、1 个 portable EXE" >&2
+          # metadata_files 存储 electron-updater 所需的更新元数据文件。
+          metadata_files=(dist-release/latest*.yml)
+          if [ "${#dmg_files[@]}" -ne 1 ] || [ "${#setup_files[@]}" -ne 1 ] || [ "${#portable_files[@]}" -ne 1 ] || [ "${#metadata_files[@]}" -lt 1 ]; then
+            echo "Release 资产必须包含 1 个 DMG、1 个 Setup EXE、1 个 portable EXE 及 electron-updater 元数据" >&2
             printf '%s\n' "${all_files[@]}" >&2
             exit 1
           fi
@@ -227,7 +232,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # release_assets 存储已经过精确集合校验的 3 个普通用户安装包。
-          release_assets=(dist-release/*.dmg dist-release/*Setup*.exe dist-release/*portable*.exe)
+          release_assets=(dist-release/*.dmg dist-release/*Setup*.exe dist-release/*portable*.exe dist-release/latest*.yml dist-release/*.blockmap)
           gh release create "${GITHUB_REF_NAME}" "${release_assets[@]}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \

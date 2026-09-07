@@ -267,14 +267,10 @@ export default function App() {
         pathProfileOptions={workspaceConfig.pathProfileOptions}
         activePathProfileId={workspaceConfig.activePathProfileId}
         pathProfileSwitching={workspaceConfig.switching}
-        updateVersion={appUpdate.version}
-        updateDownloading={appUpdate.downloading}
-        updateDownloadPercent={appUpdate.downloadPercent}
         loading={workspaceNavigation.loading}
         themeMode={themeMode}
         onViewChange={workspaceNavigation.changeView}
         onPathProfileChange={workspaceConfig.switchPathProfile}
-        onDownloadUpdate={appUpdate.downloadAndInstall}
         onCreateWorktree={() => taskLifecycle.openCreate()}
         onRefresh={workspaceNavigation.refresh}
         onToggleTheme={toggleTheme}
@@ -483,6 +479,15 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         config={config}
+        updateVersion={appUpdate.version}
+        updateError={appUpdate.error}
+        updateChecked={appUpdate.checked}
+        updateChecking={appUpdate.checking}
+        updateCheckDetails={appUpdate.checkDetails}
+        updateDownloading={appUpdate.downloading}
+        updateDownloadPercent={appUpdate.downloadPercent}
+        onCheckUpdate={appUpdate.checkNow}
+        onDownloadUpdate={appUpdate.downloadAndInstall}
         onClose={() => setSettingsOpen(false)}
         onSaved={workspaceConfig.applySavedConfig}
       />

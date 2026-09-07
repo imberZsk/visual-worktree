@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Modal, Form, Input, Select, Alert } from 'antd'
+import { Modal, Form, Input, Select } from 'antd'
 import { normalizeTaskLinkItems } from '../worktreeLogic.ts'
 import TaskLinksEditor from './TaskLinksEditor.tsx'
 
@@ -13,7 +13,6 @@ import TaskLinksEditor from './TaskLinksEditor.tsx'
  * @param {boolean} props.open - 是否打开
  * @param {Array<{name:string,path:string}>} props.projects - 可选源项目列表
  * @param {boolean} [props.projectsLoading] - 是否正在加载可选源项目列表
- * @param {string} props.worktreesPath - worktree 根目录（用于提示路径）
  * @param {string} [props.defaultTask] - 预填的任务名；设置后任务名字段禁用（从任务行添加时传入）
  * @param {(values:object)=>Promise<void>} props.onSubmit - 提交回调
  * @param {()=>void} props.onClose - 关闭回调
@@ -23,7 +22,6 @@ export default function CreateWorktreeModal({
   open,
   projects,
   projectsLoading = false,
-  worktreesPath,
   defaultTask,
   onSubmit,
   onClose,
@@ -34,9 +32,6 @@ export default function CreateWorktreeModal({
   const [submitting, setSubmitting] = useState(false)
   // 监听任务名、分支名与项目选择以实时预览将创建的路径
   const task = Form.useWatch('task', form)
-  const branch = Form.useWatch('branch', form)
-  // projectPaths 存储当前选择的项目路径数组；空数组表示只创建任务目录。
-  const projectPaths = Form.useWatch('projectPaths', form)
   // 上一次自动填充的分支名（用于判断用户是否手动修改过分支）
   const prevAutoFilled = useRef('')
 
@@ -160,19 +155,6 @@ export default function CreateWorktreeModal({
         >
           <Input placeholder="已跟随任务名自动填入，可手动修改" />
         </Form.Item>
-        {/* 路径预览：让用户确认 worktree 会建在哪 */}
-        {task && (
-          <Alert
-            type="info"
-            showIcon
-            title="将创建到"
-            description={
-              (projectPaths || []).length > 0
-                ? `${worktreesPath || '<worktree根目录>'}/${task}/<项目名>  →  分支 ${branch || '<分支名>'}`
-                : `${worktreesPath || '<worktree根目录>'}/${task}  →  暂不创建项目 worktree`
-            }
-          />
-        )}
       </Form>
     </Modal>
   )

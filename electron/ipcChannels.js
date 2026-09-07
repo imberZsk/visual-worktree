@@ -119,6 +119,11 @@ export const IPC = {
   STREAM_AI_ASSISTANT_MESSAGE: 'stream-ai-assistant-message',
   // 同步自定义标题栏的明暗主题
   SET_WINDOW_THEME: 'set-window-theme',
+  // 读取当前窗口的原生全屏状态
+  GET_WINDOW_FULLSCREEN: 'get-window-fullscreen',
+  CHECK_CLI_VERSION: 'check-cli-version',
+  UPDATE_CLI_VERSION: 'update-cli-version',
+  WINDOW_FULLSCREEN_CHANGED: 'window-fullscreen-changed',
   // 推送 AI 助手的单个文本片段
   AI_ASSISTANT_STREAM_CHUNK: 'ai-assistant-stream-chunk',
 }

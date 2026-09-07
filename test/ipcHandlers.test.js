@@ -55,6 +55,7 @@ describe('registerIpcHandlers', () => {
     mock.sentEvents = []
     const fakeWindow = {
       isDestroyed: () => false,
+      isFullScreen: vi.fn(() => true),
       setTitleBarOverlay: vi.fn(),
       webContents: {
         send: (ch, payload) => mock.sentEvents.push({ ch, payload }),
@@ -137,11 +138,17 @@ describe('registerIpcHandlers', () => {
       if (
         ch === IPC.BATCH_PROGRESS ||
         ch === IPC.STEP_OUTPUT ||
-        ch === IPC.AI_ASSISTANT_STREAM_CHUNK
+        ch === IPC.AI_ASSISTANT_STREAM_CHUNK ||
+        ch === IPC.WINDOW_FULLSCREEN_CHANGED
       )
         continue
       expect(typeof mock.handlers[ch]).toBe('function')
     }
+  })
+
+  it('可主动读取当前原生全屏状态', async () => {
+    expect(await mock.invoke(IPC.GET_WINDOW_FULLSCREEN)).toBe(true)
+    expect(mock.fakeWindow.isFullScreen).toHaveBeenCalledTimes(1)
   })
 
   it('任务分类映射可写入隔离文件并重新读取', async () => {

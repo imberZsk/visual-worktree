@@ -4,6 +4,30 @@ import { prepareWorkspace } from './helpers/workspaceFixture.ts'
 // DELAYED_WORKTREE_SCAN_MS 存储首次视图加载验收使用的可观察扫描延迟。
 const DELAYED_WORKTREE_SCAN_MS = 800
 
+test('macOS 原生全屏后标题移入交通灯区域', async ({ electronApp, appPage }) => {
+  test.skip(process.platform !== 'darwin', '仅 macOS 存在交通灯避让区域')
+
+  await electronApp.evaluate(async ({ BrowserWindow }) => {
+    // mainWindow 存储当前 E2E 主窗口，用原生 API 进入 macOS 全屏。
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (!mainWindow) throw new Error('未找到 Electron 主窗口')
+    mainWindow.setFullScreen(true)
+    if (mainWindow.isFullScreen()) return
+    await new Promise((resolve) =>
+      mainWindow.once('enter-full-screen', resolve)
+    )
+  })
+
+  // header 存储应用顶部标题栏，用于验证全屏样式与实际像素位置。
+  const header = appPage.locator('.app-header')
+  await expect(header).toHaveClass(/app-header--fullscreen/)
+  // titleLeft 存储 Visual Worktree 标题的实际左边界坐标。
+  const titleLeft = await appPage
+    .locator('.app-header__title')
+    .evaluate((element) => element.getBoundingClientRect().left)
+  expect(titleLeft).toBeLessThanOrEqual(20)
+})
+
 test('窄窗口主操作保持可达且刷新期间只展示一个内容 loading', async ({
   appPage,
   e2eHomePath,
